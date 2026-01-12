@@ -1,31 +1,125 @@
+<div align="center">
+
 # 🏗️ Broersma Bouwadvies Backoffice
 
-Productie-klaar backofficemanagementsysteem voor constructieadvies met Supabase Auth en PostgreSQL.
+**Het complete managementsysteem voor bouwadvies — van lead tot factuur.**
 
-## 📋 Inhoudsopgave
+[![Next.js](https://img.shields.io/badge/Next.js-16-black?logo=next.js)](https://nextjs.org/)
+[![React](https://img.shields.io/badge/React-19-61DAFB?logo=react)](https://react.dev/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)](https://typescriptlang.org/)
+[![Supabase](https://img.shields.io/badge/Supabase-Auth%20%2B%20DB-3FCF8E?logo=supabase&logoColor=white)](https://supabase.com/)
 
-- [Tech Stack](#-tech-stack)
-- [Installatie](#-installatie)
-- [Database Commando's](#-database-commandos)
-- [Architectuur](#-architectuur)
-- [Functionaliteiten](#-functionaliteiten)
-- [Projectstructuur](#-projectstructuur)
-- [Beveiliging](#-beveiliging)
-- [Licentie](#-licentie)
+</div>
+
+---
+
+## 🎯 Wat is dit?
+
+Een volledig backoffice platform gebouwd voor **Broersma Bouwadvies** om het hele klanttraject te stroomlijnen:
+
+| Van | Tot |
+|-----|-----|
+| 📥 Nieuwe aanvraag binnenkomt | 📊 Verschijnt in pipeline |
+| 👷 Engineer wordt toegewezen | 📧 Klant ontvangt notificatie |
+| 📝 Offerte wordt opgesteld | ✅ Admin keurt goed |
+| 💰 Factuur wordt verstuurd | 📈 KPI's worden bijgewerkt |
+
+> **Eén systeem, volledig overzicht.** Geen spreadsheets meer, geen gemiste follow-ups.
+
+---
+
+## ⚡ Snel Starten
+
+```bash
+# 1. Kloon & installeer
+git clone https://github.com/Brommah/BBR.git && cd BBR && npm install
+
+# 2. Configureer (kopieer .env.example naar .env.local en vul in)
+
+# 3. Database setup
+npm run db:push && npm run db:seed
+
+# 4. Start!
+npm run dev
+```
+
+**→ Open [localhost:3000](http://localhost:3000)** en log in.
+
+---
+
+## ✨ Kernfunctionaliteiten
+
+<table>
+<tr>
+<td width="50%">
+
+### 📊 Pipeline & Leads
+- Visueel **Kanban-bord** met drag-and-drop
+- Automatische **statustracking**
+- **Toewijzing** aan engineers
+- Volledige **klantgeschiedenis**
+
+</td>
+<td width="50%">
+
+### 📝 Offertes & Goedkeuring
+- Offertebouwer met **regelitems**
+- **Admin goedkeuringsflow**
+- **PDF generatie** met branding
+- Feedback bij afwijzing
+
+</td>
+</tr>
+<tr>
+<td width="50%">
+
+### 👥 Team & Prestaties
+- **Engineer dashboards**
+- Incentive & bonus tracking
+- **Werkbelasting** overzicht
+- Resource kalender
+
+</td>
+<td width="50%">
+
+### 📧 Automatisering
+- **15+ e-mail templates**
+- Automatische herinneringen
+- NPS & feedback surveys
+- Reactivatie campagnes
+
+</td>
+</tr>
+</table>
+
+---
 
 ## 🛠️ Tech Stack
 
-| Categorie | Technologie |
-|-----------|-------------|
-| **Frontend** | Next.js 16, React 19, TypeScript, Tailwind CSS |
-| **Backend** | Supabase (Auth + Postgres) |
-| **Database** | Prisma ORM |
-| **State Management** | Zustand met database-synchronisatie |
-| **UI Componenten** | Radix UI + Shadcn |
+| Laag | Technologie |
+|------|-------------|
+| **Frontend** | Next.js 16 · React 19 · TypeScript · Tailwind CSS |
+| **Backend** | Supabase (Auth + PostgreSQL) |
+| **ORM** | Prisma met type-safety |
+| **State** | Zustand met optimistische updates |
+| **UI** | Radix UI + Shadcn componenten |
+
+---
+
+## 📋 Inhoudsopgave
+
+- [Installatie](#-installatie)
+- [Database Commando's](#-database-commandos)
+- [Architectuur](#-architectuur)
+- [Projectstructuur](#-projectstructuur)
+- [Beveiliging](#-beveiliging)
+- [Documentatie](#-documentatie)
+
+---
 
 ## 🚀 Installatie
 
-### 1. Kloon en installeer afhankelijkheden
+### 1. Repository klonen
 
 ```bash
 git clone https://github.com/Brommah/BBR.git
@@ -33,208 +127,185 @@ cd BBR
 npm install
 ```
 
-### 2. Configureer omgevingsvariabelen
+### 2. Omgevingsvariabelen configureren
 
-Maak een `.env.local` bestand aan met je Supabase-gegevens:
+Maak `.env.local` aan in de root:
 
 ```env
 # Supabase
 NEXT_PUBLIC_SUPABASE_URL=https://puxthqumkuvspzpukouy.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=jouw-anon-key
 
-# Database (verkrijg via Supabase Dashboard > Settings > Database)
+# Database (Supabase Dashboard → Settings → Database)
 DATABASE_URL=postgresql://postgres:[wachtwoord]@db.puxthqumkuvspzpukouy.supabase.co:5432/postgres
 DIRECT_URL=postgresql://postgres:[wachtwoord]@db.puxthqumkuvspzpukouy.supabase.co:5432/postgres
+
+# Notion (optioneel, voor roadmap sync)
+NOTION_API_KEY=jouw-notion-key
 
 # Omgeving
 NODE_ENV=development
 ```
 
-### 3. Initialiseer de database
+### 3. Database initialiseren
 
 ```bash
-npm run db:push    # Synchroniseer schema naar database
-npm run db:seed    # Vul met testgegevens
+npm run db:push    # Schema naar database
+npm run db:seed    # Testdata laden
 ```
 
-### 4. Maak gebruikers aan in Supabase
+### 4. Gebruikers aanmaken
 
-Ga naar [Supabase Dashboard](https://supabase.com/dashboard) > Authentication > Users en maak gebruikers aan:
+Ga naar [Supabase Dashboard](https://supabase.com/dashboard) → Authentication → Users:
 
-| E-mail | Rol | user_metadata |
-|--------|-----|---------------|
-| mart@broersma-bouwadvies.nl | admin | `{"name": "Mart Broersma", "role": "admin"}` |
-| angelo@broersma-bouwadvies.nl | engineer | `{"name": "Angelo", "role": "engineer"}` |
-| venka@broersma-bouwadvies.nl | engineer | `{"name": "Venka", "role": "engineer"}` |
-| roina@broersma-bouwadvies.nl | engineer | `{"name": "Roina", "role": "engineer"}` |
+| E-mail | Rol | Metadata |
+|--------|-----|----------|
+| `mart@broersma-bouwadvies.nl` | admin | `{"name": "Mart Broersma", "role": "admin"}` |
+| `angelo@broersma-bouwadvies.nl` | engineer | `{"name": "Angelo", "role": "engineer"}` |
+| `venka@broersma-bouwadvies.nl` | engineer | `{"name": "Venka", "role": "engineer"}` |
+| `roina@broersma-bouwadvies.nl` | engineer | `{"name": "Roina", "role": "engineer"}` |
 
-### 5. Start de ontwikkelserver
+### 5. Ontwikkelserver starten
 
 ```bash
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) in je browser.
+---
 
 ## 📦 Database Commando's
 
-| Commando | Beschrijving |
-|----------|-------------|
-| `npm run db:studio` | Open Prisma Studio (visuele database-editor) |
-| `npm run db:push` | Synchroniseer schema naar database |
-| `npm run db:migrate` | Maak een nieuwe migratie aan |
-| `npm run db:seed` | Vul database met testgegevens |
-| `npm run db:generate` | Genereer Prisma client |
+| Commando | Wat doet het? |
+|----------|---------------|
+| `npm run db:studio` | 🔍 Prisma Studio openen (visuele editor) |
+| `npm run db:push` | ⬆️ Schema synchroniseren |
+| `npm run db:migrate` | 📝 Migratie aanmaken |
+| `npm run db:seed` | 🌱 Testdata laden |
+| `npm run db:generate` | ⚙️ Prisma client regenereren |
+
+---
 
 ## 🏛️ Architectuur
 
 ### State Management
-
 - **Zustand store** met optimistische updates
-- **Server actions** voor alle mutaties
+- **Server actions** voor alle database-mutaties
 - **Automatische rollback** bij fouten
-- **Laadstatussen** door de hele applicatie
+- Real-time **laadstatussen**
 
-### Authenticatie
-
-- **Supabase Auth** met e-mail/wachtwoord
-- **Rolgebaseerde toegangscontrole** (admin, engineer, viewer)
-- **Beveiligde routes** met AccessGuard component
-- **Sessiebehoud** bij pagina-verversingen
+### Authenticatie & Autorisatie
+- **Supabase Auth** (e-mail/wachtwoord)
+- **Drie rollen:** admin · engineer · viewer
+- **AccessGuard** component voor route-beveiliging
+- Persistente sessies
 
 ### Database
-
 - **PostgreSQL** via Supabase
-- **Prisma ORM** met volledige type-veiligheid
-- **Complete CRUD** voor leads, offertes, notities, kostentarieven
-- **Activiteitenlog** voor audit trail
+- **Prisma ORM** met 100% type-safety
+- Complete CRUD voor leads, offertes, notities
+- **Audit trail** voor alle wijzigingen
 
-## ✨ Functionaliteiten
-
-### Leadbeheer
-- 📊 Kanban-bord met drag-and-drop
-- 📋 Gedetailleerde leadweergave met specificaties
-- 👥 Toewijzing aan engineers
-- 🔄 Statusworkflow-tracking
-
-### Offertesysteem
-- 📝 Aangepaste offertebouwer met regelitems
-- ✅ Goedkeuringsworkflow voor beheerders
-- 💬 Feedbacksysteem voor afwijzingen
-- 📄 PDF-preview en -generatie
-
-### Beheerderspaneel
-- 📋 Wachtrij voor offertegoedkeuringen
-- 💰 Beheer van kostentarieven
-- 🔐 Gebruikersrechten en -machtigingen
-- 📧 Overzicht e-mailautomatiseringen
-
-### Engineer Dashboard
-- 📈 Prestatie-overzicht
-- 🏆 Incentive-dashboard
-- 📅 Resource-kalender
-- 📊 Werkbelastinggrafieken
-
-### Marketing
-- 🎨 Marketingmaterialen beheer
-- 📧 E-mailsjablonen
-- 📊 NPS-dashboard voor feedback
+---
 
 ## 📁 Projectstructuur
 
 ```
-├── app/                    # Next.js app router pagina's
-│   ├── admin/             # Beheerderspaneel
-│   ├── inbox/             # Nieuwe leads inbox
-│   ├── leads/[id]/        # Lead detailweergave
-│   ├── pipeline/          # Kanban-bord
-│   ├── incentives/        # Incentive-overzicht
-│   ├── marketing-preview/ # Marketing materialen
-│   ├── templates/         # Documentsjablonen
-│   └── login/             # Authenticatie
+broersma-backoffice/
+├── app/                      # Next.js App Router
+│   ├── admin/               # 🔐 Beheerderspaneel
+│   ├── inbox/               # 📥 Nieuwe leads
+│   ├── leads/[id]/          # 📋 Lead details
+│   ├── pipeline/            # 📊 Kanban-bord
+│   ├── incentives/          # 🏆 Incentives
+│   ├── marketing-preview/   # 🎨 Marketing
+│   └── templates/           # 📄 Sjablonen
+│
 ├── components/
-│   ├── admin/             # Beheerder-specifieke componenten
-│   ├── auth/              # Authenticatie componenten
-│   ├── dashboard/         # Dashboard widgets
-│   ├── engineer-view/     # Engineer dashboard
-│   ├── feedback/          # Feedback componenten
-│   ├── lead-detail/       # Lead detail panelen
-│   ├── marketing/         # Marketing componenten
-│   ├── pipeline/          # Kanban componenten
-│   ├── templates/         # Sjabloon componenten
-│   └── ui/                # Shadcn UI componenten
+│   ├── admin/               # Admin-specifiek
+│   ├── auth/                # Login & guards
+│   ├── dashboard/           # KPI widgets
+│   ├── engineer-view/       # Engineer tools
+│   ├── lead-detail/         # Lead panelen
+│   ├── pipeline/            # Kanban componenten
+│   └── ui/                  # Shadcn UI
+│
 ├── lib/
-│   ├── auth.ts            # Supabase auth store
-│   ├── store.ts           # Lead data store
-│   ├── db-actions.ts      # Server actions
-│   ├── supabase.ts        # Supabase client
-│   ├── incentives.ts      # Incentive berekeningen
-│   ├── notion.ts          # Notion integratie
-│   └── db.ts              # Prisma client
+│   ├── auth.ts              # Auth store
+│   ├── store.ts             # Data store
+│   ├── db-actions.ts        # Server actions
+│   └── supabase.ts          # Supabase client
+│
 ├── prisma/
-│   ├── schema.prisma      # Database schema
-│   └── seed.ts            # Seed data
-├── tests/                 # Test bestanden
-│   ├── lib/               # Unit tests
-│   └── setup.ts           # Test configuratie
-└── docs/                  # Documentatie
-    ├── email-automations/ # E-mail flow specificaties
-    └── growth-strategy/   # Bedrijfsstrategie documenten
+│   ├── schema.prisma        # Database schema
+│   └── seed.ts              # Seed data
+│
+└── docs/                    # 📚 Documentatie
+    ├── email-automations/   # E-mail specs
+    └── growth-strategy/     # Strategie docs
 ```
+
+---
 
 ## 🔒 Beveiliging
 
-| Status | Maatregel |
-|--------|-----------|
-| ✅ | Geen hardcoded credentials |
-| ✅ | Omgevingsvariabelen voor geheimen |
-| ✅ | Inputvalidatie op alle server actions |
-| ✅ | Rolgebaseerde toegangscontrole |
-| ✅ | Sessie-gebaseerde authenticatie |
-| ✅ | Beveiligde API-routes |
+| ✅ | Maatregel |
+|----|-----------|
+| 🔑 | Geen hardcoded credentials |
+| 🔐 | Environment variables voor secrets |
+| ✔️ | Inputvalidatie op alle server actions |
+| 👥 | Rolgebaseerde toegangscontrole |
+| 🍪 | Sessie-gebaseerde authenticatie |
+| 🛡️ | Beveiligde API-routes |
+
+---
 
 ## 🧪 Testen
 
 ```bash
-npm run test           # Start Vitest in watch mode
-npm run test:run       # Voer tests eenmalig uit
-npm run test:coverage  # Genereer coverage rapport
+npm run test           # Watch mode
+npm run test:run       # Eenmalig
+npm run test:coverage  # Met coverage rapport
 ```
-
-## 📧 E-mail Automatiseringen
-
-Het systeem bevat uitgebreide e-mailautomatiseringen voor:
-
-- Intakebevestigingen
-- Engineer-toewijzingen
-- Offerteverzendingen en -herinneringen
-- Opdrachtbevestigingen
-- Factuurverzendingen en betaalherinneringen
-- Feedback- en NPS-verzoeken
-- Reactivatiecampagnes
-
-Zie `/docs/email-automations/` voor volledige documentatie.
-
-## 📈 Groeistrategie
-
-Strategische documentatie beschikbaar in `/docs/growth-strategy/`:
-
-- Groeistrategie 2026
-- Budget allocatie
-- Marketing kanalen
-- Conversie-optimalisatie
-- Klantretentie en LTV
-- Partnership strategieën
-- Operationele schaling
-
-## 🤝 Bijdragen
-
-Dit is een privé-repository voor Broersma Bouwadvies. Neem contact op met het ontwikkelteam voor bijdrage-richtlijnen.
-
-## 📄 Licentie
-
-Privé - © 2026 Broersma Bouwadvies. Alle rechten voorbehouden.
 
 ---
 
-Ontwikkeld met ❤️ voor Broersma Bouwadvies
+## 📚 Documentatie
+
+### 📧 E-mail Automatiseringen
+
+Uitgebreide e-mailflows voor het hele klanttraject:
+
+- Intakebevestigingen & engineer-toewijzingen
+- Offerteverzendingen met herinneringen
+- Opdrachtbevestigingen & facturen
+- NPS surveys & feedback verzoeken
+- Reactivatie campagnes
+
+**→ Zie [`/docs/email-automations/`](./docs/email-automations/)**
+
+### 📈 Groeistrategie 2026
+
+Strategische planning en documentatie:
+
+- Budget allocatie & marketing kanalen
+- Conversie-optimalisatie
+- Klantretentie & LTV analyse
+- Partnership strategieën
+
+**→ Zie [`/docs/growth-strategy/`](./docs/growth-strategy/)**
+
+---
+
+## 📄 Licentie
+
+**Privé** — © 2026 Broersma Bouwadvies. Alle rechten voorbehouden.
+
+---
+
+<div align="center">
+
+Gebouwd met 💛 voor Broersma Bouwadvies
+
+**[🏠 Dashboard](http://localhost:3000)** · **[📊 Pipeline](http://localhost:3000/pipeline)** · **[🔐 Admin](http://localhost:3000/admin)**
+
+</div>
