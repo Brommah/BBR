@@ -1,0 +1,450 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+/* =============================================================================
+   BROERSMA ENGINEER OS - MASTER STYLE GUIDE
+   Version: 3.1.0
+   
+   Design Principles:
+   - Clean, professional sans-serif typography
+   - Navy/Gold brand palette with high contrast
+   - Consistent spacing using 4px grid (0.25rem)
+   - Subtle shadows and borders for depth
+   - WCAG AA compliant color contrast
+   ============================================================================= */
+
+/* =============================================================================
+   DESIGN TOKENS
+   ============================================================================= */
+@theme inline {
+  /* Typography */
+  --font-sans: var(--font-sans);
+  
+  /* Colors - mapped from CSS variables */
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  
+  /* Charts */
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  
+  /* Sidebar */
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+  
+  /* Border Radius - consistent rounding */
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+}
+
+/* =============================================================================
+   COLOR PALETTE - LIGHT THEME
+   Navy primary, Gold accent, High contrast
+   ============================================================================= */
+:root {
+  /* Base radius for all rounded corners */
+  --radius: 0.5rem;
+
+  /* Page backgrounds */
+  --background: oklch(0.985 0.002 260);
+  --foreground: oklch(0.145 0.025 260);
+
+  /* Card surfaces */
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0.025 260);
+
+  /* Popover/dropdown surfaces */
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0.025 260);
+
+  /* Primary - Deep Navy */
+  --primary: oklch(0.205 0.045 260);
+  --primary-foreground: oklch(0.985 0 0);
+
+  /* Secondary - Light gray */
+  --secondary: oklch(0.955 0.005 260);
+  --secondary-foreground: oklch(0.205 0.045 260);
+
+  /* Muted text and backgrounds */
+  --muted: oklch(0.955 0.005 260);
+  --muted-foreground: oklch(0.45 0.02 260);
+
+  /* Accent - Warm Gold */
+  --accent: oklch(0.78 0.14 75);
+  --accent-foreground: oklch(0.18 0.04 260);
+
+  /* Status colors */
+  --destructive: oklch(0.55 0.22 25);
+  --success: oklch(0.55 0.18 145);
+  --warning: oklch(0.75 0.15 70);
+
+  /* Borders and inputs */
+  --border: oklch(0.88 0.01 260);
+  --input: oklch(0.88 0.01 260);
+  --ring: oklch(0.55 0.12 75);
+
+  /* Chart palette */
+  --chart-1: oklch(0.205 0.045 260);
+  --chart-2: oklch(0.65 0.14 75);
+  --chart-3: oklch(0.50 0.16 165);
+  --chart-4: oklch(0.58 0.18 28);
+  --chart-5: oklch(0.55 0.18 290);
+
+  /* Sidebar - Dark navy theme */
+  --sidebar: oklch(0.18 0.04 260);
+  --sidebar-foreground: oklch(0.92 0.01 260);
+  --sidebar-primary: oklch(0.78 0.14 75);
+  --sidebar-primary-foreground: oklch(0.145 0.025 260);
+  --sidebar-accent: oklch(0.26 0.04 260);
+  --sidebar-accent-foreground: oklch(0.95 0.01 260);
+  --sidebar-border: oklch(0.30 0.04 260);
+  --sidebar-ring: oklch(0.65 0.14 75);
+}
+
+/* =============================================================================
+   COLOR PALETTE - DARK THEME
+   ============================================================================= */
+.dark {
+  --background: oklch(0.13 0.02 260);
+  --foreground: oklch(0.95 0.005 260);
+  
+  --card: oklch(0.17 0.02 260);
+  --card-foreground: oklch(0.95 0.005 260);
+  
+  --popover: oklch(0.17 0.02 260);
+  --popover-foreground: oklch(0.95 0.005 260);
+  
+  --primary: oklch(0.92 0.01 260);
+  --primary-foreground: oklch(0.17 0.02 260);
+  
+  --secondary: oklch(0.24 0.02 260);
+  --secondary-foreground: oklch(0.92 0.01 260);
+  
+  --muted: oklch(0.24 0.02 260);
+  --muted-foreground: oklch(0.65 0.02 260);
+  
+  --accent: oklch(0.78 0.14 75);
+  --accent-foreground: oklch(0.13 0.02 260);
+  
+  --destructive: oklch(0.62 0.22 25);
+  --success: oklch(0.60 0.18 145);
+  --warning: oklch(0.78 0.15 70);
+  
+  --border: oklch(0.30 0.02 260);
+  --input: oklch(0.30 0.02 260);
+  --ring: oklch(0.70 0.14 75);
+  
+  --chart-1: oklch(0.58 0.18 260);
+  --chart-2: oklch(0.78 0.14 75);
+  --chart-3: oklch(0.58 0.18 165);
+  --chart-4: oklch(0.65 0.20 28);
+  --chart-5: oklch(0.62 0.20 290);
+  
+  --sidebar: oklch(0.13 0.02 260);
+  --sidebar-foreground: oklch(0.92 0.01 260);
+  --sidebar-primary: oklch(0.78 0.14 75);
+  --sidebar-primary-foreground: oklch(0.13 0.02 260);
+  --sidebar-accent: oklch(0.22 0.02 260);
+  --sidebar-accent-foreground: oklch(0.92 0.01 260);
+  --sidebar-border: oklch(0.30 0.02 260);
+  --sidebar-ring: oklch(0.70 0.14 75);
+}
+
+/* =============================================================================
+   BASE STYLES
+   ============================================================================= */
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: var(--font-sans), system-ui, -apple-system, sans-serif;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+  
+  /* Headings - consistent weight and tracking */
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-semibold tracking-tight text-foreground;
+  }
+  
+  h1 { @apply text-3xl; }
+  h2 { @apply text-2xl; }
+  h3 { @apply text-xl; }
+  h4 { @apply text-lg; }
+  h5 { @apply text-base; }
+  h6 { @apply text-sm; }
+  
+  /* Focus styles for accessibility */
+  :focus-visible {
+    @apply outline-2 outline-offset-2 outline-ring;
+  }
+  
+  /* Toast/Notification styles - improved contrast */
+  [data-sonner-toast] {
+    @apply bg-card text-card-foreground border-border;
+  }
+  
+  [data-sonner-toast] [data-description] {
+    @apply text-foreground/80 font-medium;
+  }
+  
+  [data-sonner-toast] [data-title] {
+    @apply text-foreground font-semibold;
+  }
+  
+  [data-sonner-toast][data-type="success"] [data-description] {
+    @apply text-emerald-900 dark:text-emerald-100;
+  }
+  
+  [data-sonner-toast][data-type="error"] [data-description] {
+    @apply text-red-900 dark:text-red-100;
+  }
+  
+  [data-sonner-toast][data-type="info"] [data-description] {
+    @apply text-blue-900 dark:text-blue-100;
+  }
+  
+  [data-sonner-toast][data-type="warning"] [data-description] {
+    @apply text-amber-900 dark:text-amber-100;
+  }
+}
+
+/* =============================================================================
+   COMPONENT UTILITIES
+   ============================================================================= */
+@layer utilities {
+  /* Page container */
+  .page-container {
+    @apply flex-1 p-6 md:p-8 overflow-y-auto bg-background;
+  }
+  
+  /* Page header */
+  .page-header {
+    @apply mb-6;
+  }
+  
+  .page-title {
+    @apply text-2xl md:text-3xl font-semibold tracking-tight text-foreground;
+  }
+  
+  .page-description {
+    @apply text-sm text-muted-foreground mt-1;
+  }
+  
+  /* Section headers */
+  .section-title {
+    @apply text-lg font-semibold tracking-tight text-foreground;
+  }
+  
+  .section-description {
+    @apply text-sm text-muted-foreground;
+  }
+  
+  /* Card variations */
+  .card-elevated {
+    @apply bg-card border border-border shadow-sm hover:shadow-md transition-shadow;
+  }
+  
+  .card-interactive {
+    @apply bg-card border border-border shadow-sm hover:shadow-md hover:border-primary/20 
+           transition-all cursor-pointer;
+  }
+  
+  .card-featured {
+    @apply bg-card border-2 border-accent/30 shadow-md;
+  }
+  
+  /* New Polish Utilities */
+  .card-hover-effect {
+    @apply transition-all duration-300 hover:shadow-lg hover:-translate-y-0.5;
+  }
+
+  .bg-gradient-subtle {
+    @apply bg-gradient-to-br from-background via-muted/20 to-muted/40;
+  }
+
+  .glass-panel {
+    @apply bg-background/80 backdrop-blur-md border-b border-border/50;
+  }
+  
+  /* Status indicators */
+  .status-dot {
+    @apply w-2 h-2 rounded-full;
+  }
+  
+  .status-success { @apply bg-emerald-500; }
+  .status-warning { @apply bg-amber-500; }
+  .status-error { @apply bg-red-500; }
+  .status-info { @apply bg-blue-500; }
+  .status-neutral { @apply bg-slate-400; }
+  
+  /* Badge variations */
+  .badge-primary {
+    @apply bg-primary text-primary-foreground;
+  }
+  
+  .badge-secondary {
+    @apply bg-secondary text-secondary-foreground border border-border;
+  }
+  
+  .badge-accent {
+    @apply bg-accent text-accent-foreground;
+  }
+  
+  .badge-muted {
+    @apply bg-muted text-muted-foreground;
+  }
+  
+  /* Typography utilities */
+  .text-label {
+    @apply text-xs font-medium uppercase tracking-wider text-muted-foreground;
+  }
+  
+  .text-value {
+    @apply font-mono font-semibold tabular-nums;
+  }
+  
+  .text-currency {
+    @apply font-mono font-bold tabular-nums text-foreground;
+  }
+  
+  /* Avatar utilities */
+  .avatar-sm {
+    @apply w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold;
+  }
+  
+  .avatar-md {
+    @apply w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold;
+  }
+  
+  .avatar-lg {
+    @apply w-10 h-10 rounded-full flex items-center justify-center text-base font-semibold;
+  }
+  
+  /* Input focus ring */
+  .input-focus {
+    @apply focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background;
+  }
+  
+  /* Scrollbar styling */
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: oklch(0.55 0.02 260) transparent;
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background-color: oklch(0.55 0.02 260);
+    border-radius: 3px;
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    background-color: oklch(0.45 0.02 260);
+  }
+  
+  /* Grid layouts */
+  .grid-dashboard {
+    @apply grid gap-4 md:gap-6 grid-cols-1 md:grid-cols-2 lg:grid-cols-3;
+  }
+  
+  .grid-cards {
+    @apply grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4;
+  }
+}
+
+/* =============================================================================
+   PRINT STYLES
+   ============================================================================= */
+@media print {
+  body {
+    background: white !important;
+  }
+  
+  .no-print {
+    display: none !important;
+  }
+  
+  #quote-document {
+    box-shadow: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+}
+
+/* =============================================================================
+   ANIMATION UTILITIES
+   ============================================================================= */
+@layer utilities {
+  .animate-fade-in {
+    animation: fadeIn 0.2s ease-out;
+  }
+  
+  .animate-slide-up {
+    animation: slideUp 0.3s ease-out;
+  }
+  
+  .animate-pulse-subtle {
+    animation: pulseSlight 2s ease-in-out infinite;
+  }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from { 
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to { 
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes pulseSlight {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.8; }
+}

@@ -1,0 +1,113 @@
+// Prisma schema for Broersma Bouwadvies Backoffice
+// Connected to Supabase PostgreSQL
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum LeadStatus {
+  Nieuw
+  Calculatie
+  OfferteVerzonden
+  Opdracht
+  Archief
+}
+
+enum QuoteApprovalStatus {
+  none
+  pending
+  approved
+  rejected
+}
+
+model Lead {
+  id                  String              @id @default(cuid())
+  clientName          String
+  clientEmail         String?
+  clientPhone         String?
+  projectType         String
+  city                String
+  address             String?
+  status              LeadStatus          @default(Nieuw)
+  value               Float               @default(0)
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+  assignee            String?
+  isUrgent            Boolean             @default(false)
+  addressValid        Boolean             @default(false)
+  
+  // Quote data
+  quoteApproval       QuoteApprovalStatus @default(none)
+  quoteValue          Float?
+  quoteDescription    String?             // Engineer's justification for the quote
+  quoteLineItems      Json?               // Array of {description: string, amount: number}
+  quoteEstimatedHours Float?              // Estimated hours for the work
+  quoteFeedback       Json?               // Array of admin feedback objects
+  
+  // Relations
+  specifications      ProjectSpec[]
+  notes               Note[]
+  activities          Activity[]
+
+  @@index([status])
+  @@index([assignee])
+  @@index([createdAt])
+}
+
+model ProjectSpec {
+  id        String   @id @default(cuid())
+  leadId    String
+  lead      Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  key       String
+  value     String
+  unit      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([leadId, key])
+}
+
+model Note {
+  id        String   @id @default(cuid())
+  leadId    String
+  lead      Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  content   String
+  author    String
+  createdAt DateTime @default(now())
+}
+
+model Activity {
+  id        String   @id @default(cuid())
+  leadId    String
+  lead      Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  type      String   // 'status_change', 'email_sent', 'note_added', 'quote_generated', 'quote_submitted', 'quote_approved', 'quote_rejected'
+  content   String
+  author    String?
+  createdAt DateTime @default(now())
+
+  @@index([leadId])
+  @@index([createdAt])
+}
+
+model User {
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  role      String   @default("engineer") // 'admin', 'engineer', 'viewer'
+  avatar    String?
+  createdAt DateTime @default(now())
+}
+
+model CostRate {
+  id           String   @id @default(cuid())
+  name         String
+  basePrice    Float
+  category     String   @default("base") // 'base', 'surcharge'
+  isPercentage Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
