@@ -99,7 +99,7 @@ export function AddressAutocomplete({
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter" && isFocused) {
       // Check if autocomplete dropdown is visible
-      const pacContainer = document.querySelector(".pac-container")
+      const pacContainer = document.querySelector(".pac-container") as HTMLElement | null
       if (pacContainer && pacContainer.style.display !== "none") {
         e.preventDefault()
       }
