@@ -135,7 +135,9 @@ export function AddressAutocomplete({
           {!isLoaded && !error ? (
             <Loader2 className="w-4 h-4 text-muted-foreground animate-spin" />
           ) : error ? (
-            <AlertCircle className="w-4 h-4 text-amber-500" title={error} />
+            <span title={error}>
+              <AlertCircle className="w-4 h-4 text-amber-500" />
+            </span>
           ) : (
             icon || <MapPin className="w-4 h-4 text-muted-foreground" />
           )}
