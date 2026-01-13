@@ -24,7 +24,8 @@ import {
   X,
   File,
   Image as ImageIcon,
-  FileIcon
+  FileIcon,
+  MapPin
 } from "lucide-react"
 import { toast } from "sonner"
 
