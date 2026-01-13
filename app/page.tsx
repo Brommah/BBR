@@ -1,7 +1,7 @@
 "use client"
 
 import { DashboardNotifications } from "@/components/dashboard/dashboard-notifications"
-import { useLeadStore } from "@/lib/store"
+import { useLeadStore, Lead } from "@/lib/store"
 import { useAuthStore } from "@/lib/auth"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
