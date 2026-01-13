@@ -1,7 +1,8 @@
 "use client"
 
-import { Home, Bell, Kanban, TrendingUp, Shield } from "lucide-react"
+import { Home, Bell, Kanban, Shield, ClipboardPlus } from "lucide-react"
 import Link from "next/link"
+import Image from "next/image"
 import { usePathname } from "next/navigation"
 import { useAuthStore } from "@/lib/auth"
 import { UserMenu } from "@/components/auth/user-menu"
@@ -30,6 +31,12 @@ const menuItems = [
     roles: ['admin', 'engineer', 'viewer'] as const,
   },
   {
+    title: "Nieuw Project",
+    url: "/submit",
+    icon: ClipboardPlus,
+    roles: ['admin'] as const,
+  },
+  {
     title: "Inbox",
     url: "/inbox",
     icon: Bell,
@@ -40,13 +47,7 @@ const menuItems = [
     title: "Pipeline",
     url: "/pipeline",
     icon: Kanban,
-    roles: ['admin', 'engineer', 'viewer'] as const,
-  },
-  {
-    title: "Mijn Prestaties",
-    url: "/incentives",
-    icon: TrendingUp,
-    roles: ['admin', 'engineer'] as const,
+    roles: ['admin'] as const,
   },
   {
     title: "Admin",
@@ -63,8 +64,8 @@ export function AppSidebar() {
 
   // Filter menu items based on user role
   const visibleItems = menuItems.filter(item => {
-    if (!currentUser) return item.roles.includes('viewer')
-    return item.roles.includes(currentUser.role)
+    if (!currentUser) return (item.roles as readonly string[]).includes('viewer')
+    return (item.roles as readonly string[]).includes(currentUser.role)
   })
 
   return (
@@ -72,11 +73,12 @@ export function AppSidebar() {
       <SidebarHeader className="p-4 border-b border-sidebar-border">
         <div className="flex flex-col items-center text-center">
           <div className="relative w-36 h-14 mb-1">
-            {/* Using the official logo from URL */}
-            <img 
+            <Image 
               src="https://www.bureau-broersma.nl/wp-content/uploads/2015/09/logo-white-gold.png" 
-              alt="Bureau Broersma" 
-              className="object-contain w-full h-full"
+              alt="Bureau Broersma Logo" 
+              fill
+              className="object-contain"
+              priority
             />
           </div>
           <span className="text-[10px] uppercase tracking-[0.2em] text-sidebar-foreground/60 font-medium">

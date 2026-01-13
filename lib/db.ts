@@ -3,9 +3,10 @@ import { PrismaPg } from '@prisma/adapter-pg'
 import { Pool } from 'pg'
 
 declare global {
-  // eslint-disable-next-line no-var
+  // Using var for global augmentation is required by TypeScript
+  // biome-ignore lint: var is required for global declarations
   var prisma: PrismaClient | undefined
-  // eslint-disable-next-line no-var
+  // biome-ignore lint: var is required for global declarations
   var pool: Pool | undefined
 }
 

@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { Separator } from "@/components/ui/separator"
-import { Trophy, Zap, Target, TrendingUp, Star, Flame, Award, Clock, Users, Euro } from "lucide-react"
+import { Trophy, Zap, Target, TrendingUp, Star, Flame, Award, Euro } from "lucide-react"
 import { DEFAULT_ENGINEER_PROFILE, INCENTIVE_TIERS } from "@/lib/incentives"
 
 const leaderboard = [

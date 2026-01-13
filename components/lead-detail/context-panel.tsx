@@ -4,14 +4,12 @@ import { useState } from "react"
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Lead, ProjectSpec, useLeadStore, LeadStatus } from "@/lib/store"
-import { MapPin, Phone, Mail, Building, ExternalLink, Plus, Pencil, Trash2, Save, X as XIcon, ChevronDown } from "lucide-react"
+import { MapPin, Phone, Mail, Building, ExternalLink, Plus, Pencil, Trash2, Save, X as XIcon, Euro, Hash } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Separator } from "@/components/ui/separator"
 import { AssigneeSelector } from "./assignee-selector"
 import { Button } from "@/components/ui/button"
-import { Check, X } from "lucide-react"
 import { toast } from "sonner"
-import { useRouter } from "next/navigation"
 import { Input } from "@/components/ui/input"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 
@@ -22,6 +20,17 @@ const STATUS_OPTIONS: { value: LeadStatus; label: string; color: string; bgColor
     { value: "Offerte Verzonden", label: "Offerte Verzonden", color: "text-purple-700", bgColor: "bg-purple-100 dark:bg-purple-950" },
     { value: "Opdracht", label: "Opdracht", color: "text-emerald-700", bgColor: "bg-emerald-100 dark:bg-emerald-950" },
     { value: "Archief", label: "Archief", color: "text-slate-600", bgColor: "bg-slate-100 dark:bg-slate-800" },
+]
+
+const PROJECT_TYPES = [
+    "Dakkapel",
+    "Uitbouw",
+    "Draagmuur",
+    "Fundering",
+    "Verbouwing",
+    "Nieuwbouw",
+    "Renovatie",
+    "Overig"
 ]
 
 function StatusSelector({ currentStatus, onStatusChange }: { currentStatus: LeadStatus; onStatusChange: (status: LeadStatus) => void }) {
@@ -40,7 +49,7 @@ function StatusSelector({ currentStatus, onStatusChange }: { currentStatus: Lead
                         className="font-medium"
                     >
                         <div className="flex items-center gap-2">
-                            <div className={`w-2 h-2 rounded-full ${status.bgColor.replace('bg-', 'bg-').replace('-100', '-500').replace('-950', '-400')}`} 
+                            <div className={`w-2 h-2 rounded-full`} 
                                  style={{ 
                                      backgroundColor: status.value === "Nieuw" ? "#3b82f6" :
                                                       status.value === "Calculatie" ? "#f59e0b" :
@@ -57,13 +66,112 @@ function StatusSelector({ currentStatus, onStatusChange }: { currentStatus: Lead
     )
 }
 
+interface EditableFieldProps {
+    label: string
+    value: string
+    onChange: (value: string) => void
+    isEditing: boolean
+    icon?: React.ReactNode
+    type?: "text" | "email" | "tel" | "number"
+    prefix?: string
+    href?: string
+}
+
+function EditableField({ label, value, onChange, isEditing, icon, type = "text", prefix, href }: EditableFieldProps) {
+    if (isEditing) {
+        return (
+            <div className="flex items-center gap-3 p-2 rounded-md bg-slate-50 dark:bg-slate-800">
+                {icon && <span className="text-slate-500 dark:text-slate-400">{icon}</span>}
+                <div className="flex-1">
+                    <label className="text-[10px] uppercase tracking-wider text-slate-500 dark:text-slate-400 font-semibold block mb-1">
+                        {label}
+                    </label>
+                    <div className="flex items-center gap-1">
+                        {prefix && <span className="text-sm text-slate-500">{prefix}</span>}
+                        <Input
+                            type={type}
+                            value={value || ""}
+                            onChange={(e) => onChange(e.target.value)}
+                            className="h-7 text-sm bg-white dark:bg-slate-900"
+                            placeholder={`${label}...`}
+                        />
+                    </div>
+                </div>
+            </div>
+        )
+    }
+
+    const content = (
+        <div className="flex items-center gap-3 p-2 rounded-md text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors group">
+            {icon && <span className="text-slate-500 dark:text-slate-400">{icon}</span>}
+            <div className="flex-1 min-w-0">
+                <span className="text-[10px] uppercase tracking-wider text-slate-500 dark:text-slate-400 font-semibold block">
+                    {label}
+                </span>
+                <span className="text-sm font-medium truncate block">
+                    {prefix}{value || <span className="text-slate-400 italic">Niet ingevuld</span>}
+                </span>
+            </div>
+            {href && <ExternalLink className="w-3 h-3 opacity-0 group-hover:opacity-50" />}
+        </div>
+    )
+
+    if (href && value) {
+        return <a href={href}>{content}</a>
+    }
+
+    return content
+}
+
 export function ContextPanel({ lead }: { lead: Lead }) {
-    const { updateLeadStatus, updateProjectSpecs } = useLeadStore()
-    const router = useRouter()
+    const { updateLeadStatus, updateProjectSpecs, updateLead } = useLeadStore()
+    const [isEditing, setIsEditing] = useState(false)
+    
+    // Editable lead fields
+    const [editedLead, setEditedLead] = useState({
+        clientName: lead.clientName,
+        clientEmail: lead.clientEmail || "",
+        clientPhone: lead.clientPhone || "",
+        address: lead.address || "",
+        city: lead.city,
+        projectType: lead.projectType,
+        value: lead.value,
+        werknummer: lead.werknummer || "",
+    })
+
+    // Specs editing
     const [isEditingSpecs, setIsEditingSpecs] = useState(false)
     const [editedSpecs, setEditedSpecs] = useState<ProjectSpec[]>(lead.specifications || [])
     const [isAddingSpec, setIsAddingSpec] = useState(false)
     const [newSpec, setNewSpec] = useState<ProjectSpec>({ key: "", value: "", unit: "" })
+
+    const handleSaveLead = () => {
+        updateLead(lead.id, {
+            clientName: editedLead.clientName,
+            clientEmail: editedLead.clientEmail || null,
+            clientPhone: editedLead.clientPhone || null,
+            address: editedLead.address || null,
+            city: editedLead.city,
+            projectType: editedLead.projectType,
+            value: editedLead.value,
+        })
+        setIsEditing(false)
+        toast.success("Wijzigingen opgeslagen")
+    }
+
+    const handleCancelEdit = () => {
+        setEditedLead({
+            clientName: lead.clientName,
+            clientEmail: lead.clientEmail || "",
+            clientPhone: lead.clientPhone || "",
+            address: lead.address || "",
+            city: lead.city,
+            projectType: lead.projectType,
+            value: lead.value,
+            werknummer: lead.werknummer || "",
+        })
+        setIsEditing(false)
+    }
 
     const handleSaveSpecs = () => {
         updateProjectSpecs(lead.id, editedSpecs)
@@ -96,43 +204,122 @@ export function ContextPanel({ lead }: { lead: Lead }) {
     return (
         <Card className="h-full flex flex-col overflow-hidden border-none shadow-none bg-transparent">
             {/* Map Section */}
-            <div className="h-56 bg-slate-900 relative rounded-lg overflow-hidden border-2 border-slate-300 dark:border-slate-600 group cursor-pointer hover:border-slate-400 transition-colors">
+            <div className="h-40 bg-slate-900 relative rounded-lg overflow-hidden border-2 border-slate-300 dark:border-slate-600 group cursor-pointer hover:border-slate-400 transition-colors">
                 {/* Mock Satellite Map */}
                 <div className="absolute inset-0 bg-gradient-to-br from-slate-700 via-slate-600 to-slate-800" />
                 <div className="absolute inset-0 opacity-30 bg-[linear-gradient(45deg,transparent_25%,rgba(0,0,0,0.1)_25%,rgba(0,0,0,0.1)_50%,transparent_50%,transparent_75%,rgba(0,0,0,0.1)_75%)] bg-[length:10px_10px]" />
                 
                 <div className="absolute inset-0 flex items-center justify-center">
                     <div className="text-center">
-                        <MapPin className="w-8 h-8 text-white/80 mx-auto mb-2" />
+                        <MapPin className="w-6 h-6 text-white/80 mx-auto mb-1" />
                         <span className="text-white font-medium text-sm">
-                            {lead.address || `${lead.city}`}
+                            {isEditing ? editedLead.address || editedLead.city : lead.address || lead.city}
                         </span>
-                        <p className="text-white/60 text-xs mt-1">Klik om te openen in Maps</p>
+                        <p className="text-white/60 text-[10px] mt-1">Klik om te openen in Maps</p>
                     </div>
                 </div>
                 
                 {/* BAG Overlay */}
-                <div className="absolute top-3 right-3 bg-white dark:bg-slate-800 shadow-lg p-3 rounded-lg text-xs border-2 border-slate-200 dark:border-slate-600">
-                    <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-400 font-semibold">
-                        <Building className="w-4 h-4" />
+                <div className="absolute top-2 right-2 bg-white dark:bg-slate-800 shadow-lg p-2 rounded-lg text-[10px] border border-slate-200 dark:border-slate-600">
+                    <div className="flex items-center gap-1 text-emerald-700 dark:text-emerald-400 font-semibold">
+                        <Building className="w-3 h-3" />
                         <span>BAG Gevalideerd</span>
-                    </div>
-                    <Separator className="my-2" />
-                    <div className="text-slate-700 dark:text-slate-300 space-y-1">
-                        <p><span className="text-slate-500 dark:text-slate-400">Bouwjaar:</span> <span className="font-medium">1934</span></p>
-                        <p><span className="text-slate-500 dark:text-slate-400">Oppervlakte:</span> <span className="font-medium">145m²</span></p>
-                        <p><span className="text-slate-500 dark:text-slate-400">Functie:</span> <span className="font-medium">Wonen</span></p>
                     </div>
                 </div>
             </div>
 
-            <div className="mt-6 space-y-6 flex-1 overflow-y-auto">
-                {/* Client Header */}
-                <div>
-                    <div className="flex justify-between items-start mb-3">
-                        <h3 className="text-xl font-bold text-slate-900 dark:text-slate-100">{lead.clientName}</h3>
-                        <AssigneeSelector leadId={lead.id} currentAssignee={lead.assignee} />
+            <div className="mt-4 space-y-4 flex-1 overflow-y-auto">
+                {/* Header with edit toggle */}
+                <div className="flex items-center justify-between">
+                    <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100">
+                        {isEditing ? "Bewerken" : "Projectgegevens"}
+                    </h3>
+                    {isEditing ? (
+                        <div className="flex gap-1">
+                            <Button 
+                                size="sm" 
+                                variant="ghost" 
+                                className="h-7 px-2 text-xs"
+                                onClick={handleCancelEdit}
+                            >
+                                <XIcon className="w-3 h-3 mr-1" /> Annuleren
+                            </Button>
+                            <Button 
+                                size="sm" 
+                                className="h-7 px-2 text-xs bg-emerald-600 hover:bg-emerald-700"
+                                onClick={handleSaveLead}
+                            >
+                                <Save className="w-3 h-3 mr-1" /> Opslaan
+                            </Button>
+                        </div>
+                    ) : (
+                        <Button 
+                            size="sm" 
+                            variant="ghost" 
+                            className="h-7 px-2 text-xs"
+                            onClick={() => setIsEditing(true)}
+                        >
+                            <Pencil className="w-3 h-3 mr-1" /> Bewerken
+                        </Button>
+                    )}
+                </div>
+
+                {/* Client Name & Assignee */}
+                <div className="space-y-2">
+                    {isEditing ? (
+                        <div className="p-2 rounded-md bg-slate-50 dark:bg-slate-800">
+                            <label className="text-[10px] uppercase tracking-wider text-slate-500 dark:text-slate-400 font-semibold block mb-1">
+                                Klantnaam
+                            </label>
+                            <Input
+                                value={editedLead.clientName}
+                                onChange={(e) => setEditedLead({ ...editedLead, clientName: e.target.value })}
+                                className="h-8 text-base font-bold bg-white dark:bg-slate-900"
+                            />
+                        </div>
+                    ) : (
+                        <div className="flex justify-between items-start">
+                            <div>
+                                <span className="text-[10px] uppercase tracking-wider text-slate-500 dark:text-slate-400 font-semibold block">
+                                    Klant
+                                </span>
+                                <h4 className="text-lg font-bold text-slate-900 dark:text-slate-100">{lead.clientName}</h4>
+                            </div>
+                            <AssigneeSelector leadId={lead.id} currentAssignee={lead.assignee} />
+                        </div>
+                    )}
+                </div>
+
+                {/* Werknummer */}
+                <EditableField
+                    label="Werknummer"
+                    value={editedLead.werknummer}
+                    onChange={(v) => setEditedLead({ ...editedLead, werknummer: v })}
+                    isEditing={isEditing}
+                    icon={<Hash className="w-4 h-4" />}
+                />
+
+                {/* Project Type */}
+                {isEditing ? (
+                    <div className="p-2 rounded-md bg-slate-50 dark:bg-slate-800">
+                        <label className="text-[10px] uppercase tracking-wider text-slate-500 dark:text-slate-400 font-semibold block mb-1">
+                            Projecttype
+                        </label>
+                        <Select 
+                            value={editedLead.projectType} 
+                            onValueChange={(v) => setEditedLead({ ...editedLead, projectType: v })}
+                        >
+                            <SelectTrigger className="h-8 bg-white dark:bg-slate-900">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {PROJECT_TYPES.map((type) => (
+                                    <SelectItem key={type} value={type}>{type}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
                     </div>
+                ) : (
                     <div className="flex flex-wrap gap-2">
                         <Badge variant="outline" className="rounded-sm uppercase tracking-wider text-[10px] bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 border-slate-300 dark:border-slate-600 font-semibold">
                             {lead.projectType}
@@ -140,48 +327,75 @@ export function ContextPanel({ lead }: { lead: Lead }) {
                         <Badge variant="secondary" className="rounded-sm uppercase tracking-wider text-[10px] bg-slate-200 dark:bg-slate-600 text-slate-700 dark:text-slate-200 font-semibold">
                             {lead.city}
                         </Badge>
-                        {lead.isUrgent && (
-                            <Badge className="rounded-sm text-[10px] bg-red-600 text-white border-0 font-semibold">
-                                SPOED
-                            </Badge>
-                        )}
                     </div>
+                )}
 
-                    {/* Status Selector */}
-                    <div className="mt-4">
-                        <label className="text-xs font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400 mb-2 block">
-                            Status
-                        </label>
-                        <StatusSelector 
-                            currentStatus={lead.status} 
-                            onStatusChange={(status) => {
-                                updateLeadStatus(lead.id, status)
-                                toast.success(`Status gewijzigd naar ${status}`)
-                            }} 
-                        />
-                    </div>
+                {/* Value */}
+                <EditableField
+                    label="Projectwaarde"
+                    value={isEditing ? editedLead.value.toString() : lead.value.toLocaleString()}
+                    onChange={(v) => setEditedLead({ ...editedLead, value: parseFloat(v) || 0 })}
+                    isEditing={isEditing}
+                    icon={<Euro className="w-4 h-4" />}
+                    type="number"
+                    prefix="€ "
+                />
+
+                {/* Status Selector */}
+                <div>
+                    <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1 block">
+                        Status
+                    </label>
+                    <StatusSelector 
+                        currentStatus={lead.status} 
+                        onStatusChange={(status) => {
+                            updateLeadStatus(lead.id, status)
+                            toast.success(`Status gewijzigd naar ${status}`)
+                        }} 
+                    />
                 </div>
 
+                <Separator className="bg-slate-200 dark:bg-slate-700" />
+
                 {/* Contact Info */}
-                <div className="space-y-2">
-                    {lead.clientEmail && (
-                        <a href={`mailto:${lead.clientEmail}`} className="flex items-center gap-3 p-2 rounded-md text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors group">
-                            <Mail className="w-4 h-4 text-slate-500 dark:text-slate-400" />
-                            <span className="text-sm">{lead.clientEmail}</span>
-                            <ExternalLink className="w-3 h-3 opacity-0 group-hover:opacity-50 ml-auto" />
-                        </a>
+                <div className="space-y-1">
+                    <h4 className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2">
+                        Contactgegevens
+                    </h4>
+                    <EditableField
+                        label="E-mail"
+                        value={isEditing ? editedLead.clientEmail : (lead.clientEmail || "")}
+                        onChange={(v) => setEditedLead({ ...editedLead, clientEmail: v })}
+                        isEditing={isEditing}
+                        icon={<Mail className="w-4 h-4" />}
+                        type="email"
+                        href={lead.clientEmail ? `mailto:${lead.clientEmail}` : undefined}
+                    />
+                    <EditableField
+                        label="Telefoon"
+                        value={isEditing ? editedLead.clientPhone : (lead.clientPhone || "")}
+                        onChange={(v) => setEditedLead({ ...editedLead, clientPhone: v })}
+                        isEditing={isEditing}
+                        icon={<Phone className="w-4 h-4" />}
+                        type="tel"
+                        href={lead.clientPhone ? `tel:${lead.clientPhone}` : undefined}
+                    />
+                    <EditableField
+                        label="Adres"
+                        value={isEditing ? editedLead.address : (lead.address || "")}
+                        onChange={(v) => setEditedLead({ ...editedLead, address: v })}
+                        isEditing={isEditing}
+                        icon={<MapPin className="w-4 h-4" />}
+                    />
+                    {isEditing && (
+                        <EditableField
+                            label="Plaats"
+                            value={editedLead.city}
+                            onChange={(v) => setEditedLead({ ...editedLead, city: v })}
+                            isEditing={isEditing}
+                            icon={<Building className="w-4 h-4" />}
+                        />
                     )}
-                    {lead.clientPhone && (
-                        <a href={`tel:${lead.clientPhone}`} className="flex items-center gap-3 p-2 rounded-md text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors group">
-                            <Phone className="w-4 h-4 text-slate-500 dark:text-slate-400" />
-                            <span className="text-sm">{lead.clientPhone}</span>
-                            <ExternalLink className="w-3 h-3 opacity-0 group-hover:opacity-50 ml-auto" />
-                        </a>
-                    )}
-                    <div className="flex items-center gap-3 p-2 rounded-md text-slate-700 dark:text-slate-300">
-                        <MapPin className="w-4 h-4 text-slate-500 dark:text-slate-400" />
-                        <span className="text-sm">{lead.address || lead.city}</span>
-                    </div>
                 </div>
 
                 <Separator className="bg-slate-200 dark:bg-slate-700" />
@@ -189,7 +403,7 @@ export function ContextPanel({ lead }: { lead: Lead }) {
                 {/* Project Specs - Configurable */}
                 <div className="space-y-3">
                     <div className="flex items-center justify-between">
-                        <h4 className="text-xs font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">
+                        <h4 className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                             Project Specificaties
                         </h4>
                         {isEditingSpecs ? (
@@ -232,35 +446,35 @@ export function ContextPanel({ lead }: { lead: Lead }) {
                         {specs.map((spec, index) => (
                             <div 
                                 key={index} 
-                                className="bg-slate-100 dark:bg-slate-800 p-3 rounded-md border border-slate-200 dark:border-slate-700 relative group"
+                                className="bg-slate-100 dark:bg-slate-800 p-2 rounded-md border border-slate-200 dark:border-slate-700 relative group"
                             >
                                 {isEditingSpecs ? (
                                     <>
                                         <Input
                                             value={spec.key}
                                             onChange={(e) => handleUpdateSpec(index, 'key', e.target.value)}
-                                            className="h-6 text-[10px] uppercase tracking-wider font-semibold mb-1 bg-transparent border-dashed p-1"
+                                            className="h-5 text-[10px] uppercase tracking-wider font-semibold mb-1 bg-transparent border-dashed p-1"
                                             placeholder="Naam..."
                                         />
                                         <div className="flex gap-1">
                                             <Input
                                                 value={spec.value}
                                                 onChange={(e) => handleUpdateSpec(index, 'value', e.target.value)}
-                                                className="h-7 text-sm font-semibold bg-white dark:bg-slate-900 flex-1"
+                                                className="h-6 text-sm font-semibold bg-white dark:bg-slate-900 flex-1"
                                                 placeholder="Waarde..."
                                             />
                                             <Input
                                                 value={spec.unit || ''}
                                                 onChange={(e) => handleUpdateSpec(index, 'unit', e.target.value)}
-                                                className="h-7 text-sm w-12 bg-white dark:bg-slate-900"
+                                                className="h-6 text-sm w-10 bg-white dark:bg-slate-900"
                                                 placeholder="eenheid"
                                             />
                                         </div>
                                         <button 
                                             onClick={() => handleDeleteSpec(index)}
-                                            className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                                            className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
                                         >
-                                            <Trash2 className="w-3 h-3" />
+                                            <Trash2 className="w-2 h-2" />
                                         </button>
                                     </>
                                 ) : (
@@ -277,16 +491,16 @@ export function ContextPanel({ lead }: { lead: Lead }) {
                         {isEditingSpecs && (
                             <button
                                 onClick={() => setIsAddingSpec(true)}
-                                className="bg-slate-50 dark:bg-slate-900 p-3 rounded-md border-2 border-dashed border-slate-300 dark:border-slate-600 flex items-center justify-center gap-2 text-slate-500 hover:text-slate-700 hover:border-slate-400 transition-colors"
+                                className="bg-slate-50 dark:bg-slate-900 p-2 rounded-md border-2 border-dashed border-slate-300 dark:border-slate-600 flex items-center justify-center gap-2 text-slate-500 hover:text-slate-700 hover:border-slate-400 transition-colors"
                             >
-                                <Plus className="w-4 h-4" />
+                                <Plus className="w-3 h-3" />
                                 <span className="text-xs font-medium">Toevoegen</span>
                             </button>
                         )}
                     </div>
 
                     {specs.length === 0 && !isEditingSpecs && (
-                        <div className="text-center py-4 text-slate-500 text-sm">
+                        <div className="text-center py-3 text-slate-500 text-xs">
                             Geen specificaties. Klik op &quot;Bewerken&quot; om toe te voegen.
                         </div>
                     )}

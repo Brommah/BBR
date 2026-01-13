@@ -9,9 +9,7 @@ export default defineConfig({
     path: "prisma/migrations",
   },
   datasource: {
-    // Main connection URL for Prisma Client
+    // Connection URL for Prisma Migrate
     url: process.env.DATABASE_URL,
-    // Direct URL bypasses connection pooling (for migrations)
-    directUrl: process.env.DIRECT_URL,
   },
 })

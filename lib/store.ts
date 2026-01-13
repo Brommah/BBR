@@ -1,9 +1,21 @@
+/**
+ * @fileoverview Lead Store - Client-side state management with Zustand
+ * 
+ * This store manages the client-side state for leads with:
+ * - Optimistic updates for instant UI feedback
+ * - Automatic rollback on server action failures
+ * - Integration with server actions for persistence
+ * 
+ * @module lib/store
+ */
+
 import { create } from 'zustand'
 import { toast } from 'sonner'
 import {
   getLeads,
   updateLeadStatus as updateLeadStatusAction,
   updateLeadAssignee as updateLeadAssigneeAction,
+  updateLeadDetails as updateLeadDetailsAction,
   createLead as createLeadAction,
   updateLeadSpecs as updateLeadSpecsAction,
   submitQuoteForApproval as submitQuoteForApprovalAction,
@@ -17,55 +29,104 @@ import {
 // Re-export types for backwards compatibility
 export type { QuoteLineItem, QuoteFeedbackItem as QuoteFeedback, QuoteSubmission }
 
-export type LeadStatus = "Nieuw" | "Triage" | "Calculatie" | "Offerte Verzonden" | "Opdracht" | "Archief"
+/** Possible lead statuses in the pipeline */
+export type LeadStatus = "Nieuw" | "Calculatie" | "Offerte Verzonden" | "Opdracht" | "Archief"
+
+/** Quote approval workflow statuses */
 export type QuoteApprovalStatus = "none" | "pending" | "approved" | "rejected"
 
+/**
+ * Project specification key-value pair
+ */
 export interface ProjectSpec {
+  /** Specification name/key */
   key: string
+  /** Specification value */
   value: string
+  /** Optional unit (e.g., "m²", "stuks") */
   unit?: string
 }
 
+/**
+ * Lead entity representing a potential project
+ */
 export interface Lead {
+  /** Unique identifier (CUID) */
   id: string
+  /** Client's full name */
   clientName: string
+  /** Client's email address */
   clientEmail?: string
+  /** Client's phone number */
   clientPhone?: string
+  /** Type of construction project */
   projectType: string
+  /** City/location of the project */
   city: string
+  /** Full street address */
   address?: string
+  /** Current pipeline status */
   status: LeadStatus
+  /** Estimated project value in EUR */
   value: number
+  /** ISO timestamp of creation */
   createdAt: string
+  /** ISO timestamp of last update */
   updatedAt?: string
+  /** Name of assigned engineer */
   assignee?: string
-  isUrgent?: boolean
+  /** Whether address has been validated */
   addressValid?: boolean
+  /** Work number for the project */
+  werknummer?: string
+  /** Current quote approval status */
   quoteApproval?: QuoteApprovalStatus
+  /** Quote total value in EUR */
   quoteValue?: number
+  /** Quote description/justification */
   quoteDescription?: string
+  /** Quote line items breakdown */
   quoteLineItems?: QuoteLineItem[]
+  /** Estimated hours for the work */
   quoteEstimatedHours?: number
+  /** Project specifications */
   specifications?: ProjectSpec[]
+  /** Admin feedback on quotes */
   quoteFeedback?: QuoteFeedbackItem[]
 }
 
+/**
+ * Lead store state and actions interface
+ */
 interface LeadState {
+  /** Array of all leads */
   leads: Lead[]
+  /** Whether data is being loaded */
   isLoading: boolean
+  /** Current error message, if any */
   error: string | null
   
   // Data fetching
+  /** Load all leads from database */
   loadLeads: () => Promise<void>
   
   // Mutations (all async with optimistic updates)
+  /** Update a lead's pipeline status */
   updateLeadStatus: (id: string, status: LeadStatus) => Promise<boolean>
+  /** Assign a lead to an engineer */
   assignLead: (id: string, assignee: string) => Promise<boolean>
+  /** Create a new lead */
   addLead: (lead: Omit<Lead, 'id' | 'createdAt'>) => Promise<boolean>
+  /** Submit a quote for admin approval */
   submitQuoteForApproval: (id: string, submission: QuoteSubmission) => Promise<boolean>
+  /** Approve a pending quote (admin only) */
   approveQuote: (id: string, feedback?: { authorId: string; authorName: string; message: string }, adjustedValue?: number) => Promise<boolean>
+  /** Reject a pending quote with feedback (admin only) */
   rejectQuote: (id: string, feedback: { authorId: string; authorName: string; message: string }) => Promise<boolean>
+  /** Update project specifications */
   updateProjectSpecs: (id: string, specs: ProjectSpec[]) => Promise<boolean>
+  /** Update lead details (clientName, email, phone, address, etc.) */
+  updateLead: (id: string, data: Partial<Pick<Lead, 'clientName' | 'clientEmail' | 'clientPhone' | 'address' | 'city' | 'projectType' | 'value'>>) => Promise<boolean>
 }
 
 export const useLeadStore = create<LeadState>((set, get) => ({
@@ -83,8 +144,10 @@ export const useLeadStore = create<LeadState>((set, get) => ({
       const result = await getLeads()
       
       if (result.success && result.data) {
+        // Extract leads from paginated response
+        const paginatedData = result.data as { data: Lead[]; pagination: unknown }
         set({ 
-          leads: result.data as Lead[], 
+          leads: paginatedData.data, 
           isLoading: false,
           error: null 
         })
@@ -192,7 +255,6 @@ export const useLeadStore = create<LeadState>((set, get) => ({
         city: leadData.city,
         address: leadData.address,
         value: leadData.value,
-        isUrgent: leadData.isUrgent,
         specifications: leadData.specifications
       })
       
@@ -265,7 +327,6 @@ export const useLeadStore = create<LeadState>((set, get) => ({
    */
   approveQuote: async (id, feedback, adjustedValue) => {
     const previousLeads = get().leads
-    const lead = previousLeads.find(l => l.id === id)
     
     // Optimistic update
     set((state) => ({
@@ -384,6 +445,40 @@ export const useLeadStore = create<LeadState>((set, get) => ({
         set({ leads: previousLeads })
         toast.error('Opslaan mislukt', {
           description: result.error || 'Kon specificaties niet opslaan'
+        })
+        return false
+      }
+      
+      return true
+    } catch (error) {
+      set({ leads: previousLeads })
+      toast.error('Netwerkfout', {
+        description: error instanceof Error ? error.message : 'Probeer opnieuw'
+      })
+      return false
+    }
+  },
+
+  /**
+   * Update lead details with optimistic update
+   */
+  updateLead: async (id, data) => {
+    const previousLeads = get().leads
+    
+    // Optimistic update
+    set((state) => ({
+      leads: state.leads.map((lead) =>
+        lead.id === id ? { ...lead, ...data } : lead
+      )
+    }))
+
+    try {
+      const result = await updateLeadDetailsAction(id, data)
+      
+      if (!result.success) {
+        set({ leads: previousLeads })
+        toast.error('Opslaan mislukt', {
+          description: result.error || 'Kon gegevens niet opslaan'
         })
         return false
       }

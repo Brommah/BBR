@@ -660,7 +660,6 @@ Vergroot uw woonkamer of keuken
 • Project: {{project_type}}
 • Locatie: {{address}}, {{city}}
 • Geschatte waarde: €{{estimated_value}}
-• Urgentie: {{is_urgent ? "⚠️ SPOED" : "Normaal"}}
 
 📊 Huidige workload team:
 • Angelo: {{angelo_workload}} leads

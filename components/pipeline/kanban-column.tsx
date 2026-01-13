@@ -8,8 +8,7 @@ import {
   Calculator, 
   Send, 
   CheckCircle2, 
-  Archive,
-  ClipboardList
+  Archive
 } from "lucide-react"
 
 interface KanbanColumnProps {
@@ -35,14 +34,6 @@ const statusStyles: Record<LeadStatus, {
     headerBg: "bg-blue-100/80 dark:bg-blue-900/50",
     icon: Inbox,
     description: "Nieuwe aanvragen"
-  },
-  "Triage": { 
-    bg: "bg-amber-50/70 dark:bg-amber-950/30", 
-    border: "border-amber-300 dark:border-amber-700",
-    badge: "bg-amber-600 text-white",
-    headerBg: "bg-amber-100/80 dark:bg-amber-900/50",
-    icon: ClipboardList,
-    description: "Te beoordelen"
   },
   "Calculatie": { 
     bg: "bg-purple-50/70 dark:bg-purple-950/30", 
@@ -96,6 +87,9 @@ export function KanbanColumn({ status, title, count, children }: KanbanColumnPro
         "bg-gradient-to-b from-transparent to-background/50", // Subtle gradient
         isOver && "ring-4 ring-accent/50 ring-offset-2 ring-offset-background border-accent scale-[1.02]"
       )}
+      role="region"
+      aria-label={`${title} - ${count} ${count === 1 ? 'lead' : 'leads'}`}
+      aria-dropeffect={isOver ? "move" : "none"}
     >
       {/* Column Header */}
       <div className={cn(
@@ -110,30 +104,39 @@ export function KanbanColumn({ status, title, count, children }: KanbanColumnPro
               styles.badge.replace("text-white", "bg-opacity-20"),
               "bg-current/10"
             )}>
-              <Icon className={cn("w-4 h-4", styles.badge.split(" ")[0].replace("bg-", "text-"))} />
+              <Icon className={cn("w-4 h-4", styles.badge.split(" ")[0].replace("bg-", "text-"))} aria-hidden="true" />
             </div>
-            <h3 className="font-bold text-sm text-foreground">{title}</h3>
+            <h3 className="font-bold text-sm text-foreground" id={`column-${status.replace(/\s+/g, '-').toLowerCase()}`}>
+              {title}
+            </h3>
           </div>
-          <span className={cn(
-            "text-xs px-2.5 py-1 rounded-full font-bold shadow-sm min-w-[28px] text-center",
-            styles.badge
-          )}>
+          <span 
+            className={cn(
+              "text-xs px-2.5 py-1 rounded-full font-bold shadow-sm min-w-[28px] text-center",
+              styles.badge
+            )}
+            aria-label={`${count} leads`}
+          >
             {count}
           </span>
         </div>
-        <p className="text-[10px] text-muted-foreground pl-9">{styles.description}</p>
+        <p className="text-[10px] text-muted-foreground pl-9" aria-hidden="true">{styles.description}</p>
       </div>
 
       {/* Column Content */}
-      <div className="flex-1 p-3 overflow-y-auto space-y-2 scrollbar-thin">
+      <div 
+        className="flex-1 p-3 overflow-y-auto space-y-2 scrollbar-thin"
+        role="list"
+        aria-labelledby={`column-${status.replace(/\s+/g, '-').toLowerCase()}`}
+      >
         {children}
       </div>
 
       {/* Empty State */}
       {count === 0 && (
-        <div className="flex-1 flex items-center justify-center p-6 text-center">
+        <div className="flex-1 flex items-center justify-center p-6 text-center" role="status">
           <div className="text-muted-foreground">
-            <Icon className="w-8 h-8 mx-auto mb-2 opacity-30" />
+            <Icon className="w-8 h-8 mx-auto mb-2 opacity-30" aria-hidden="true" />
             <p className="text-xs">Geen leads</p>
           </div>
         </div>

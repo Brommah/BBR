@@ -11,11 +11,14 @@ import { WorkloadChart } from "@/components/dashboard/workload-chart"
 import { NeedsAttentionList } from "@/components/dashboard/needs-attention"
 import { FinancialRoadmapView } from "@/components/roadmap/financial-roadmap"
 import { AccessGuard } from "@/components/auth/access-guard"
+import { PageErrorBoundary, ComponentErrorBoundary } from "@/components/error-boundary"
 import { useAuthStore } from "@/lib/auth"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Euro, Users, Database, Mail, ClipboardCheck, TrendingUp, FileText, ChevronRight, Shield, ExternalLink, Link2, Copy, Check } from "lucide-react"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
-import { Settings, Euro, Users, Database, Mail, ClipboardCheck, TrendingUp, FileText, ChevronRight, Shield } from "lucide-react"
+import { toast } from "sonner"
 import { IsoTrophy } from "@/components/ui/illustrations"
 
 type AdminSection = 
@@ -26,6 +29,7 @@ type AdminSection =
     | "team-rechten" 
     | "email-automations" 
     | "integraties"
+    | "intake-formulier"
 
 const adminSections: Array<{
     id: AdminSection
@@ -41,42 +45,165 @@ const adminSections: Array<{
     { id: "team-rechten", label: "Team & Rechten", icon: Users, description: "User permissions", category: "instellingen" },
     { id: "email-automations", label: "Email Automations", icon: Mail, description: "Automated workflows", category: "instellingen" },
     { id: "integraties", label: "Integraties", icon: Database, description: "Notion & APIs", category: "instellingen" },
+    { id: "intake-formulier", label: "Intake Formulier", icon: Link2, description: "Publiek aanvraagformulier", category: "instellingen" },
 ]
 
 export default function AdminPage() {
     const [activeSection, setActiveSection] = useState<AdminSection>("goedkeuringen")
     const { currentUser } = useAuthStore()
 
+    const [copied, setCopied] = useState(false)
+    
+    const intakeUrl = typeof window !== 'undefined' 
+        ? `${window.location.origin}/intake` 
+        : '/intake'
+    
+    const copyToClipboard = async () => {
+        try {
+            await navigator.clipboard.writeText(intakeUrl)
+            setCopied(true)
+            toast.success("Link gekopieerd!")
+            setTimeout(() => setCopied(false), 2000)
+        } catch {
+            toast.error("Kon link niet kopiëren")
+        }
+    }
+
     const renderContent = () => {
         switch (activeSection) {
             case "goedkeuringen":
-                return <QuoteApprovalQueue />
+                return <ComponentErrorBoundary><QuoteApprovalQueue /></ComponentErrorBoundary>
             case "financieel":
-                return <FinancialRoadmapView />
+                return <ComponentErrorBoundary><FinancialRoadmapView /></ComponentErrorBoundary>
             case "team-overview":
                 return (
                     <div className="space-y-6">
-                        <KPIcards />
+                        <ComponentErrorBoundary><KPIcards /></ComponentErrorBoundary>
                         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-7">
-                            <WorkloadChart />
-                            <NeedsAttentionList />
+                            <ComponentErrorBoundary><WorkloadChart /></ComponentErrorBoundary>
+                            <ComponentErrorBoundary><NeedsAttentionList /></ComponentErrorBoundary>
                         </div>
                     </div>
                 )
             case "tarieven":
-                return <CostDeterminationPanel />
+                return <ComponentErrorBoundary><CostDeterminationPanel /></ComponentErrorBoundary>
             case "team-rechten":
-                return <UserPermissionsTable />
+                return <ComponentErrorBoundary><UserPermissionsTable /></ComponentErrorBoundary>
             case "email-automations":
-                return <EmailAutomationPanel />
+                return <ComponentErrorBoundary><EmailAutomationPanel /></ComponentErrorBoundary>
             case "integraties":
-                return <NotionSyncPanel />
+                return <ComponentErrorBoundary><NotionSyncPanel /></ComponentErrorBoundary>
+            case "intake-formulier":
+                return (
+                    <div className="space-y-6 max-w-3xl">
+                        <Card>
+                            <CardHeader>
+                                <CardTitle className="flex items-center gap-2">
+                                    <Link2 className="w-5 h-5" />
+                                    Publiek Intake Formulier
+                                </CardTitle>
+                                <CardDescription>
+                                    Deel deze link met potentiële klanten. Aanvragen komen automatisch in de inbox terecht.
+                                </CardDescription>
+                            </CardHeader>
+                            <CardContent className="space-y-4">
+                                <div className="flex gap-2">
+                                    <Input 
+                                        value={intakeUrl} 
+                                        readOnly 
+                                        className="font-mono text-sm"
+                                    />
+                                    <Button 
+                                        variant="outline" 
+                                        size="icon"
+                                        onClick={copyToClipboard}
+                                    >
+                                        {copied ? (
+                                            <Check className="w-4 h-4 text-emerald-500" />
+                                        ) : (
+                                            <Copy className="w-4 h-4" />
+                                        )}
+                                    </Button>
+                                    <Button asChild>
+                                        <a href="/intake" target="_blank" className="gap-2">
+                                            <ExternalLink className="w-4 h-4" />
+                                            Openen
+                                        </a>
+                                    </Button>
+                                </div>
+                                
+                                <div className="bg-slate-50 dark:bg-slate-900 rounded-lg p-4 space-y-3">
+                                    <h4 className="font-medium text-sm">Hoe te gebruiken:</h4>
+                                    <ul className="text-sm text-muted-foreground space-y-2">
+                                        <li className="flex items-start gap-2">
+                                            <Badge variant="outline" className="mt-0.5">1</Badge>
+                                            <span>Kopieer de link hierboven</span>
+                                        </li>
+                                        <li className="flex items-start gap-2">
+                                            <Badge variant="outline" className="mt-0.5">2</Badge>
+                                            <span>Plaats op uw website of deel via email/WhatsApp</span>
+                                        </li>
+                                        <li className="flex items-start gap-2">
+                                            <Badge variant="outline" className="mt-0.5">3</Badge>
+                                            <span>Klanten vullen het formulier in</span>
+                                        </li>
+                                        <li className="flex items-start gap-2">
+                                            <Badge variant="outline" className="mt-0.5">4</Badge>
+                                            <span>Aanvragen verschijnen automatisch in de Inbox</span>
+                                        </li>
+                                    </ul>
+                                </div>
+                            </CardContent>
+                        </Card>
+                        
+                        <Card>
+                            <CardHeader>
+                                <CardTitle className="text-base">Automatische Acties</CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                <div className="space-y-3">
+                                    <div className="flex items-center gap-3 p-3 rounded-lg border">
+                                        <div className="w-8 h-8 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center">
+                                            <Check className="w-4 h-4 text-emerald-600" />
+                                        </div>
+                                        <div className="flex-1">
+                                            <p className="text-sm font-medium">Lead aanmaken</p>
+                                            <p className="text-xs text-muted-foreground">Automatisch nieuwe lead in database</p>
+                                        </div>
+                                        <Badge className="bg-emerald-100 text-emerald-700 border-0">Actief</Badge>
+                                    </div>
+                                    <div className="flex items-center gap-3 p-3 rounded-lg border">
+                                        <div className="w-8 h-8 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center">
+                                            <Mail className="w-4 h-4 text-emerald-600" />
+                                        </div>
+                                        <div className="flex-1">
+                                            <p className="text-sm font-medium">Bevestigingsmail</p>
+                                            <p className="text-xs text-muted-foreground">Email naar klant na aanvraag</p>
+                                        </div>
+                                        <Badge className="bg-emerald-100 text-emerald-700 border-0">Actief</Badge>
+                                    </div>
+                                    <div className="flex items-center gap-3 p-3 rounded-lg border">
+                                        <div className="w-8 h-8 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center">
+                                            <FileText className="w-4 h-4 text-emerald-600" />
+                                        </div>
+                                        <div className="flex-1">
+                                            <p className="text-sm font-medium">Activiteit loggen</p>
+                                            <p className="text-xs text-muted-foreground">Projectbeschrijving als notitie</p>
+                                        </div>
+                                        <Badge className="bg-emerald-100 text-emerald-700 border-0">Actief</Badge>
+                                    </div>
+                                </div>
+                            </CardContent>
+                        </Card>
+                    </div>
+                )
         }
     }
 
     const activeConfig = adminSections.find(s => s.id === activeSection)!
 
     return (
+        <PageErrorBoundary>
         <AccessGuard permission="admin:access" redirectTo="/login">
             <div className="flex h-screen overflow-hidden bg-background">
                 {/* Admin Sidebar Navigation */}
@@ -193,5 +320,6 @@ export default function AdminPage() {
                 </div>
             </div>
         </AccessGuard>
+        </PageErrorBoundary>
     )
 }

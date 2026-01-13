@@ -101,8 +101,11 @@ npm run dev
 | **Frontend** | Next.js 16 · React 19 · TypeScript · Tailwind CSS |
 | **Backend** | Supabase (Auth + PostgreSQL) |
 | **ORM** | Prisma met type-safety |
-| **State** | Zustand met optimistische updates |
+| **State** | Zustand (client) + React Query (server) |
 | **UI** | Radix UI + Shadcn componenten |
+| **Testing** | Vitest (unit) + Playwright (e2e) |
+| **Monitoring** | Sentry error tracking |
+| **Email** | Resend transactional emails |
 
 ---
 
@@ -262,9 +265,55 @@ broersma-backoffice/
 ## 🧪 Testen
 
 ```bash
+# Unit tests (Vitest)
 npm run test           # Watch mode
 npm run test:run       # Eenmalig
 npm run test:coverage  # Met coverage rapport
+
+# E2E tests (Playwright)
+npm run test:e2e       # Alle e2e tests draaien
+npm run test:e2e:ui    # Met Playwright UI
+
+# Validatie (alle checks)
+npm run validate       # Lint + TypeScript + Tests
+```
+
+### Test Coverage
+
+| Type | Aantal Tests | Dekking |
+|------|--------------|---------|
+| Unit | 165+ | Auth, Store, Config, Utils, Email |
+| E2E | 30+ | Auth, API, Navigation, Pipeline |
+| Components | 25+ | AccessGuard, ErrorBoundary |
+
+---
+
+## 🔧 Alle NPM Scripts
+
+```bash
+# Development
+npm run dev            # Ontwikkelserver starten
+npm run build          # Productie build
+npm run start          # Productie server
+
+# Database
+npm run db:push        # Schema pushen
+npm run db:migrate     # Migratie maken
+npm run db:seed        # Testdata laden
+npm run db:studio      # Prisma Studio openen
+npm run db:generate    # Client genereren
+
+# Kwaliteit
+npm run lint           # ESLint draaien
+npm run lint:fix       # ESLint auto-fix
+npm run typecheck      # TypeScript check
+npm run validate       # Alle checks
+
+# Testing
+npm run test           # Unit tests (watch)
+npm run test:run       # Unit tests (single)
+npm run test:coverage  # Met coverage
+npm run test:e2e       # E2E tests
 ```
 
 ---

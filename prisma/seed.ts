@@ -124,7 +124,6 @@ async function main() {
         address: 'Keizersgracht 100',
       status: 'Nieuw' as LeadStatus,
         value: 6500,
-        isUrgent: true,
         addressValid: true,
       specifications: [
             { key: 'Breedte', value: '4.5', unit: 'm' },
@@ -143,7 +142,6 @@ async function main() {
       address: 'Witte de Withstraat 45',
       status: 'Nieuw' as LeadStatus,
       value: 5800,
-      isUrgent: false,
       addressValid: true,
       specifications: [
         { key: 'Breedte', value: '3.0', unit: 'm' },
@@ -161,7 +159,6 @@ async function main() {
       address: 'Rapenburg 12',
       status: 'Nieuw' as LeadStatus,
       value: 18500,
-      isUrgent: true,
       addressValid: true,
       specifications: [
         { key: 'Oppervlakte', value: '15', unit: 'm²' },
@@ -179,7 +176,6 @@ async function main() {
       address: 'Waterwijk 203',
       status: 'Nieuw' as LeadStatus,
       value: 5500,
-      isUrgent: false,
       addressValid: true,
       specifications: [
         { key: 'Breedte', value: '2.8', unit: 'm' },
@@ -197,7 +193,6 @@ async function main() {
       address: 'Gedempte Gracht 34',
       status: 'Nieuw' as LeadStatus,
       value: 4800,
-      isUrgent: false,
       addressValid: true,
       specifications: [
         { key: 'Lengte opening', value: '2.8', unit: 'm' },
@@ -215,7 +210,6 @@ async function main() {
       address: 'Oude Delft 120',
       status: 'Nieuw' as LeadStatus,
       value: 22000,
-      isUrgent: false,
       addressValid: true,
       specifications: [
         { key: 'Oppervlakte', value: '18', unit: 'm²' },
@@ -233,7 +227,6 @@ async function main() {
       address: 'Beethovenlaan 12',
       status: 'Nieuw' as LeadStatus,
       value: 6800,
-      isUrgent: false,
       addressValid: true,
       specifications: [
         { key: 'Breedte', value: '4.0', unit: 'm' },
@@ -252,7 +245,6 @@ async function main() {
       address: 'Wheermolen 12',
       status: 'Nieuw' as LeadStatus,
       value: 3200,
-      isUrgent: false,
       addressValid: true,
       specifications: [
         { key: 'Lengte opening', value: '2.5', unit: 'm' },
@@ -267,7 +259,6 @@ async function main() {
       address: 'Grote Noord 88',
       status: 'Nieuw' as LeadStatus,
       value: 4800,
-      isUrgent: false,
       addressValid: true,
       specifications: [
         { key: 'Breedte', value: '3.0', unit: 'm' },
@@ -357,7 +348,6 @@ async function main() {
       status: 'Calculatie' as LeadStatus,
       value: 48000,
       assignee: 'Angelo',
-      isUrgent: true,
       addressValid: true,
       quoteApproval: 'pending' as QuoteApprovalStatus,
       quoteValue: 4200,

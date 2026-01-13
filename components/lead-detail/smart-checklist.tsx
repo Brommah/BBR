@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
@@ -27,7 +27,7 @@ interface ChecklistItem {
 
 interface SmartChecklistProps {
     projectType: string
-    leadId: string
+    leadId?: string
 }
 
 const checklistTemplates: Record<string, ChecklistItem[]> = {
@@ -79,20 +79,25 @@ const categoryLabels: Record<string, { label: string, color: string }> = {
     client: { label: "Klant", color: "bg-emerald-100 text-emerald-700" }
 }
 
-export function SmartChecklist({ projectType, leadId }: SmartChecklistProps) {
-    const [items, setItems] = useState<ChecklistItem[]>([])
-    const [isExpanded, setIsExpanded] = useState(true)
+// Helper to get initial items for a project type
+function getInitialItems(projectType: string): ChecklistItem[] {
+    const template = checklistTemplates[projectType] || checklistTemplates["default"]
+    return template.map((item, index) => ({
+        ...item,
+        checked: index < 3 // First 3 items checked by default for demo
+    }))
+}
 
-    useEffect(() => {
-        // Get template for project type or default
-        const template = checklistTemplates[projectType] || checklistTemplates["default"]
-        // Simulate some items already checked
-        const initialItems = template.map((item, index) => ({
-            ...item,
-            checked: index < 3 // First 3 items checked by default for demo
-        }))
-        setItems(initialItems)
-    }, [projectType])
+export function SmartChecklist({ projectType }: SmartChecklistProps) {
+    const [items, setItems] = useState<ChecklistItem[]>(() => getInitialItems(projectType))
+    const [isExpanded, setIsExpanded] = useState(true)
+    const [lastProjectType, setLastProjectType] = useState(projectType)
+    
+    // Reset items when project type changes (using derived state pattern)
+    if (projectType !== lastProjectType) {
+        setLastProjectType(projectType)
+        setItems(getInitialItems(projectType))
+    }
 
     const toggleItem = (id: string) => {
         setItems(items.map(item => 

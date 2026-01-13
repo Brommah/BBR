@@ -2,7 +2,7 @@
 
 import { useAuthStore, Permission } from "@/lib/auth"
 import { useRouter } from "next/navigation"
-import { useEffect, ReactNode, useState } from "react"
+import { useEffect, ReactNode, useSyncExternalStore, useCallback } from "react"
 import { toast } from "sonner"
 
 interface AccessGuardProps {
@@ -15,6 +15,15 @@ interface AccessGuardProps {
     fallback?: ReactNode
     /** Redirect path when not authenticated */
     redirectTo?: string
+}
+
+// Hydration detection using useSyncExternalStore (no cascading renders)
+const emptySubscribe = () => () => {}
+const getClientSnapshot = () => true
+const getServerSnapshot = () => false
+
+function useIsHydrated() {
+    return useSyncExternalStore(emptySubscribe, getClientSnapshot, getServerSnapshot)
 }
 
 /**
@@ -38,22 +47,21 @@ export function AccessGuard({
 }: AccessGuardProps) {
     const { isAuthenticated, currentUser, hasPermission } = useAuthStore()
     const router = useRouter()
-    const [isHydrated, setIsHydrated] = useState(false)
+    const isHydrated = useIsHydrated()
 
-    // Wait for hydration before checking auth
-    useEffect(() => {
-        setIsHydrated(true)
-    }, [])
+    const handleRedirect = useCallback(() => {
+        toast.error("Niet ingelogd", {
+            description: "Log in om toegang te krijgen."
+        })
+        router.push(redirectTo)
+    }, [router, redirectTo])
 
     useEffect(() => {
         // Only redirect after hydration is complete
         if (isHydrated && !isAuthenticated) {
-            toast.error("Niet ingelogd", {
-                description: "Log in om toegang te krijgen."
-            })
-            router.push(redirectTo)
+            handleRedirect()
         }
-    }, [isAuthenticated, isHydrated, router, redirectTo])
+    }, [isAuthenticated, isHydrated, handleRedirect])
 
     // Show loading state during hydration
     if (!isHydrated) {

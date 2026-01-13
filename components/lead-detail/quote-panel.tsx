@@ -1,21 +1,26 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo, useCallback } from "react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
-import { Separator } from "@/components/ui/separator"
 import { Badge } from "@/components/ui/badge"
+import { Separator } from "@/components/ui/separator"
 import { useParams } from "next/navigation"
 import { useLeadStore, QuoteLineItem } from "@/lib/store"
+import { useAuthStore } from "@/lib/auth"
 import { toast } from "sonner"
-import { FileText, Clock, CheckCircle2, XCircle, Send, Eye, Plus, Trash2, Euro, Calculator, MessageSquare, Loader2 } from "lucide-react"
+import { FileText, Clock, CheckCircle2, XCircle, Send, Eye, Plus, Trash2, Euro, MessageSquare, Loader2, Calculator, Download } from "lucide-react"
 import { DocumentPreview } from "@/components/templates/document-preview"
+import { downloadQuotePDF, generateQuoteNumber } from "@/lib/pdf"
+import { sendQuoteEmail } from "@/lib/email"
+import { createQuoteVersion } from "@/lib/db-actions"
 
 export function QuotePanel() {
     const params = useParams()
     const { leads, submitQuoteForApproval, updateLeadStatus } = useLeadStore()
+    const { currentUser } = useAuthStore()
     const leadId = params.id as string
     const lead = leads.find(l => l.id === leadId)
 
@@ -40,7 +45,7 @@ export function QuotePanel() {
         if (lead?.quoteEstimatedHours) {
             setEstimatedHours(lead.quoteEstimatedHours)
         }
-    }, [lead?.id])
+    }, [lead?.id, lead?.quoteLineItems, lead?.quoteDescription, lead?.quoteEstimatedHours])
 
     const addLineItem = () => {
         setLineItems([...lineItems, { description: "", amount: 0 }])
@@ -62,13 +67,19 @@ export function QuotePanel() {
         setLineItems(updated)
     }
 
-    const calculateTotal = () => {
+    // Memoize total calculation to prevent recalculation on every render
+    const total = useMemo(() => {
         return lineItems.reduce((sum, item) => sum + (item.amount || 0), 0)
-    }
+    }, [lineItems])
 
-    const getValidLineItems = () => {
+    // Memoize valid line items filter
+    const validLineItems = useMemo(() => {
         return lineItems.filter(item => item.description.trim() && item.amount > 0)
-    }
+    }, [lineItems])
+
+    // Keep function versions for backwards compatibility with existing code
+    const calculateTotal = useCallback(() => total, [total])
+    const getValidLineItems = useCallback(() => validLineItems, [validLineItems])
 
     const handleSubmitForApproval = async () => {
         const validItems = getValidLineItems()
@@ -95,6 +106,16 @@ export function QuotePanel() {
             })
             
             if (success) {
+                // Create quote version for history
+                await createQuoteVersion({
+                    leadId,
+                    value: calculateTotal(),
+                    lineItems: validItems,
+                    description: description || undefined,
+                    status: 'submitted',
+                    createdBy: currentUser?.name || 'Unknown'
+                })
+                
                 toast.info("Offerte ingediend ter goedkeuring", {
                     description: `€${calculateTotal().toLocaleString('nl-NL', { minimumFractionDigits: 2 })} wacht op admin beoordeling.`
                 })
@@ -105,24 +126,89 @@ export function QuotePanel() {
     }
 
     const handleSendQuote = async () => {
+        if (!lead?.clientEmail) {
+            toast.error("Geen e-mailadres beschikbaar", {
+                description: "Voeg eerst een e-mailadres toe aan deze lead."
+            })
+            return
+        }
+        
         setIsSending(true)
         
         try {
+            // Send email with quote
+            const emailResult = await sendQuoteEmail({
+                to: lead.clientEmail,
+                clientName: lead.clientName,
+                projectType: lead.projectType,
+                quoteValue: lead.quoteValue || calculateTotal(),
+                quoteDescription: description || undefined,
+                leadId,
+                sentBy: currentUser?.name || 'System'
+            })
+            
+            if (!emailResult.success) {
+                toast.error("Kon e-mail niet verzenden", {
+                    description: emailResult.error
+                })
+                return
+            }
+            
+            // Update quote version status
+            await createQuoteVersion({
+                leadId,
+                value: lead.quoteValue || calculateTotal(),
+                lineItems: getValidLineItems(),
+                description: description || undefined,
+                status: 'sent',
+                createdBy: currentUser?.name || 'Unknown'
+            })
+            
+            // Update lead status
             const success = await updateLeadStatus(leadId, "Offerte Verzonden")
             
             if (success) {
                 setPreviewOpen(false)
                 toast.success("Offerte verzonden naar klant!", {
-                    description: `Email verstuurd naar ${lead?.clientName}. Status automatisch bijgewerkt.`
+                    description: `Email verstuurd naar ${lead.clientEmail}. Status automatisch bijgewerkt.`
                 })
             }
         } finally {
             setIsSending(false)
         }
     }
+    
+    const handleDownloadPDF = async () => {
+        if (!lead) return
+        
+        const quoteNumber = generateQuoteNumber(leadId)
+        const validUntil = new Date()
+        validUntil.setDate(validUntil.getDate() + 30)
+        
+        await downloadQuotePDF({
+            clientName: lead.clientName,
+            clientEmail: lead.clientEmail,
+            clientPhone: lead.clientPhone,
+            address: lead.address,
+            city: lead.city,
+            projectType: lead.projectType,
+            leadId,
+            quoteValue: lead.quoteValue || calculateTotal(),
+            quoteDescription: description,
+            lineItems: getValidLineItems(),
+            estimatedHours: estimatedHours || undefined,
+            quoteDate: new Date(),
+            validUntil,
+            quoteNumber
+        })
+        
+        toast.success("PDF gedownload")
+    }
 
+    const { isAdmin } = useAuthStore()
     const approvalStatus = lead?.quoteApproval || "none"
-    const isEditable = approvalStatus === "none" || approvalStatus === "rejected"
+    // Admins can always edit quotes, engineers only when status is none or rejected
+    const isEditable = isAdmin() || approvalStatus === "none" || approvalStatus === "rejected"
 
     if (!lead) return null
 
@@ -167,7 +253,7 @@ export function QuotePanel() {
                                     <p className="text-sm font-medium text-red-800 dark:text-red-200">Admin Feedback:</p>
                                     {lead.quoteFeedback.filter(f => f.type === 'rejection').slice(-1).map(f => (
                                         <p key={f.id} className="text-sm text-red-700 dark:text-red-300 mt-1">
-                                            "{f.message}" – {f.authorName}
+                                            &ldquo;{f.message}&rdquo; – {f.authorName}
                                         </p>
                                     ))}
                                 </div>
@@ -309,15 +395,26 @@ export function QuotePanel() {
                 <CardFooter className="flex-col gap-3 pt-0 pb-6">
                     {approvalStatus === "none" || approvalStatus === "rejected" ? (
                         <>
-                            <Button 
-                                variant="outline"
-                                className="w-full gap-2 h-11 border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800" 
-                                onClick={() => setPreviewOpen(true)}
-                                disabled={getValidLineItems().length === 0 || isSubmitting}
-                            >
-                                <Eye className="w-4 h-4" />
-                                Voorbeeld Bekijken
-                            </Button>
+                            <div className="flex gap-2 w-full">
+                                <Button 
+                                    variant="outline"
+                                    className="flex-1 gap-2 h-11 border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800" 
+                                    onClick={() => setPreviewOpen(true)}
+                                    disabled={getValidLineItems().length === 0 || isSubmitting}
+                                >
+                                    <Eye className="w-4 h-4" />
+                                    Voorbeeld
+                                </Button>
+                                <Button 
+                                    variant="outline"
+                                    className="gap-2 h-11 border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800" 
+                                    onClick={handleDownloadPDF}
+                                    disabled={getValidLineItems().length === 0 || isSubmitting}
+                                >
+                                    <Download className="w-4 h-4" />
+                                    PDF
+                                </Button>
+                            </div>
                             <Button 
                                 className="w-full gap-2 h-12 text-base shadow-lg shadow-slate-900/10 bg-slate-900 hover:bg-slate-800 text-white" 
                                 size="lg"
@@ -342,15 +439,60 @@ export function QuotePanel() {
                                 <Eye className="w-4 h-4" />
                                 Voorbeeld Bekijken
                             </Button>
-                            <Button 
-                                className="w-full gap-2 h-12 text-base" 
-                                size="lg"
-                                disabled
-                                variant="outline"
-                            >
-                                <Clock className="w-5 h-5" />
-                                Wachten op Admin...
-                            </Button>
+                            {isAdmin() ? (
+                                <div className="flex gap-2 w-full">
+                                    <Button 
+                                        className="flex-1 gap-2 h-12 text-base bg-emerald-600 hover:bg-emerald-700 text-white" 
+                                        size="lg"
+                                        onClick={async () => {
+                                            const { approveQuote } = useLeadStore.getState()
+                                            const success = await approveQuote(leadId)
+                                            if (success) {
+                                                toast.success("Offerte goedgekeurd!", {
+                                                    description: "De engineer kan nu de offerte naar de klant versturen."
+                                                })
+                                            }
+                                        }}
+                                    >
+                                        <CheckCircle2 className="w-5 h-5" />
+                                        Goedkeuren
+                                    </Button>
+                                    <Button 
+                                        className="flex-1 gap-2 h-12 text-base" 
+                                        size="lg"
+                                        variant="destructive"
+                                        onClick={async () => {
+                                            const feedback = prompt("Reden voor afkeuring (optioneel):")
+                                            const { rejectQuote } = useLeadStore.getState()
+                                            const { currentUser } = useAuthStore.getState()
+                                            const feedbackObj = {
+                                                authorId: currentUser?.id || '',
+                                                authorName: currentUser?.name || 'Admin',
+                                                message: feedback || 'Geen reden opgegeven',
+                                            }
+                                            const success = await rejectQuote(leadId, feedbackObj)
+                                            if (success) {
+                                                toast.info("Offerte afgekeurd", {
+                                                    description: "De engineer wordt geïnformeerd."
+                                                })
+                                            }
+                                        }}
+                                    >
+                                        <XCircle className="w-5 h-5" />
+                                        Afkeuren
+                                    </Button>
+                                </div>
+                            ) : (
+                                <Button 
+                                    className="w-full gap-2 h-12 text-base" 
+                                    size="lg"
+                                    disabled
+                                    variant="outline"
+                                >
+                                    <Clock className="w-5 h-5" />
+                                    Wachten op Admin...
+                                </Button>
+                            )}
                         </>
                     ) : (
                         <>
@@ -380,7 +522,7 @@ export function QuotePanel() {
                     )}
                     <p className="text-xs text-center text-slate-500 dark:text-slate-400">
                         {approvalStatus === "none" && "Offertes vereisen goedkeuring door een admin."}
-                        {approvalStatus === "pending" && "Je ontvangt bericht zodra de offerte is beoordeeld."}
+                        {approvalStatus === "pending" && (isAdmin() ? "Beoordeel de offerte en keur goed of af." : "Je ontvangt bericht zodra de offerte is beoordeeld.")}
                         {approvalStatus === "approved" && "Klik om de offerte naar de klant te verzenden."}
                         {approvalStatus === "rejected" && "Pas de offerte aan en dien opnieuw in."}
                     </p>

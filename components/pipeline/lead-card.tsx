@@ -4,7 +4,7 @@ import { useDraggable } from "@dnd-kit/core"
 import { Lead } from "@/lib/store"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { MapPin, User, CheckCircle2, Clock, AlertCircle } from "lucide-react"
+import { MapPin, User, Clock, AlertCircle, CheckCircle2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useRouter } from "next/navigation"
 import { useState, useEffect } from "react"
@@ -139,7 +139,16 @@ export function LeadCard({ lead }: LeadCardProps) {
 
   return (
     <TooltipProvider>
-      <div ref={setNodeRef} style={style} {...listeners} {...attributes} className="mb-3">
+      <div 
+        ref={setNodeRef} 
+        style={style} 
+        {...listeners} 
+        {...attributes} 
+        className="mb-3"
+        role="listitem"
+        aria-label={`Lead: ${lead.clientName}, ${lead.projectType} in ${lead.city}, €${lead.value.toLocaleString('nl-NL')}`}
+        aria-grabbed={isDragging}
+      >
         <Card 
           onClick={handleCardClick}
           className={cn(
@@ -148,6 +157,15 @@ export function LeadCard({ lead }: LeadCardProps) {
             borderClass,
             isDragging ? "opacity-50 ring-2 ring-ring z-50 rotate-1 shadow-xl" : ""
           )}
+          role="button"
+          tabIndex={0}
+          aria-label={`Open details voor ${lead.clientName}`}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault()
+              handleCardClick()
+            }
+          }}
         >
           {/* Status indicator line - Left side */}
           <div className={cn(
@@ -169,20 +187,6 @@ export function LeadCard({ lead }: LeadCardProps) {
               >
                 {lead.projectType}
               </Badge>
-              <div className="flex items-center gap-1">
-                {lead.isUrgent && (
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Badge className="text-[10px] h-5 px-1.5 bg-red-600 hover:bg-red-700 text-white border-0 font-semibold animate-pulse">
-                        Urgent
-                      </Badge>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>Klant heeft prioriteit aangegeven</p>
-                    </TooltipContent>
-                  </Tooltip>
-                )}
-              </div>
             </div>
             <CardTitle className="text-sm font-semibold leading-tight flex items-center justify-between text-foreground">
               <span className="truncate">{lead.clientName}</span>
@@ -201,7 +205,7 @@ export function LeadCard({ lead }: LeadCardProps) {
           
           <CardContent className="p-3 pt-2 pl-4 text-xs space-y-2">
             <div className="flex items-center gap-2 text-muted-foreground">
-              <MapPin className="w-3 h-3 flex-shrink-0" />
+              <MapPin className="w-3 h-3 flex-shrink-0" aria-hidden="true" />
               <span className="truncate">{lead.city}</span>
             </div>
              
@@ -223,9 +227,9 @@ export function LeadCard({ lead }: LeadCardProps) {
                           ageStatus === "fresh" && "text-muted-foreground"
                         )}>
                           {ageStatus === "critical" ? (
-                            <AlertCircle className="w-3 h-3" />
+                            <AlertCircle className="w-3 h-3" aria-hidden="true" />
                           ) : (
-                            <Clock className="w-3 h-3" />
+                            <Clock className="w-3 h-3" aria-hidden="true" />
                           )}
                           <span>{formatHours(hoursSince)}</span>
                         </div>
@@ -236,8 +240,8 @@ export function LeadCard({ lead }: LeadCardProps) {
                     </Tooltip>
                   ) : (
                     // For Offerte Verzonden/Opdracht/Archief: neutral time indicator
-                    <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                      <Clock className="w-3 h-3" />
+                    <div className="flex items-center gap-1 text-[10px] text-muted-foreground" aria-label={`Leeftijd: ${formatHours(hoursSince)}`}>
+                      <Clock className="w-3 h-3" aria-hidden="true" />
                       <span>{formatHours(hoursSince)}</span>
                     </div>
                   )
@@ -262,8 +266,8 @@ export function LeadCard({ lead }: LeadCardProps) {
                 ) : (
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <div className="avatar-sm bg-slate-200 dark:bg-slate-700">
-                        <User className="w-3 h-3 text-slate-500" />
+                      <div className="avatar-sm bg-slate-200 dark:bg-slate-700" aria-label="Niet toegewezen">
+                        <User className="w-3 h-3 text-slate-500" aria-hidden="true" />
                       </div>
                     </TooltipTrigger>
                     <TooltipContent>

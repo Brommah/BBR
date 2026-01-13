@@ -51,7 +51,7 @@ export function WorkloadChart() {
                 boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)'
               }}
               labelStyle={{ fontWeight: 'bold', color: '#1e293b' }}
-              formatter={(value: number) => [`${value} cases`, 'Actief']}
+              formatter={(value) => [`${value ?? 0} cases`, 'Actief']}
             />
             <Bar dataKey="cases" radius={[0, 6, 6, 0]} barSize={36}>
               {data.map((entry, index) => (

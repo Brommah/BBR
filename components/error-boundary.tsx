@@ -1,119 +1,138 @@
 "use client"
 
-import { Component, ReactNode } from 'react'
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+import { Component, type ReactNode } from 'react'
+import { AlertTriangle, RefreshCcw, Home, Bug } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { AlertTriangle, RefreshCcw, Home } from 'lucide-react'
-import Link from 'next/link'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import * as Sentry from '@sentry/nextjs'
 
-interface Props {
+interface ErrorBoundaryProps {
   children: ReactNode
   fallback?: ReactNode
+  onError?: (error: Error, errorInfo: React.ErrorInfo) => void
+  showDetails?: boolean
 }
 
-interface State {
+interface ErrorBoundaryState {
   hasError: boolean
-  error?: Error
-  errorInfo?: { componentStack: string }
+  error: Error | null
+  errorInfo: React.ErrorInfo | null
 }
 
 /**
- * Error boundary component to catch and handle React errors gracefully
- * Provides Dutch error messages and recovery options
+ * Error Boundary Component
+ * Catches JavaScript errors anywhere in child component tree
+ * Logs errors and displays fallback UI
  */
-export class ErrorBoundary extends Component<Props, State> {
-  constructor(props: Props) {
+export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  constructor(props: ErrorBoundaryProps) {
     super(props)
-    this.state = { hasError: false }
+    this.state = { hasError: false, error: null, errorInfo: null }
   }
 
-  static getDerivedStateFromError(error: Error): State {
+  static getDerivedStateFromError(error: Error): Partial<ErrorBoundaryState> {
     return { hasError: true, error }
   }
 
-  componentDidCatch(error: Error, errorInfo: { componentStack: string }) {
-    console.error('[ErrorBoundary] Caught error:', error)
-    console.error('[ErrorBoundary] Component stack:', errorInfo.componentStack)
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    console.error('[ErrorBoundary] Caught error:', error, errorInfo)
     
     this.setState({ errorInfo })
     
-    // In production, you would send this to an error tracking service like Sentry
-    // if (process.env.NODE_ENV === 'production') {
-    //   Sentry.captureException(error, { extra: errorInfo })
-    // }
+    // Call optional error handler
+    this.props.onError?.(error, errorInfo)
+
+    // Send error to Sentry in production
+    Sentry.captureException(error, {
+      extra: {
+        componentStack: errorInfo.componentStack,
+      },
+      tags: {
+        errorBoundary: true,
+      },
+    })
+  }
+
+  handleReset = () => {
+    this.setState({ hasError: false, error: null, errorInfo: null })
   }
 
   handleReload = () => {
     window.location.reload()
   }
 
-  handleReset = () => {
-    this.setState({ hasError: false, error: undefined, errorInfo: undefined })
+  handleGoHome = () => {
+    window.location.href = '/'
   }
 
   render() {
     if (this.state.hasError) {
+      // Custom fallback
       if (this.props.fallback) {
         return this.props.fallback
       }
 
+      // Default fallback UI
       return (
-        <div className="flex items-center justify-center min-h-screen p-4 bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800">
-          <Card className="max-w-lg w-full shadow-xl border-destructive/20">
-            <CardHeader className="text-center pb-2">
-              <div className="mx-auto w-16 h-16 rounded-full bg-destructive/10 flex items-center justify-center mb-4">
-                <AlertTriangle className="w-8 h-8 text-destructive" />
+        <div className="min-h-[400px] flex items-center justify-center p-6">
+          <Card className="max-w-lg w-full">
+            <CardHeader className="text-center">
+              <div className="mx-auto w-12 h-12 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center mb-4">
+                <AlertTriangle className="w-6 h-6 text-red-600 dark:text-red-400" />
               </div>
-              <CardTitle className="text-xl text-destructive">
-                Er is iets misgegaan
-              </CardTitle>
-              <CardDescription className="text-base mt-2">
-                We hebben een onverwachte fout gedetecteerd. Dit kan gebeuren door een netwerkprobleem of een bug in de applicatie.
+              <CardTitle className="text-xl">Er is iets misgegaan</CardTitle>
+              <CardDescription>
+                We hebben een onverwachte fout gedetecteerd. Probeer de pagina te vernieuwen.
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4 pt-4">
-              {process.env.NODE_ENV === 'development' && this.state.error && (
-                <div className="p-3 bg-slate-100 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700">
-                  <p className="text-xs font-mono text-destructive break-all">
-                    {this.state.error.message}
+            <CardContent className="space-y-4">
+              {/* Error details (only in development or when showDetails is true) */}
+              {(process.env.NODE_ENV === 'development' || this.props.showDetails) && this.state.error && (
+                <div className="p-3 rounded-lg bg-slate-100 dark:bg-slate-800 font-mono text-xs overflow-auto max-h-32">
+                  <p className="text-red-600 dark:text-red-400 font-semibold mb-1">
+                    {this.state.error.name}: {this.state.error.message}
                   </p>
+                  {this.state.errorInfo && (
+                    <pre className="text-slate-600 dark:text-slate-400 whitespace-pre-wrap">
+                      {this.state.errorInfo.componentStack?.slice(0, 500)}
+                    </pre>
+                  )}
                 </div>
               )}
-              
-              <div className="flex flex-col sm:flex-row gap-3">
+
+              <div className="flex flex-col sm:flex-row gap-2">
                 <Button 
-                  onClick={this.handleReload}
+                  variant="outline" 
                   className="flex-1 gap-2"
-                  variant="default"
+                  onClick={this.handleReset}
                 >
                   <RefreshCcw className="w-4 h-4" />
-                  Pagina vernieuwen
+                  Probeer opnieuw
                 </Button>
                 <Button 
-                  onClick={this.handleReset}
+                  variant="outline" 
                   className="flex-1 gap-2"
-                  variant="outline"
+                  onClick={this.handleReload}
                 >
-                  Opnieuw proberen
+                  <RefreshCcw className="w-4 h-4" />
+                  Pagina herladen
                 </Button>
-              </div>
-              
-              <div className="pt-2 border-t">
                 <Button 
-                  asChild
-                  variant="ghost"
-                  className="w-full gap-2 text-muted-foreground"
+                  variant="default" 
+                  className="flex-1 gap-2"
+                  onClick={this.handleGoHome}
                 >
-                  <Link href="/">
-                    <Home className="w-4 h-4" />
-                    Terug naar home
-                  </Link>
+                  <Home className="w-4 h-4" />
+                  Naar home
                 </Button>
               </div>
-              
-              <p className="text-xs text-center text-muted-foreground pt-2">
-                Als dit probleem blijft optreden, neem contact op met support.
-              </p>
+
+              {process.env.NODE_ENV === 'development' && (
+                <p className="text-xs text-muted-foreground text-center flex items-center justify-center gap-1">
+                  <Bug className="w-3 h-3" />
+                  Development mode: Foutdetails zichtbaar
+                </p>
+              )}
             </CardContent>
           </Card>
         </div>
@@ -122,6 +141,48 @@ export class ErrorBoundary extends Component<Props, State> {
 
     return this.props.children
   }
+}
+
+/**
+ * Page-level error boundary wrapper
+ * Use this to wrap individual pages/routes
+ */
+export function PageErrorBoundary({ children }: { children: ReactNode }) {
+  return (
+    <ErrorBoundary
+      onError={(error, errorInfo) => {
+        console.error('[PageError]', error.message, errorInfo.componentStack)
+      }}
+    >
+      {children}
+    </ErrorBoundary>
+  )
+}
+
+/**
+ * Component-level error boundary wrapper
+ * Use this to wrap individual components that might fail
+ */
+export function ComponentErrorBoundary({ 
+  children,
+  fallback 
+}: { 
+  children: ReactNode
+  fallback?: ReactNode 
+}) {
+  return (
+    <ErrorBoundary
+      fallback={fallback || (
+        <div className="p-4 rounded-lg border border-red-200 bg-red-50 dark:bg-red-900/20 dark:border-red-800">
+          <p className="text-sm text-red-600 dark:text-red-400">
+            Dit onderdeel kon niet worden geladen.
+          </p>
+        </div>
+      )}
+    >
+      {children}
+    </ErrorBoundary>
+  )
 }
 
 /**

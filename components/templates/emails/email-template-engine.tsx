@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
-import { Copy, Plus, RefreshCw } from "lucide-react"
+import { Copy, RefreshCw } from "lucide-react"
 import { toast } from "sonner"
 
 interface Template {
@@ -43,7 +43,7 @@ const defaultTemplates: Template[] = [
 ]
 
 export function EmailTemplateEngine() {
-    const [templates, setTemplates] = useState<Template[]>(defaultTemplates)
+    const [templates] = useState<Template[]>(defaultTemplates)
     const [selectedId, setSelectedId] = useState<string>(defaultTemplates[0].id)
     const [previewData, setPreviewData] = useState<Record<string, string>>({
         client_name: "J. de Vries",

@@ -34,3 +34,6 @@ coverage/
 # Misc
 *.pem
 *.log
+
+# Sentry Config File
+.env.sentry-build-plugin

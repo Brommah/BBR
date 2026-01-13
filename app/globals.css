@@ -448,3 +448,76 @@
   0%, 100% { opacity: 1; }
   50% { opacity: 0.8; }
 }
+
+/* =============================================================================
+   GOOGLE PLACES AUTOCOMPLETE STYLES
+   ============================================================================= */
+.pac-container {
+  background-color: hsl(var(--popover));
+  border: 1px solid hsl(var(--border));
+  border-radius: calc(var(--radius) - 2px);
+  box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  font-family: inherit;
+  margin-top: 4px;
+  z-index: 9999;
+}
+
+.pac-item {
+  padding: 8px 12px;
+  cursor: pointer;
+  border-top: 1px solid hsl(var(--border));
+  color: hsl(var(--foreground));
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.pac-item:first-child {
+  border-top: none;
+}
+
+.pac-item:hover,
+.pac-item-selected {
+  background-color: hsl(var(--accent));
+}
+
+.pac-item-query {
+  font-weight: 500;
+  color: hsl(var(--foreground));
+}
+
+.pac-matched {
+  font-weight: 600;
+  color: oklch(0.78 0.14 75);
+}
+
+.pac-icon {
+  display: none;
+}
+
+.pac-logo::after {
+  display: none;
+}
+
+/* Dark mode support for Google Places */
+.dark .pac-container {
+  background-color: oklch(0.17 0.02 260);
+  border-color: oklch(0.30 0.02 260);
+}
+
+.dark .pac-item {
+  color: oklch(0.95 0.005 260);
+  border-color: oklch(0.30 0.02 260);
+}
+
+.dark .pac-item:hover,
+.dark .pac-item-selected {
+  background-color: oklch(0.24 0.02 260);
+}
+
+.dark .pac-item-query {
+  color: oklch(0.95 0.005 260);
+}
+
+.dark .pac-matched {
+  color: oklch(0.78 0.14 75);
+}

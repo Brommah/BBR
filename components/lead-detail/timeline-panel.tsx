@@ -4,8 +4,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
 import { Sparkles, Send, Paperclip, Mail, MessageSquare, FileText, BookOpen, ExternalLink } from "lucide-react"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { ScrollArea } from "@/components/ui/scroll-area"
 import { useEffect, useState } from "react"
 import { getKnowledgeBaseArticles } from "@/app/actions"
 

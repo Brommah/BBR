@@ -113,7 +113,6 @@ Uw aanvraag is ontvangen. Binnen 1-2 werkdagen nemen wij contact met u op.
 
 | Conditie | Aanpassing |
 |----------|------------|
-| `isUrgent === true` | Voeg toe: "Wij begrijpen dat uw project spoed heeft. Wij doen ons best om vandaag nog contact op te nemen." |
 | Monumentaal pand | Voeg toe: "Wij hebben ruime ervaring met monumentale panden en kennen de specifieke regelgeving." |
 
 ---

@@ -1,5 +1,4 @@
 import { Card } from "@/components/ui/card"
-import { Separator } from "@/components/ui/separator"
 import { format } from "date-fns"
 import { nl } from "date-fns/locale"
 
@@ -17,6 +16,7 @@ export function QuoteTemplate({ clientName, projectType, date, items, total }: Q
             {/* Header */}
             <div className="flex justify-between items-start mb-16">
                 <div className="w-48">
+                    {/* eslint-disable-next-line @next/next/no-img-element -- Using <img> intentionally for PDF/print compatibility */}
                     <img 
                         src="/branding/logo-white-gold.png" 
                         alt="Bureau Broersma" 

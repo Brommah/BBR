@@ -5,7 +5,6 @@ import {
   Info, 
   Clock, 
   User, 
-  AlertTriangle,
   CheckCircle2,
   ChevronDown,
   ChevronUp,
@@ -124,9 +123,7 @@ export function PipelineLegend() {
                 Project Types
               </h4>
               <div className="space-y-2">
-                {Object.entries(PROJECT_TYPE_COLORS).map(([type, colors]) => {
-                  const Icon = getProjectTypeIcon(type)
-                  return (
+                {Object.entries(PROJECT_TYPE_COLORS).map(([type, colors]) => (
                     <div key={type} className="flex items-center gap-2">
                       <div className={cn(
                         "px-2 py-0.5 text-[10px] font-medium uppercase rounded border",
@@ -135,8 +132,7 @@ export function PipelineLegend() {
                         {type}
                       </div>
                     </div>
-                  )
-                })}
+                ))}
               </div>
             </div>
 

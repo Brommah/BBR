@@ -3,7 +3,7 @@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
-import { ArrowUpRight, TrendingUp, DollarSign, Target, CalendarDays, CheckCircle2 } from "lucide-react"
+import { ArrowUpRight, TrendingUp, Target, CalendarDays } from "lucide-react"
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts"
 
 const financialData = [
@@ -119,7 +119,7 @@ export function FinancialRoadmapView() {
                                     />
                                     <CartesianGrid vertical={false} strokeDasharray="3 3" strokeOpacity={0.2} />
                                     <Tooltip 
-                                        formatter={(value: number) => `€ ${value.toLocaleString()}`}
+                                        formatter={(value) => `€ ${(value ?? 0).toLocaleString()}`}
                                         contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
                                     />
                                     <Area 

@@ -2,7 +2,6 @@
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
-import { Separator } from "@/components/ui/separator"
 import { Badge } from "@/components/ui/badge"
 import { Star, MessageSquare } from "lucide-react"
 

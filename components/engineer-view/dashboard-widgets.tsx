@@ -22,10 +22,8 @@ export function MyProjectsWidget({ leads, userName }: EngineerDashboardProps) {
         l.status !== "Nieuw"
     )
 
-    // Sort by urgency: Urgent first, then oldest
+    // Sort by oldest first
     const sortedProjects = myProjects.sort((a, b) => {
-        if (a.isUrgent && !b.isUrgent) return -1
-        if (!a.isUrgent && b.isUrgent) return 1
         return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
     })
 
@@ -62,7 +60,7 @@ export function MyProjectsWidget({ leads, userName }: EngineerDashboardProps) {
                                 className="group flex items-center justify-between p-3 rounded-lg hover:bg-muted/50 cursor-pointer transition-colors border-b border-border last:border-0"
                             >
                                 <div className="flex items-center gap-4">
-                                    <div className={`status-dot ${project.isUrgent ? 'status-error animate-pulse ring-4 ring-red-500/20' : 'status-success'}`} />
+                                    <div className="status-dot status-success" />
                                     <div>
                                         <div className="font-semibold text-sm flex items-center gap-2 text-foreground">
                                             {project.clientName}
@@ -102,8 +100,8 @@ export function MyProjectsWidget({ leads, userName }: EngineerDashboardProps) {
 
 export function IncomingRequestsWidget({ leads }: { leads: Lead[] }) {
     const router = useRouter()
-    // Unassigned leads in "Nieuw" or "Triage"
-    const incoming = leads.filter(l => !l.assignee && (l.status === "Nieuw" || l.status === "Triage"))
+    // Unassigned leads in "Nieuw"
+    const incoming = leads.filter(l => !l.assignee && l.status === "Nieuw")
 
     return (
         <Card className="col-span-3 lg:col-span-3 border border-accent bg-accent/10 shadow-sm hover:shadow-md transition-all">

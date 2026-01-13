@@ -14,10 +14,10 @@ import { useLeadStore, LeadStatus } from "@/lib/store"
 import { KanbanColumn } from "./kanban-column"
 import { LeadCard } from "./lead-card"
 import { PipelineLegend } from "./pipeline-legend"
-import { useState, useEffect } from "react"
+import { PipelineSkeleton } from "@/components/ui/skeleton-loaders"
+import { useState, useSyncExternalStore } from "react"
 import { createPortal } from "react-dom"
 import { toast } from "sonner"
-import { Loader2 } from "lucide-react"
 
 const COLUMNS: { id: LeadStatus, label: string }[] = [
     { id: "Nieuw", label: "Nieuw" },
@@ -27,15 +27,19 @@ const COLUMNS: { id: LeadStatus, label: string }[] = [
     { id: "Archief", label: "Archief" },
 ]
 
+// Hydration detection using useSyncExternalStore (no cascading renders)
+const emptySubscribe = () => () => {}
+const getClientSnapshot = () => true
+const getServerSnapshot = () => false
+
+function useIsMounted() {
+    return useSyncExternalStore(emptySubscribe, getClientSnapshot, getServerSnapshot)
+}
+
 export function PipelineView() {
     const { leads, updateLeadStatus, isLoading } = useLeadStore()
     const [activeId, setActiveId] = useState<string | null>(null)
-    const [isMounted, setIsMounted] = useState(false)
-    const [isDragging, setIsDragging] = useState(false)
-
-    useEffect(() => {
-        setIsMounted(true)
-    }, [])
+    const isMounted = useIsMounted()
 
     const sensors = useSensors(
         useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -44,13 +48,11 @@ export function PipelineView() {
 
     function handleDragStart(event: DragStartEvent) {
         setActiveId(event.active.id as string)
-        setIsDragging(true)
     }
 
     async function handleDragEnd(event: DragEndEvent) {
         const { active, over } = event
         setActiveId(null)
-        setIsDragging(false)
 
         if (!over) return
 
@@ -70,14 +72,11 @@ export function PipelineView() {
 
     const activeLead = activeId ? leads.find(l => l.id === activeId) : null
 
-    // Loading state
+    // Loading state with skeleton
     if (isLoading) {
         return (
-            <div className="h-[calc(100vh-4rem)] p-6 flex items-center justify-center">
-                <div className="text-center space-y-4">
-                    <Loader2 className="w-10 h-10 animate-spin mx-auto text-primary" />
-                    <p className="text-muted-foreground">Leads laden...</p>
-                </div>
+            <div className="h-[calc(100vh-4rem)] p-6">
+                <PipelineSkeleton />
             </div>
         )
     }
@@ -90,13 +89,21 @@ export function PipelineView() {
             onDragStart={handleDragStart} 
             onDragEnd={handleDragEnd}
         >
-            <div className="h-[calc(100vh-4rem)] p-6 flex flex-col">
+            <div 
+                className="h-[calc(100vh-4rem)] p-6 flex flex-col"
+                role="application"
+                aria-label="Lead pipeline - Sleep kaarten om status te wijzigen"
+            >
                 {/* Legend */}
                 <div className="flex-shrink-0">
                     <PipelineLegend />
                 </div>
                 
-                <div className="flex gap-4 flex-1 min-w-max overflow-x-auto overflow-y-hidden">
+                <div 
+                    className="flex gap-4 flex-1 min-w-max overflow-x-auto overflow-y-hidden"
+                    role="region"
+                    aria-label={`Pipeline met ${leads.length} leads in ${COLUMNS.length} kolommen`}
+                >
                     {COLUMNS.map(col => {
                         const colLeads = leads.filter(l => l.status === col.id)
                         return (

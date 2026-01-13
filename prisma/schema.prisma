@@ -36,9 +36,10 @@ model Lead {
   value               Float               @default(0)
   createdAt           DateTime            @default(now())
   updatedAt           DateTime            @updatedAt
+  deletedAt           DateTime?           // Soft delete
   assignee            String?
-  isUrgent            Boolean             @default(false)
   addressValid        Boolean             @default(false)
+  werknummer          String?             // Work number for the project
   
   // Quote data
   quoteApproval       QuoteApprovalStatus @default(none)
@@ -52,10 +53,19 @@ model Lead {
   specifications      ProjectSpec[]
   notes               Note[]
   activities          Activity[]
+  documents           Document[]
+  communications      Communication[]
+  quoteVersions       QuoteVersion[]
+  emailLogs           EmailLog[]
 
   @@index([status])
   @@index([assignee])
   @@index([createdAt])
+  @@index([deletedAt])
+  // Composite indexes for common query patterns
+  @@index([assignee, status])        // "My leads" filtered by status
+  @@index([quoteApproval, status])   // Approval queue queries
+  @@index([status, createdAt])       // Pipeline sorting by date
 }
 
 model ProjectSpec {
@@ -84,22 +94,25 @@ model Activity {
   id        String   @id @default(cuid())
   leadId    String
   lead      Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
-  type      String   // 'status_change', 'email_sent', 'note_added', 'quote_generated', 'quote_submitted', 'quote_approved', 'quote_rejected'
+  type      String   // 'status_change', 'email_sent', 'note_added', 'quote_generated', etc.
   content   String
   author    String?
+  metadata  Json?    // For storing before/after states for audit
   createdAt DateTime @default(now())
 
   @@index([leadId])
   @@index([createdAt])
+  @@index([type])
 }
 
 model User {
-  id        String   @id @default(cuid())
+  id        String    @id @default(cuid())
   name      String
-  email     String   @unique
-  role      String   @default("engineer") // 'admin', 'engineer', 'viewer'
+  email     String    @unique
+  role      String    @default("engineer") // 'admin', 'engineer', 'viewer'
   avatar    String?
-  createdAt DateTime @default(now())
+  createdAt DateTime  @default(now())
+  deletedAt DateTime? // Soft delete
 }
 
 model CostRate {
@@ -110,4 +123,118 @@ model CostRate {
   isPercentage Boolean  @default(false)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+}
+
+// Document storage for leads
+model Document {
+  id         String    @id @default(cuid())
+  leadId     String
+  lead       Lead      @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  name       String
+  type       String    // 'pdf', 'image', 'spreadsheet', 'dwg', 'other'
+  category   String    // 'tekening', 'offerte', 'foto', 'vergunning', 'correspondentie', 'overig'
+  size       Int       // in bytes
+  url        String    // Supabase Storage URL
+  status     String    @default("pending") // 'pending', 'approved', 'final'
+  uploadedBy String
+  createdAt  DateTime  @default(now())
+  deletedAt  DateTime? // Soft delete
+
+  @@index([leadId])
+  @@index([category])
+}
+
+// Communication log (emails, calls)
+model Communication {
+  id        String   @id @default(cuid())
+  leadId    String
+  lead      Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  type      String   // 'email', 'call', 'whatsapp'
+  direction String   // 'inbound', 'outbound'
+  subject   String?
+  content   String
+  duration  Int?     // for calls, in seconds
+  author    String
+  createdAt DateTime @default(now())
+
+  @@index([leadId])
+  @@index([createdAt])
+}
+
+// Quote version history
+model QuoteVersion {
+  id          String   @id @default(cuid())
+  leadId      String
+  lead        Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  version     Int
+  value       Float
+  lineItems   Json     // Array of {description: string, amount: number}
+  description String?
+  status      String   // 'draft', 'submitted', 'approved', 'rejected', 'sent'
+  createdBy   String
+  createdAt   DateTime @default(now())
+
+  @@index([leadId])
+  @@unique([leadId, version])
+}
+
+// Email templates
+model EmailTemplate {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  subject   String
+  body      String
+  variables Json     // Array of variable names
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Email send log
+model EmailLog {
+  id         String   @id @default(cuid())
+  leadId     String?
+  lead       Lead?    @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  templateId String?
+  to         String
+  subject    String
+  body       String
+  status     String   // 'sent', 'delivered', 'failed', 'bounced'
+  messageId  String?  // From email provider
+  error      String?
+  sentBy     String
+  createdAt  DateTime @default(now())
+
+  @@index([leadId])
+  @@index([createdAt])
+  @@index([status])
+}
+
+// Rate limiting storage
+model RateLimit {
+  id        String   @id
+  count     Int      @default(1)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([expiresAt])
+}
+
+// Audit log for compliance
+model AuditLog {
+  id         String   @id @default(cuid())
+  entityType String   // 'lead', 'user', 'quote', 'document'
+  entityId   String
+  action     String   // 'create', 'update', 'delete', 'restore'
+  changes    Json     // Array of {field, oldValue, newValue}
+  userId     String
+  userName   String
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  @@index([entityType, entityId])
+  @@index([userId])
+  @@index([createdAt])
 }

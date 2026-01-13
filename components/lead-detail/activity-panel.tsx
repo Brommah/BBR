@@ -1,36 +1,33 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Textarea } from "@/components/ui/textarea"
 import { Input } from "@/components/ui/input"
-import { Separator } from "@/components/ui/separator"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Skeleton } from "@/components/ui/skeleton"
 import {
     Phone,
     Mail,
     MessageSquare,
     Send,
     Plus,
-    Clock,
-    ArrowUpRight,
-    ArrowDownLeft,
-    User,
     Settings,
-    Filter
+    Loader2,
 } from "lucide-react"
 import { toast } from "sonner"
 import { format } from "date-fns"
 import { nl } from "date-fns/locale"
 import { cn } from "@/lib/utils"
+import { useAuthStore } from "@/lib/auth"
+import { getActivityFeed, createCommunication, addNote } from "@/lib/db-actions"
 
 // Unified activity entry type
 interface ActivityEntry {
     id: string
-    type: "note" | "call" | "email" | "system"
+    type: "note" | "call" | "email" | "system" | "whatsapp"
     direction?: "inbound" | "outbound"
     subject?: string
     content: string
@@ -39,69 +36,11 @@ interface ActivityEntry {
     duration?: number // for calls, in seconds
 }
 
-// Mock data combining notes and communications
-const mockActivities: ActivityEntry[] = [
-    {
-        id: "sys-1",
-        type: "system",
-        content: "Lead aangemaakt via website intake",
-        timestamp: new Date(Date.now() - 1000 * 60 * 60 * 48).toISOString(),
-        user: "System"
-    },
-    {
-        id: "note-1",
-        type: "note",
-        content: "Ik zie op de satellietfoto dat er al een uitbouw staat bij de buren, dus vergunning is waarschijnlijk makkelijk.",
-        timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString(),
-        user: "Angelo"
-    },
-    {
-        id: "call-1",
-        type: "call",
-        direction: "outbound",
-        content: "Klant gebeld over offerte. Besproken: dakkapel afmetingen 4m breed. Klant wil graag een bezoek op locatie.",
-        timestamp: new Date(Date.now() - 1000 * 60 * 60 * 8).toISOString(),
-        user: "Angelo",
-        duration: 480
-    },
-    {
-        id: "email-1",
-        type: "email",
-        direction: "outbound",
-        subject: "Offerte Dakkapel - Bevestiging Afspraak",
-        content: "Afspraakbevestiging verzonden voor locatiebezoek.",
-        timestamp: new Date(Date.now() - 1000 * 60 * 60 * 7).toISOString(),
-        user: "Angelo"
-    },
-    {
-        id: "call-2",
-        type: "call",
-        direction: "inbound",
-        content: "Klant belt terug. Gaat akkoord met offerte inclusief bezoek.",
-        timestamp: new Date(Date.now() - 1000 * 60 * 60 * 4).toISOString(),
-        user: "Angelo",
-        duration: 180
-    },
-    {
-        id: "note-2",
-        type: "note",
-        content: "Telefoon gehad met klant - wil weten wanneer we kunnen beginnen. Heb gezegd binnen 2 weken na akkoord.",
-        timestamp: new Date(Date.now() - 1000 * 60 * 60 * 2).toISOString(),
-        user: "Venka"
-    },
-    {
-        id: "sys-2",
-        type: "system",
-        content: "Status gewijzigd naar Calculatie",
-        timestamp: new Date(Date.now() - 1000 * 60 * 60).toISOString(),
-        user: "System"
-    }
-].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-
 const authorColors: Record<string, string> = {
     "Angelo": "bg-blue-600",
     "Venka": "bg-purple-600",
     "Roina": "bg-emerald-600",
+    "Martijn": "bg-amber-600",
     "System": "bg-slate-500"
 }
 
@@ -111,17 +50,57 @@ interface ActivityPanelProps {
     clientEmail?: string
 }
 
-export function ActivityPanel({ leadId, clientPhone = "+31 6 12345678", clientEmail = "client@email.nl" }: ActivityPanelProps) {
-    const [activities, setActivities] = useState<ActivityEntry[]>(mockActivities)
+export function ActivityPanel({ leadId, clientPhone, clientEmail }: ActivityPanelProps) {
+    const { currentUser } = useAuthStore()
+    const [activities, setActivities] = useState<ActivityEntry[]>([])
+    const [isLoading, setIsLoading] = useState(true)
+    const [isSaving, setIsSaving] = useState(false)
     const [newNote, setNewNote] = useState("")
     const [isAddOpen, setIsAddOpen] = useState(false)
     const [filter, setFilter] = useState<"all" | "note" | "call" | "email">("all")
     const [newEntry, setNewEntry] = useState({
-        type: "call" as "call" | "email",
+        type: "call" as "call" | "email" | "whatsapp",
         direction: "outbound" as "inbound" | "outbound",
         content: "",
         subject: ""
     })
+
+    // Load activities from database with cleanup to prevent memory leaks
+    useEffect(() => {
+        let isMounted = true
+        const abortController = new AbortController()
+        
+        async function loadActivities() {
+            if (!leadId) return
+            setIsLoading(true)
+            
+            try {
+                const result = await getActivityFeed(leadId)
+                // Only update state if component is still mounted
+                if (isMounted && result.success && result.data) {
+                    setActivities(result.data as ActivityEntry[])
+                }
+            } catch (error) {
+                // Ignore abort errors
+                if (error instanceof Error && error.name === 'AbortError') {
+                    return
+                }
+                console.error('[ActivityPanel] Failed to load activities:', error)
+            } finally {
+                if (isMounted) {
+                    setIsLoading(false)
+                }
+            }
+        }
+        
+        loadActivities()
+        
+        // Cleanup function to prevent state updates on unmounted component
+        return () => {
+            isMounted = false
+            abortController.abort()
+        }
+    }, [leadId])
 
     const filteredActivities = filter === "all"
         ? activities
@@ -144,21 +123,6 @@ export function ActivityPanel({ leadId, clientPhone = "+31 6 12345678", clientEm
         return format(date, "d MMM, HH:mm", { locale: nl })
     }
 
-    const getIcon = (entry: ActivityEntry) => {
-        switch (entry.type) {
-            case "call":
-                return entry.direction === "inbound"
-                    ? <ArrowDownLeft className="w-4 h-4 text-emerald-600" />
-                    : <ArrowUpRight className="w-4 h-4 text-blue-600" />
-            case "email":
-                return <Mail className="w-4 h-4 text-purple-600" />
-            case "note":
-                return <MessageSquare className="w-4 h-4 text-amber-600" />
-            case "system":
-                return <Settings className="w-4 h-4 text-slate-500" />
-        }
-    }
-
     const getTypeBadge = (entry: ActivityEntry) => {
         switch (entry.type) {
             case "call":
@@ -174,6 +138,8 @@ export function ActivityPanel({ leadId, clientPhone = "+31 6 12345678", clientEm
                 )
             case "email":
                 return <Badge className="bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-300 border-0 text-[10px]">E-mail</Badge>
+            case "whatsapp":
+                return <Badge className="bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-300 border-0 text-[10px]">WhatsApp</Badge>
             case "note":
                 return <Badge className="bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300 border-0 text-[10px]">Notitie</Badge>
             case "system":
@@ -181,60 +147,127 @@ export function ActivityPanel({ leadId, clientPhone = "+31 6 12345678", clientEm
         }
     }
 
-    const handleAddNote = () => {
-        if (!newNote.trim()) return
+    const handleAddNote = async () => {
+        if (!newNote.trim() || !currentUser) return
+        setIsSaving(true)
 
-        const entry: ActivityEntry = {
-            id: `note-${Date.now()}`,
-            type: "note",
-            content: newNote,
-            timestamp: new Date().toISOString(),
-            user: "Angelo" // Mock current user
+        const result = await addNote(leadId, newNote, currentUser.name)
+        
+        if (result.success) {
+            // Add to local state optimistically
+            const entry: ActivityEntry = {
+                id: `note-${Date.now()}`,
+                type: "note",
+                content: newNote,
+                timestamp: new Date().toISOString(),
+                user: currentUser.name
+            }
+            setActivities([entry, ...activities])
+            setNewNote("")
+            toast.success("Notitie toegevoegd")
+        } else {
+            toast.error("Kon notitie niet opslaan")
         }
-        setActivities([entry, ...activities])
-        setNewNote("")
-        toast.success("Notitie toegevoegd")
+        setIsSaving(false)
     }
 
-    const handleQuickCall = () => {
-        const entry: ActivityEntry = {
-            id: `call-${Date.now()}`,
-            type: "call",
-            direction: "outbound",
-            content: "Gesprek gestart...",
-            timestamp: new Date().toISOString(),
-            user: "Angelo",
-            duration: 0
+    const handleQuickCall = async () => {
+        if (!currentUser) return
+        
+        // Log the call
+        const result = await createCommunication({
+            leadId,
+            type: 'call',
+            direction: 'outbound',
+            content: 'Gesprek gestart...',
+            author: currentUser.name
+        })
+        
+        if (result.success) {
+            const entry: ActivityEntry = {
+                id: `call-${Date.now()}`,
+                type: "call",
+                direction: "outbound",
+                content: "Gesprek gestart...",
+                timestamp: new Date().toISOString(),
+                user: currentUser.name,
+                duration: 0
+            }
+            setActivities([entry, ...activities])
         }
-        setActivities([entry, ...activities])
-        window.open(`tel:${clientPhone}`, '_self')
+        
+        if (clientPhone) {
+            window.open(`tel:${clientPhone}`, '_self')
+        }
         toast.success("Gesprek geregistreerd", {
-            description: `Bellen naar ${clientPhone}`
+            description: clientPhone ? `Bellen naar ${clientPhone}` : 'Gesprek gelogd'
         })
     }
 
     const handleQuickEmail = () => {
-        window.open(`mailto:${clientEmail}`, '_blank')
-        toast.success("E-mail client geopend", {
-            description: `Mailen naar ${clientEmail}`
-        })
+        if (clientEmail) {
+            window.open(`mailto:${clientEmail}`, '_blank')
+            toast.success("E-mail client geopend", {
+                description: `Mailen naar ${clientEmail}`
+            })
+        }
     }
 
-    const handleAddEntry = () => {
-        const entry: ActivityEntry = {
-            id: `${newEntry.type}-${Date.now()}`,
+    const handleAddEntry = async () => {
+        if (!currentUser) return
+        setIsSaving(true)
+        
+        const result = await createCommunication({
+            leadId,
             type: newEntry.type,
             direction: newEntry.direction,
             subject: newEntry.subject || undefined,
             content: newEntry.content,
-            timestamp: new Date().toISOString(),
-            user: "Angelo"
-        }
+            author: currentUser.name
+        })
+        
+        if (result.success) {
+            const entry: ActivityEntry = {
+                id: `${newEntry.type}-${Date.now()}`,
+                type: newEntry.type,
+                direction: newEntry.direction,
+                subject: newEntry.subject || undefined,
+                content: newEntry.content,
+                timestamp: new Date().toISOString(),
+                user: currentUser.name
+            }
 
-        setActivities([entry, ...activities])
-        setIsAddOpen(false)
-        setNewEntry({ type: "call", direction: "outbound", content: "", subject: "" })
-        toast.success("Activiteit gelogd")
+            setActivities([entry, ...activities])
+            setIsAddOpen(false)
+            setNewEntry({ type: "call", direction: "outbound", content: "", subject: "" })
+            toast.success("Activiteit gelogd")
+        } else {
+            toast.error("Kon activiteit niet opslaan")
+        }
+        setIsSaving(false)
+    }
+
+    if (isLoading) {
+        return (
+            <div className="flex flex-col h-full bg-card rounded-lg border border-border overflow-hidden p-4 space-y-4">
+                <Skeleton className="h-8 w-32" />
+                <div className="flex gap-2">
+                    <Skeleton className="h-8 flex-1" />
+                    <Skeleton className="h-8 flex-1" />
+                </div>
+                <div className="space-y-3">
+                    {[1, 2, 3].map(i => (
+                        <div key={i} className="flex gap-3">
+                            <Skeleton className="w-8 h-8 rounded-full" />
+                            <div className="flex-1 space-y-2">
+                                <Skeleton className="h-4 w-24" />
+                                <Skeleton className="h-16 w-full" />
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        )
     }
 
     return (
@@ -268,6 +301,7 @@ export function ActivityPanel({ leadId, clientPhone = "+31 6 12345678", clientEm
                             variant="outline"
                             className="flex-1 gap-2 h-8"
                             onClick={handleQuickCall}
+                            disabled={!clientPhone}
                         >
                             <Phone className="w-3 h-3" />
                             Bellen
@@ -277,6 +311,7 @@ export function ActivityPanel({ leadId, clientPhone = "+31 6 12345678", clientEm
                             variant="outline"
                             className="flex-1 gap-2 h-8"
                             onClick={handleQuickEmail}
+                            disabled={!clientEmail}
                         >
                             <Mail className="w-3 h-3" />
                             E-mail
@@ -384,9 +419,13 @@ export function ActivityPanel({ leadId, clientPhone = "+31 6 12345678", clientEm
                                 size="sm"
                                 className="h-8 gap-2"
                                 onClick={handleAddNote}
-                                disabled={!newNote.trim()}
+                                disabled={!newNote.trim() || isSaving}
                             >
-                                <Send className="w-3 h-3" />
+                                {isSaving ? (
+                                    <Loader2 className="w-3 h-3 animate-spin" />
+                                ) : (
+                                    <Send className="w-3 h-3" />
+                                )}
                                 Verzend
                             </Button>
                         </div>
@@ -410,7 +449,7 @@ export function ActivityPanel({ leadId, clientPhone = "+31 6 12345678", clientEm
                                 <label className="text-sm font-medium">Type</label>
                                 <Select
                                     value={newEntry.type}
-                                    onValueChange={(v) => setNewEntry({ ...newEntry, type: v as "call" | "email" })}
+                                    onValueChange={(v) => setNewEntry({ ...newEntry, type: v as "call" | "email" | "whatsapp" })}
                                 >
                                     <SelectTrigger>
                                         <SelectValue />
@@ -418,6 +457,7 @@ export function ActivityPanel({ leadId, clientPhone = "+31 6 12345678", clientEm
                                     <SelectContent>
                                         <SelectItem value="call">Telefoongesprek</SelectItem>
                                         <SelectItem value="email">E-mail</SelectItem>
+                                        <SelectItem value="whatsapp">WhatsApp</SelectItem>
                                     </SelectContent>
                                 </Select>
                             </div>
@@ -465,7 +505,8 @@ export function ActivityPanel({ leadId, clientPhone = "+31 6 12345678", clientEm
                         <Button variant="outline" onClick={() => setIsAddOpen(false)}>
                             Annuleren
                         </Button>
-                        <Button onClick={handleAddEntry} disabled={!newEntry.content}>
+                        <Button onClick={handleAddEntry} disabled={!newEntry.content || isSaving}>
+                            {isSaving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
                             Opslaan
                         </Button>
                     </DialogFooter>

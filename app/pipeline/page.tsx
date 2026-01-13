@@ -1,8 +1,10 @@
 import { PipelineView } from "@/components/pipeline/pipeline-view"
 import { IsoBlueprint } from "@/components/ui/illustrations"
+import { PageErrorBoundary } from "@/components/error-boundary"
 
 export default function PipelinePage() {
   return (
+    <PageErrorBoundary>
     <div className="flex-1 overflow-hidden h-screen bg-background relative">
         {/* Background Watermark */}
         <div className="absolute right-0 top-0 w-96 h-96 opacity-[0.03] pointer-events-none z-0">
@@ -16,5 +18,6 @@ export default function PipelinePage() {
             <PipelineView />
         </div>
     </div>
+    </PageErrorBoundary>
   )
 }

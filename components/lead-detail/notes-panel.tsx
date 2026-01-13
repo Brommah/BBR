@@ -33,7 +33,7 @@ const initialNotes: Note[] = [
     {
         id: 3,
         author: "System",
-        content: "Lead status gewijzigd naar Triage",
+        content: "Lead status gewijzigd naar Calculatie",
         time: "09:00",
         date: "Gisteren",
         isSystem: true

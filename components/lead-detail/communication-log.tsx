@@ -74,12 +74,12 @@ const mockCommunications: CommunicationEntry[] = [
 ]
 
 interface CommunicationLogProps {
-    leadId: string
+    leadId?: string
     clientPhone?: string
     clientEmail?: string
 }
 
-export function CommunicationLog({ leadId, clientPhone = "+31 6 12345678", clientEmail = "j.devries@email.nl" }: CommunicationLogProps) {
+export function CommunicationLog({ clientPhone = "+31 6 12345678", clientEmail = "j.devries@email.nl" }: CommunicationLogProps) {
     const [entries, setEntries] = useState<CommunicationEntry[]>(mockCommunications)
     const [isExpanded, setIsExpanded] = useState(true)
     const [isAddOpen, setIsAddOpen] = useState(false)

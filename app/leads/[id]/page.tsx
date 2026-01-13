@@ -1,23 +1,58 @@
 "use client"
 
 import { useParams } from "next/navigation"
-import { useLeadStore } from "@/lib/store"
+import { useLeadStore, Lead } from "@/lib/store"
 import { ContextPanel } from "@/components/lead-detail/context-panel"
 import { ActivityPanel } from "@/components/lead-detail/activity-panel"
 import { QuotePanel } from "@/components/lead-detail/quote-panel"
 import { DocumentsPanel } from "@/components/lead-detail/documents-panel"
-import { TimeTracker } from "@/components/lead-detail/time-tracker"
-import { SmartChecklist } from "@/components/lead-detail/smart-checklist"
 import { CalculationHistory } from "@/components/lead-detail/calculation-history"
+import { HourRegistrationPanel } from "@/components/lead-detail/hour-registration-panel"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { ArrowLeft, MessageSquare, FolderOpen, History } from "lucide-react"
+import { ArrowLeft, MessageSquare, FolderOpen, History, Clock, Loader2 } from "lucide-react"
 import Link from "next/link"
+import { useState, useEffect, useTransition, useRef } from "react"
+import { getLead } from "@/lib/db-actions"
 
 export default function LeadDetailPage() {
     const params = useParams()
-    const { leads } = useLeadStore()
-    const lead = leads.find(l => l.id === params.id)
+    const { leads, isLoading: storeLoading } = useLeadStore()
+    const [directLead, setDirectLead] = useState<Lead | null>(null)
+    const [isPending, startTransition] = useTransition()
+    const hasFetchedRef = useRef(false)
+    
+    // First try to get lead from store
+    const storeLead = leads.find(l => l.id === params.id)
+    
+    // Fetch lead if not in store - properly inside useEffect to avoid render-phase side effects
+    useEffect(() => {
+        // Skip if already in store, still loading store, or already fetched
+        if (storeLead || storeLoading || !params.id || hasFetchedRef.current) {
+            return
+        }
+        
+        hasFetchedRef.current = true
+        
+        startTransition(async () => {
+            const result = await getLead(params.id as string)
+            if (result.success && result.data) {
+                setDirectLead(result.data as Lead)
+            }
+        })
+    }, [storeLead, storeLoading, params.id])
+    
+    const lead = storeLead || directLead
+    const isLoading = storeLoading || isPending
+
+    if (isLoading) {
+        return (
+            <div className="flex flex-col items-center justify-center h-full gap-4">
+                <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                <p className="text-muted-foreground">Lead laden...</p>
+            </div>
+        )
+    }
 
     if (!lead) {
         return (
@@ -54,12 +89,6 @@ export default function LeadDetailPage() {
                 {/* Context Panel - Left Column */}
                 <div className="col-span-3 h-full overflow-y-auto p-6 bg-background/50 space-y-4">
                     <ContextPanel lead={lead} />
-                    
-                    {/* Smart Checklist */}
-                    <SmartChecklist projectType={lead.projectType} leadId={lead.id} />
-                    
-                    {/* Time Tracker */}
-                    <TimeTracker leadId={lead.id} />
                 </div>
 
                 {/* Center Panel - Tabbed Activity, Documents, History */}
@@ -70,6 +99,10 @@ export default function LeadDetailPage() {
                                 <TabsTrigger value="activity" className="gap-2 data-[state=active]:bg-card">
                                     <MessageSquare className="w-4 h-4" />
                                     Activiteit
+                                </TabsTrigger>
+                                <TabsTrigger value="hours" className="gap-2 data-[state=active]:bg-card">
+                                    <Clock className="w-4 h-4" />
+                                    Uren
                                 </TabsTrigger>
                                 <TabsTrigger value="documents" className="gap-2 data-[state=active]:bg-card">
                                     <FolderOpen className="w-4 h-4" />
@@ -88,11 +121,14 @@ export default function LeadDetailPage() {
                                 clientEmail={lead.clientEmail} 
                             />
                         </TabsContent>
+                        <TabsContent value="hours" className="flex-1 overflow-hidden p-6 pt-4 m-0">
+                            <HourRegistrationPanel leadId={lead.id} />
+                        </TabsContent>
                         <TabsContent value="documents" className="flex-1 overflow-hidden p-6 pt-4 m-0">
                             <DocumentsPanel leadId={lead.id} />
                         </TabsContent>
                         <TabsContent value="history" className="flex-1 overflow-auto p-6 pt-4 m-0">
-                            <CalculationHistory leadId={lead.id} />
+                            <CalculationHistory />
                         </TabsContent>
                     </Tabs>
                 </div>

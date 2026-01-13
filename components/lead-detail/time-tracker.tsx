@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
-import { Play, Pause, Clock, History, TrendingUp, Euro } from "lucide-react"
+import { Play, Pause, Clock, History, Euro, TrendingUp } from "lucide-react"
 import { toast } from "sonner"
 
 interface TimeEntry {
@@ -18,11 +18,11 @@ interface TimeEntry {
 }
 
 interface TimeTrackerProps {
-    leadId: string
+    leadId?: string
     hourlyRate?: number
 }
 
-export function TimeTracker({ leadId, hourlyRate = 85 }: TimeTrackerProps) {
+export function TimeTracker({ hourlyRate = 85 }: TimeTrackerProps) {
     const [isTracking, setIsTracking] = useState(false)
     const [currentSessionStart, setCurrentSessionStart] = useState<Date | null>(null)
     const [elapsedTime, setElapsedTime] = useState(0)

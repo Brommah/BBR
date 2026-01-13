@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom'
-import { vi } from 'vitest'
+import { vi, afterEach } from 'vitest'
 
 // Mock lib/db to prevent DATABASE_URL requirement in tests
 vi.mock('@/lib/db', () => ({

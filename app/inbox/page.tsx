@@ -14,7 +14,7 @@ import { useAuthStore } from "@/lib/auth"
 import { useRouter } from "next/navigation"
 import { IsoInbox, IsoEmpty } from "@/components/ui/illustrations"
 import { toast } from "sonner"
-import { PageLoader } from "@/components/error-boundary"
+import { PageLoader, PageErrorBoundary } from "@/components/error-boundary"
 
 // Helper to format relative time
 function getRelativeTime(dateString: string): string {
@@ -51,9 +51,7 @@ export default function InboxPage() {
     const newApplications = leads
         .filter(lead => lead.status === "Nieuw")
         .sort((a, b) => {
-            // Urgent first, then by creation date (newest first)
-            if (a.isUrgent && !b.isUrgent) return -1
-            if (!a.isUrgent && b.isUrgent) return 1
+            // Sort by creation date (newest first)
             return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
         })
 
@@ -131,6 +129,7 @@ export default function InboxPage() {
     }
 
     return (
+        <PageErrorBoundary>
         <div className="page-container">
             <div className="page-header flex items-center justify-between">
                 <div className="flex items-center gap-4">
@@ -154,20 +153,13 @@ export default function InboxPage() {
                     return (
                         <Card 
                             key={lead.id} 
-                            className={`card-hover-effect transition-all ${
-                                lead.isUrgent 
-                                    ? 'border-l-4 border-l-amber-500 bg-amber-50/30 dark:bg-amber-950/10' 
-                                    : ''
-                            } ${isProcessing ? 'opacity-60 pointer-events-none' : ''}`}
+                            className={`card-hover-effect transition-all ${isProcessing ? 'opacity-60 pointer-events-none' : ''}`}
                         >
                             <CardHeader className="pb-3">
                                 <div className="flex items-start justify-between gap-4">
                                     <div className="space-y-1">
                                         <div className="flex items-center gap-3">
                                             <CardTitle className="text-lg">{lead.clientName}</CardTitle>
-                                            {lead.isUrgent && (
-                                                <Badge className="bg-amber-500 text-white hover:bg-amber-600 border-none">Spoed</Badge>
-                                            )}
                                         </div>
                                         <CardDescription className="flex items-center gap-4 text-sm pt-1">
                                             <span className="flex items-center gap-1.5">
@@ -303,5 +295,6 @@ export default function InboxPage() {
                 )}
             </div>
         </div>
+        </PageErrorBoundary>
     )
 }

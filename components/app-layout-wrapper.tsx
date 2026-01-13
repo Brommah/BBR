@@ -8,8 +8,8 @@ interface AppLayoutWrapperProps {
   children: React.ReactNode
 }
 
-// Routes that don't show the sidebar
-const NO_SIDEBAR_ROUTES = ["/login"]
+// Routes that don't show the sidebar (public pages)
+const NO_SIDEBAR_ROUTES = ["/login", "/intake"]
 
 export function AppLayoutWrapper({ children }: AppLayoutWrapperProps) {
   const pathname = usePathname()

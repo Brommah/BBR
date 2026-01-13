@@ -111,9 +111,8 @@ export function estimateSideJobReward(lead: Lead): SideJobRewardEstimate {
   // Tune later based on real policy (margin, complexity, SLA, etc).
   const baseBonus = Math.max(25, Math.round(lead.value * 0.03)) // ~3% with a floor
   const complexityMultiplier = lead.projectType.toLowerCase().includes("renov") ? 1.3 : 1
-  const urgentMultiplier = lead.isUrgent ? 1.2 : 1
 
-  const bonusEur = Math.round(baseBonus * complexityMultiplier * urgentMultiplier)
+  const bonusEur = Math.round(baseBonus * complexityMultiplier)
 
   const xp = Math.round(20 + Math.min(80, lead.value / 250)) // caps around +80
 

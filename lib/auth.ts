@@ -1,7 +1,21 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import { supabase, isSupabaseConfigured, SupabaseUser } from './supabase'
+import { useState, useEffect } from 'react'
+import { getSupabaseBrowserClient, isSupabaseConfigured } from './supabase-browser'
 import { getUserByEmail } from './db-actions'
+
+/**
+ * Type for Supabase Auth user
+ */
+interface SupabaseUser {
+  id: string
+  email?: string
+  user_metadata?: {
+    name?: string
+    role?: 'admin' | 'engineer' | 'viewer'
+    avatar_url?: string
+  }
+}
 
 /**
  * User roles in the system:
@@ -121,6 +135,7 @@ export const useAuthStore = create<AuthState>()(
        * Login with email and password via Supabase
        */
       login: async (email: string, password: string): Promise<boolean> => {
+        const supabase = getSupabaseBrowserClient()
         if (!isSupabaseConfigured() || !supabase) {
           set({ 
             error: 'Authenticatie niet geconfigureerd. Configureer Supabase omgevingsvariabelen.' 
@@ -199,6 +214,7 @@ export const useAuthStore = create<AuthState>()(
        * Logout user
        */
       logout: async () => {
+        const supabase = getSupabaseBrowserClient()
         if (isSupabaseConfigured() && supabase) {
           try {
             await supabase.auth.signOut()
@@ -213,6 +229,7 @@ export const useAuthStore = create<AuthState>()(
        * Check for existing session on app load
        */
       checkSession: async () => {
+        const supabase = getSupabaseBrowserClient()
         if (!isSupabaseConfigured() || !supabase) {
           set({ isLoading: false })
           return
@@ -293,10 +310,18 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: 'broersma-auth',
+      // Only persist currentUser, NOT isAuthenticated
+      // isAuthenticated should be verified on each page load via checkSession
       partialize: (state) => ({ 
-        currentUser: state.currentUser, 
-        isAuthenticated: state.isAuthenticated 
+        currentUser: state.currentUser
       }),
+      // On rehydration, ensure isAuthenticated starts as false
+      // until checkSession verifies the session
+      onRehydrateStorage: () => (state) => {
+        if (state) {
+          state.isAuthenticated = false
+        }
+      }
     }
   )
 )
@@ -316,23 +341,146 @@ export function useCurrentUser(): User | null {
 }
 
 /**
- * Get all available users (from database in production)
+ * Get all available users (from database)
  * This is used for assignee dropdowns
+ * @deprecated Use useEngineers hook instead for React components
  */
 export function getEngineers(): User[] {
-  // In production, this should fetch from the database
-  // For now, return empty array - components should handle this
-  return []
+  console.warn('[Auth] getEngineers() is synchronous and returns cached data. Use useEngineers hook instead.')
+  return cachedEngineers
 }
 
 /**
  * Get user by name (for backwards compatibility)
+ * @deprecated Use useUserByName hook or getUserByNameAsync instead
  */
 export function getUserByName(name: string): User | undefined {
-  // In production, this should query the database
-  return undefined
+  return cachedEngineers.find(u => u.name.toLowerCase() === name.toLowerCase())
+}
+
+// Cached engineers list (populated by hooks)
+let cachedEngineers: User[] = []
+
+/**
+ * Update the cached engineers list
+ * Called internally by useEngineers hook
+ */
+export function setCachedEngineers(engineers: User[]): void {
+  cachedEngineers = engineers
+}
+
+/**
+ * Hook to fetch and cache engineers
+ * Use this in components that need the engineers list
+ */
+export function useEngineers(): { engineers: User[]; isLoading: boolean; error: string | null } {
+  const [engineers, setEngineers] = useState<User[]>(cachedEngineers)
+  const [isLoading, setIsLoading] = useState(cachedEngineers.length === 0)
+  const [error, setError] = useState<string | null>(null)
+  
+  useEffect(() => {
+    let isMounted = true
+    
+    async function fetchEngineers() {
+      // Use dynamic import to avoid circular dependency
+      const { getUsers } = await import('./db-actions')
+      
+      try {
+        const result = await getUsers('engineer')
+        if (isMounted) {
+          if (result.success && result.data) {
+            const engineerUsers = result.data as User[]
+            setEngineers(engineerUsers)
+            setCachedEngineers(engineerUsers)
+          } else {
+            setError(result.error || 'Failed to load engineers')
+          }
+        }
+      } catch (err) {
+        if (isMounted) {
+          setError(err instanceof Error ? err.message : 'Unknown error')
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoading(false)
+        }
+      }
+    }
+    
+    // Only fetch if we don't have cached data
+    if (cachedEngineers.length === 0) {
+      fetchEngineers()
+    } else {
+      setIsLoading(false)
+    }
+    
+    return () => {
+      isMounted = false
+    }
+  }, [])
+  
+  return { engineers, isLoading, error }
+}
+
+/**
+ * Hook to fetch all users (admins + engineers)
+ */
+export function useAllUsers(): { users: User[]; isLoading: boolean; error: string | null } {
+  const [users, setUsers] = useState<User[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  
+  useEffect(() => {
+    let isMounted = true
+    
+    async function fetchUsers() {
+      const { getUsers } = await import('./db-actions')
+      
+      try {
+        const result = await getUsers()
+        if (isMounted) {
+          if (result.success && result.data) {
+            setUsers(result.data as User[])
+          } else {
+            setError(result.error || 'Failed to load users')
+          }
+        }
+      } catch (err) {
+        if (isMounted) {
+          setError(err instanceof Error ? err.message : 'Unknown error')
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoading(false)
+        }
+      }
+    }
+    
+    fetchUsers()
+    
+    return () => {
+      isMounted = false
+    }
+  }, [])
+  
+  return { users, isLoading, error }
+}
+
+/**
+ * Async function to get user by name from database
+ */
+export async function getUserByNameAsync(name: string): Promise<User | null> {
+  const { getUsers } = await import('./db-actions')
+  const result = await getUsers()
+  
+  if (result.success && result.data) {
+    const users = result.data as User[]
+    return users.find(u => u.name.toLowerCase() === name.toLowerCase()) || null
+  }
+  
+  return null
 }
 
 // Re-export USERS as empty for backwards compatibility
-// Components should migrate to fetching users from database
+// Components should migrate to useEngineers or useAllUsers hooks
 export const USERS: User[] = []

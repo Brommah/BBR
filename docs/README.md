@@ -2,9 +2,16 @@
 
 ## Welkom
 
-Deze map bevat alle strategische documentatie voor Bureau Broersma:
-- **Email Automations** – Alle geautomatiseerde e-mail flows
-- **Growth Strategy** – Complete groeistrategie met budget allocatie
+Deze map bevat alle documentatie voor Bureau Broersma:
+
+### 🔧 Technical Documentation
+- **[API.md](./API.md)** – Complete API reference
+- **[ARCHITECTURE.md](./ARCHITECTURE.md)** – System architecture & data flow
+- **[ENVIRONMENT.md](./ENVIRONMENT.md)** – Environment variables guide
+
+### 📧 Business Documentation
+- **[Email Automations](./email-automations/)** – Alle geautomatiseerde e-mail flows
+- **[Growth Strategy](./growth-strategy/)** – Complete groeistrategie met budget allocatie
 
 ---
 
@@ -13,6 +20,9 @@ Deze map bevat alle strategische documentatie voor Bureau Broersma:
 ```
 docs/
 ├── README.md (dit bestand)
+├── API.md                    # API reference
+├── ARCHITECTURE.md           # System architecture
+├── ENVIRONMENT.md            # Environment variables
 ├── email-automations/
 │   ├── README.md
 │   ├── 00-overzicht-email-flows.md
@@ -44,7 +54,32 @@ docs/
 
 ---
 
+## 🔧 Technical Documentation
+
+### For Developers
+
+| Document | Description |
+|----------|-------------|
+| [API.md](./API.md) | Complete API reference with types, endpoints, and examples |
+| [ARCHITECTURE.md](./ARCHITECTURE.md) | System architecture, data flow, state management |
+| [ENVIRONMENT.md](./ENVIRONMENT.md) | All environment variables with setup guide |
+
+### Root-Level Docs
+
+| Document | Description |
+|----------|-------------|
+| [README.md](../README.md) | Project overview and quick start |
+| [CONTRIBUTING.md](../CONTRIBUTING.md) | Development workflow and code style |
+
+---
+
 ## 🚀 Quick Start
+
+### For Developers
+
+1. Read [ENVIRONMENT.md](./ENVIRONMENT.md) to set up your local environment
+2. Review [ARCHITECTURE.md](./ARCHITECTURE.md) to understand the system
+3. Check [API.md](./API.md) for endpoint details
 
 ### Email Automations
 
@@ -79,11 +114,14 @@ Start met de [Groeistrategie 2026](./growth-strategy/01-groeistrategie-2026.md) 
 
 | Functie | Tool |
 |---------|------|
-| CRM | Pipedrive |
+| Frontend | Next.js 16 + React 19 |
+| Database | Supabase (PostgreSQL) |
+| ORM | Prisma |
+| State | Zustand |
+| Auth | Supabase Auth |
 | Email | Resend |
-| Analytics | Mixpanel |
-| Ads | Google Ads |
-| Betaling | Mollie |
+| Error Tracking | Sentry |
+| Testing | Vitest + Playwright |
 
 ---
 
@@ -94,7 +132,8 @@ Start met de [Groeistrategie 2026](./growth-strategy/01-groeistrategie-2026.md) 
 | Email templates | Marketing |
 | Growth strategy | Management |
 | Budget | Finance |
-| Implementatie | Development |
+| Technical docs | Development |
+| Implementation | Development |
 
 ---
 

@@ -1,6 +1,6 @@
 import React from "react";
 import Image from "next/image";
-import { cn } from "@/lib/utils";
+;
 import { ArrowRight, CheckCircle2, Star, TrendingUp, ShieldCheck, Zap } from "lucide-react";
 
 // Asset 1: The "Golden Standard" Hero Header
@@ -215,9 +215,9 @@ export function MarketingTestimonial() {
                 </div>
                 
                 <blockquote className="text-3xl font-light text-slate-100 leading-relaxed mb-10 tracking-wide">
-                "The insights we get from the Broersma platform are unmatched. 
-                It's like having a <span className="text-transparent bg-clip-text bg-gradient-to-r from-amber-200 to-amber-500 font-bold">crystal ball</span> for our construction projects. 
-                Absolute game changer."
+                &ldquo;The insights we get from the Broersma platform are unmatched. 
+                It&apos;s like having a <span className="text-transparent bg-clip-text bg-gradient-to-r from-amber-200 to-amber-500 font-bold">crystal ball</span> for our construction projects. 
+                Absolute game changer.&rdquo;
                 </blockquote>
 
                 <div className="flex items-center gap-6">

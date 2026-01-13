@@ -5,10 +5,13 @@ import { KeyboardShortcuts } from "@/components/keyboard-shortcuts"
 import { useLeadStore } from "@/lib/store"
 import { useAuthStore } from "@/lib/auth"
 import { ErrorBoundary } from "@/components/error-boundary"
+import { Toaster } from "@/components/ui/sonner"
+import { WalkthroughProvider } from "@/components/walkthrough"
+import { QueryProvider } from "@/lib/query-client"
 
 /**
  * Initializes the store by loading leads from database
- * Runs once on app mount
+ * Runs once on app mount when authenticated
  */
 function StoreInitializer() {
   const loadLeads = useLeadStore(state => state.loadLeads)
@@ -40,15 +43,26 @@ function AuthInitializer() {
 
 /**
  * Global providers wrapper
- * Includes error boundary, store initialization, and keyboard shortcuts
+ * Includes:
+ * - Error boundary for catching runtime errors
+ * - React Query for server state management
+ * - Auth initialization
+ * - Store initialization (Zustand for client state)
+ * - Keyboard shortcuts
+ * - Toast notifications
+ * - Introduction walkthrough
  */
 export function GlobalProviders({ children }: { children: React.ReactNode }) {
   return (
     <ErrorBoundary>
-      <AuthInitializer />
-      <StoreInitializer />
-      {children}
-      <KeyboardShortcuts />
+      <QueryProvider>
+        <AuthInitializer />
+        <StoreInitializer />
+        {children}
+        <KeyboardShortcuts />
+        <WalkthroughProvider />
+        <Toaster position="bottom-right" richColors closeButton />
+      </QueryProvider>
     </ErrorBoundary>
   )
 }
