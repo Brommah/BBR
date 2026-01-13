@@ -148,9 +148,9 @@ export function ContextPanel({ lead }: { lead: Lead }) {
     const handleSaveLead = () => {
         updateLead(lead.id, {
             clientName: editedLead.clientName,
-            clientEmail: editedLead.clientEmail || null,
-            clientPhone: editedLead.clientPhone || null,
-            address: editedLead.address || null,
+            clientEmail: editedLead.clientEmail || undefined,
+            clientPhone: editedLead.clientPhone || undefined,
+            address: editedLead.address || undefined,
             city: editedLead.city,
             projectType: editedLead.projectType,
             value: editedLead.value,
