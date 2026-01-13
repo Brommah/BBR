@@ -37,8 +37,6 @@ import {
   File,
   X
 } from "lucide-react"
-import { AddressAutocomplete } from "@/components/ui/address-autocomplete"
-import { ParsedAddress } from "@/hooks/use-google-places"
 
 interface Engineer {
   id: string
@@ -442,30 +440,20 @@ export default function SubmitPage() {
                   </Select>
                 </div>
 
-                {/* Location - Address Autocomplete */}
+                {/* Location - Address */}
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-foreground">
                     Adres
                   </label>
-                  <AddressAutocomplete
-                    value={formData.address}
-                    onChange={(value) => setFormData({...formData, address: value})}
-                    onPlaceSelect={(parsed: ParsedAddress) => {
-                      // Auto-fill address and city from selected place
-                      setFormData(prev => ({
-                        ...prev,
-                        address: parsed.street && parsed.houseNumber 
-                          ? `${parsed.street} ${parsed.houseNumber}` 
-                          : parsed.fullAddress,
-                        city: parsed.city || prev.city
-                      }))
-                    }}
-                    placeholder="Zoek adres of straat..."
-                    showIcon
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Begin met typen om adressen te zoeken
-                  </p>
+                  <div className="relative">
+                    <Input
+                      placeholder="Straatnaam en huisnummer"
+                      value={formData.address}
+                      onChange={(e) => setFormData({...formData, address: e.target.value})}
+                      className="pl-10"
+                    />
+                    <Home className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  </div>
                 </div>
 
                 {/* City - auto-filled or manual */}

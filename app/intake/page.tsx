@@ -27,8 +27,6 @@ import {
   FileIcon
 } from "lucide-react"
 import { toast } from "sonner"
-import { AddressAutocomplete } from "@/components/ui/address-autocomplete"
-import { ParsedAddress } from "@/hooks/use-google-places"
 
 const projectTypes = [
   { value: "Dakkapel", label: "Dakkapel", icon: "🏠", description: "Uitbreiding op uw dak" },
@@ -468,31 +466,21 @@ export default function IntakePage() {
                   </Select>
                 </div>
 
-                {/* Location - Address Autocomplete */}
+                {/* Location - Address */}
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-slate-700">
                     Adres *
                   </label>
-                  <AddressAutocomplete
-                    value={formData.address}
-                    onChange={(value) => setFormData({...formData, address: value})}
-                    onPlaceSelect={(parsed: ParsedAddress) => {
-                      // Auto-fill city from selected address
-                      setFormData(prev => ({
-                        ...prev,
-                        address: parsed.street && parsed.houseNumber 
-                          ? `${parsed.street} ${parsed.houseNumber}` 
-                          : parsed.fullAddress,
-                        city: parsed.city || prev.city
-                      }))
-                    }}
-                    placeholder="Zoek adres of straat..."
-                    required
-                    showIcon
-                  />
-                  <p className="text-xs text-slate-500">
-                    Begin met typen om adressen te zoeken
-                  </p>
+                  <div className="relative">
+                    <Input
+                      placeholder="Straatnaam en huisnummer"
+                      value={formData.address}
+                      onChange={(e) => setFormData({...formData, address: e.target.value})}
+                      required
+                      className="pl-10"
+                    />
+                    <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  </div>
                 </div>
 
                 {/* City - auto-filled or manual */}
