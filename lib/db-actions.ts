@@ -12,6 +12,13 @@
 import prisma from './db'
 import { LeadStatus, QuoteApprovalStatus } from '@prisma/client'
 import { PAGINATION } from './config'
+import {
+  triggerStatusChangeEmail,
+  triggerAssignmentEmails,
+  sendQuotePendingApprovalNotification,
+  sendQuoteRejectedNotification,
+  sendNewLeadNotification
+} from './email-triggers'
 
 // ============================================================
 // Type Definitions
@@ -435,7 +442,7 @@ export async function createLead(data: {
   }
 }
 
-export async function updateLeadStatus(id: string, status: string): Promise<ActionResult> {
+export async function updateLeadStatus(id: string, status: string, triggeredBy?: string): Promise<ActionResult> {
   const validId = validateId(id)
   const dbStatus = validateStatus(status)
   
@@ -443,9 +450,43 @@ export async function updateLeadStatus(id: string, status: string): Promise<Acti
   if (!dbStatus) return { success: false, error: 'Invalid status' }
 
   try {
+    // Get current lead to track status change
+    const currentLead = await prisma.lead.findUnique({
+      where: { id: validId },
+      select: { 
+        status: true, 
+        clientName: true, 
+        clientEmail: true, 
+        projectType: true, 
+        city: true,
+        address: true,
+        assignee: true,
+        quoteValue: true,
+        quoteDescription: true
+      }
+    })
+    
+    if (!currentLead) {
+      return { success: false, error: 'Lead not found' }
+    }
+    
+    const oldStatus = statusDbToFrontend[currentLead.status]
+    const newStatus = status
+    
+    // Build update data with email tracking timestamps
+    const updateData: Record<string, unknown> = { status: dbStatus }
+    
+    // Track when specific emails would be sent
+    if (newStatus === 'Opdracht' && oldStatus !== 'Opdracht') {
+      updateData.orderConfirmSentAt = new Date()
+    }
+    if (newStatus === 'Archief' && oldStatus !== 'Archief') {
+      updateData.deliveryNotifSentAt = new Date()
+    }
+    
     const lead = await prisma.lead.update({
       where: { id: validId },
-      data: { status: dbStatus }
+      data: updateData
     })
     
     await prisma.activity.create({
@@ -455,6 +496,33 @@ export async function updateLeadStatus(id: string, status: string): Promise<Acti
         content: `Status gewijzigd naar ${status}`
       }
     })
+    
+    // Trigger status change emails (async, don't block response)
+    if (currentLead.clientEmail && triggeredBy) {
+      triggerStatusChangeEmail(
+        {
+          id: validId,
+          clientName: currentLead.clientName,
+          clientEmail: currentLead.clientEmail,
+          projectType: currentLead.projectType,
+          city: currentLead.city,
+          address: currentLead.address,
+          status: newStatus as 'Nieuw' | 'Calculatie' | 'Offerte Verzonden' | 'Opdracht' | 'Archief',
+          assignee: currentLead.assignee,
+          quoteValue: currentLead.quoteValue,
+          quoteDescription: currentLead.quoteDescription
+        },
+        oldStatus as 'Nieuw' | 'Calculatie' | 'Offerte Verzonden' | 'Opdracht' | 'Archief',
+        newStatus as 'Nieuw' | 'Calculatie' | 'Offerte Verzonden' | 'Opdracht' | 'Archief',
+        triggeredBy
+      ).then(result => {
+        if (result.sent) {
+          console.log(`[Email] Status change email (${result.emailType}) sent for lead ${validId}`)
+        }
+      }).catch(err => {
+        console.error('[Email] Failed to send status change email:', err)
+      })
+    }
     
     return {
       success: true,
@@ -466,16 +534,43 @@ export async function updateLeadStatus(id: string, status: string): Promise<Acti
   }
 }
 
-export async function updateLeadAssignee(id: string, assignee: string): Promise<ActionResult> {
+export async function updateLeadAssignee(id: string, assignee: string, triggeredBy?: string): Promise<ActionResult> {
   const validId = validateId(id)
   if (!validId) return { success: false, error: 'Invalid lead ID' }
 
   const assigneeName = assignee?.trim() || null
 
   try {
+    // Get current lead and previous assignee
+    const currentLead = await prisma.lead.findUnique({
+      where: { id: validId },
+      select: { 
+        assignee: true, 
+        clientName: true, 
+        clientEmail: true, 
+        projectType: true, 
+        city: true,
+        address: true,
+        assigneeNotifiedAt: true
+      }
+    })
+    
+    if (!currentLead) {
+      return { success: false, error: 'Lead not found' }
+    }
+    
+    const previousAssignee = currentLead.assignee
+    const isNewAssignment = !previousAssignee && assigneeName
+    
+    // Update lead with assignee and notification timestamp if new assignment
+    const updateData: Record<string, unknown> = { assignee: assigneeName }
+    if (isNewAssignment) {
+      updateData.assigneeNotifiedAt = new Date()
+    }
+    
     const lead = await prisma.lead.update({
       where: { id: validId },
-      data: { assignee: assigneeName }
+      data: updateData
     })
     
     await prisma.activity.create({
@@ -487,6 +582,35 @@ export async function updateLeadAssignee(id: string, assignee: string): Promise<
           : 'Toewijzing verwijderd'
       }
     })
+    
+    // Send assignment notification emails if this is a new assignment
+    if (isNewAssignment && assigneeName && triggeredBy) {
+      // Get engineer's email
+      const engineer = await prisma.user.findFirst({
+        where: { name: assigneeName, deletedAt: null },
+        select: { email: true }
+      })
+      
+      triggerAssignmentEmails(
+        {
+          id: validId,
+          clientName: currentLead.clientName,
+          clientEmail: currentLead.clientEmail,
+          projectType: currentLead.projectType,
+          city: currentLead.city,
+          address: currentLead.address,
+          status: 'Calculatie', // Typically assigned when moving to Calculatie
+          assignee: assigneeName
+        },
+        assigneeName,
+        engineer?.email || null,
+        triggeredBy
+      ).then(result => {
+        console.log(`[Email] Assignment notification: client=${result.clientNotified}, engineer=${result.engineerNotified}`)
+      }).catch(err => {
+        console.error('[Email] Failed to send assignment emails:', err)
+      })
+    }
     
     return { success: true, data: lead }
   } catch (error) {
@@ -587,7 +711,8 @@ export async function updateLeadDetails(
 
 export async function submitQuoteForApproval(
   id: string, 
-  submission: QuoteSubmission
+  submission: QuoteSubmission,
+  submittedBy?: string
 ): Promise<ActionResult> {
   const validId = validateId(id)
   if (!validId) return { success: false, error: 'Invalid lead ID' }
@@ -608,6 +733,16 @@ export async function submitQuoteForApproval(
   }
 
   try {
+    // Get lead details for notification
+    const currentLead = await prisma.lead.findUnique({
+      where: { id: validId },
+      select: { clientName: true, projectType: true, assignee: true }
+    })
+    
+    if (!currentLead) {
+      return { success: false, error: 'Lead not found' }
+    }
+    
     const lead = await prisma.lead.update({
       where: { id: validId },
       data: {
@@ -623,9 +758,31 @@ export async function submitQuoteForApproval(
       data: {
         leadId: validId,
         type: 'quote_submitted',
-        content: `Offerte van €${quoteValue.toLocaleString('nl-NL', { minimumFractionDigits: 2 })} ingediend ter goedkeuring`
+        content: `Offerte van €${quoteValue.toLocaleString('nl-NL', { minimumFractionDigits: 2 })} ingediend ter goedkeuring`,
+        author: submittedBy
       }
     })
+    
+    // Notify admins about pending approval
+    const admins = await prisma.user.findMany({
+      where: { role: 'admin', deletedAt: null },
+      select: { email: true }
+    })
+    
+    if (admins.length > 0) {
+      sendQuotePendingApprovalNotification({
+        adminEmails: admins.map(a => a.email),
+        engineerName: currentLead.assignee || submittedBy || 'Onbekend',
+        clientName: currentLead.clientName,
+        projectType: currentLead.projectType,
+        quoteValue,
+        leadId: validId
+      }).then(result => {
+        console.log(`[Email] Quote pending approval notification: ${result.sent} sent, ${result.failed} failed`)
+      }).catch(err => {
+        console.error('[Email] Failed to send pending approval notification:', err)
+      })
+    }
     
     return { success: true, data: lead }
   } catch (error) {
@@ -643,10 +800,20 @@ export async function approveQuote(
   if (!validId) return { success: false, error: 'Invalid lead ID' }
 
   try {
-    // Get current lead to preserve existing feedback
+    // Get current lead to preserve existing feedback AND send email
     const currentLead = await prisma.lead.findUnique({
       where: { id: validId },
-      select: { quoteFeedback: true, quoteValue: true }
+      select: { 
+        quoteFeedback: true, 
+        quoteValue: true,
+        quoteDescription: true,
+        clientName: true,
+        clientEmail: true,
+        projectType: true,
+        city: true,
+        address: true,
+        assignee: true
+      }
     })
     
     if (!currentLead) {
@@ -675,7 +842,8 @@ export async function approveQuote(
         quoteApproval: 'approved' as QuoteApprovalStatus,
         status: 'OfferteVerzonden' as LeadStatus,
         quoteValue: finalValue,
-        quoteFeedback: JSON.parse(JSON.stringify(newFeedback))
+        quoteFeedback: JSON.parse(JSON.stringify(newFeedback)),
+        quoteSentAt: new Date() // Track when quote was sent
       }
     })
     
@@ -687,6 +855,28 @@ export async function approveQuote(
         author: feedback?.authorName
       }
     })
+    
+    // Trigger quote email to client (status change will handle this)
+    if (currentLead.clientEmail && finalValue) {
+      const { sendQuoteEmail } = await import('./email')
+      sendQuoteEmail({
+        to: currentLead.clientEmail,
+        clientName: currentLead.clientName,
+        projectType: currentLead.projectType,
+        quoteValue: finalValue,
+        quoteDescription: currentLead.quoteDescription || undefined,
+        leadId: validId,
+        sentBy: feedback?.authorName || 'System'
+      }).then(result => {
+        if (result.success) {
+          console.log(`[Email] Quote email sent to ${currentLead.clientEmail} for lead ${validId}`)
+        } else {
+          console.error(`[Email] Failed to send quote email: ${result.error}`)
+        }
+      }).catch(err => {
+        console.error('[Email] Quote email error:', err)
+      })
+    }
     
     return { success: true, data: lead }
   } catch (error) {
@@ -709,7 +899,13 @@ export async function rejectQuote(
   try {
     const currentLead = await prisma.lead.findUnique({
       where: { id: validId },
-      select: { quoteFeedback: true }
+      select: { 
+        quoteFeedback: true,
+        assignee: true,
+        clientName: true,
+        projectType: true,
+        quoteValue: true
+      }
     })
     
     if (!currentLead) {
@@ -742,6 +938,33 @@ export async function rejectQuote(
         author: feedback.authorName
       }
     })
+    
+    // Notify engineer about rejection
+    if (currentLead.assignee) {
+      const engineer = await prisma.user.findFirst({
+        where: { name: currentLead.assignee, deletedAt: null },
+        select: { email: true }
+      })
+      
+      if (engineer?.email) {
+        sendQuoteRejectedNotification({
+          engineerEmail: engineer.email,
+          engineerName: currentLead.assignee,
+          clientName: currentLead.clientName,
+          projectType: currentLead.projectType,
+          quoteValue: currentLead.quoteValue || 0,
+          rejectionFeedback: feedback.message.trim(),
+          rejectedBy: feedback.authorName,
+          leadId: validId
+        }).then(result => {
+          if (result.success) {
+            console.log(`[Email] Rejection notification sent to ${engineer.email}`)
+          }
+        }).catch(err => {
+          console.error('[Email] Failed to send rejection notification:', err)
+        })
+      }
+    }
     
     return { success: true, data: lead }
   } catch (error) {
@@ -1560,5 +1783,193 @@ export async function getAuditLogs(params: {
   } catch (error) {
     console.error('[DB] Error fetching audit logs:', error)
     return { success: false, error: 'Failed to load audit logs' }
+  }
+}
+
+// ============================================================
+// Time Entry Operations
+// ============================================================
+
+export type TimeCategory = 'calculatie' | 'overleg' | 'administratie' | 'site-bezoek' | 'overig'
+
+export interface TimeEntryInput {
+  leadId: string
+  userId: string
+  userName: string
+  date: string // ISO date string
+  startTime: string // HH:mm
+  endTime: string // HH:mm
+  duration: number // in minutes
+  description: string
+  category: TimeCategory
+}
+
+/**
+ * Create a new time entry for a lead
+ */
+export async function createTimeEntry(data: TimeEntryInput): Promise<ActionResult> {
+  const validLeadId = validateId(data.leadId)
+  const validUserId = validateId(data.userId)
+  const description = validateString(data.description, 1000)
+  
+  if (!validLeadId) return { success: false, error: 'Invalid lead ID' }
+  if (!validUserId) return { success: false, error: 'Invalid user ID' }
+  if (!description) return { success: false, error: 'Description is required' }
+  if (data.duration <= 0) return { success: false, error: 'Duration must be positive' }
+
+  try {
+    const entry = await prisma.timeEntry.create({
+      data: {
+        leadId: validLeadId,
+        userId: validUserId,
+        userName: data.userName,
+        date: new Date(data.date),
+        startTime: data.startTime,
+        endTime: data.endTime,
+        duration: data.duration,
+        description,
+        category: data.category,
+      }
+    })
+
+    // Log activity
+    await prisma.activity.create({
+      data: {
+        leadId: validLeadId,
+        type: 'time_logged',
+        content: `${data.userName} registreerde ${data.duration} min (${data.category})`,
+        author: data.userName,
+      }
+    })
+
+    return { 
+      success: true, 
+      data: {
+        ...entry,
+        date: entry.date.toISOString(),
+        createdAt: entry.createdAt.toISOString(),
+        updatedAt: entry.updatedAt.toISOString(),
+      }
+    }
+  } catch (error) {
+    console.error('[DB] Error creating time entry:', error)
+    return { success: false, error: 'Failed to create time entry' }
+  }
+}
+
+/**
+ * Get all time entries for a lead
+ */
+export async function getTimeEntries(leadId: string): Promise<ActionResult> {
+  const validId = validateId(leadId)
+  if (!validId) return { success: false, error: 'Invalid lead ID' }
+
+  try {
+    const entries = await prisma.timeEntry.findMany({
+      where: { leadId: validId },
+      orderBy: [{ date: 'desc' }, { startTime: 'desc' }],
+    })
+
+    return { 
+      success: true, 
+      data: entries.map(e => ({
+        ...e,
+        date: e.date.toISOString().split('T')[0],
+        createdAt: e.createdAt.toISOString(),
+        updatedAt: e.updatedAt.toISOString(),
+      }))
+    }
+  } catch (error) {
+    console.error('[DB] Error fetching time entries:', error)
+    return { success: false, error: 'Failed to load time entries' }
+  }
+}
+
+/**
+ * Get all time entries for a user (across all leads)
+ */
+export async function getTimeEntriesByUser(userId: string, dateFrom?: string, dateTo?: string): Promise<ActionResult> {
+  const validId = validateId(userId)
+  if (!validId) return { success: false, error: 'Invalid user ID' }
+
+  try {
+    const where: Record<string, unknown> = { userId: validId }
+    if (dateFrom || dateTo) {
+      where.date = {}
+      if (dateFrom) (where.date as Record<string, unknown>).gte = new Date(dateFrom)
+      if (dateTo) (where.date as Record<string, unknown>).lte = new Date(dateTo)
+    }
+
+    const entries = await prisma.timeEntry.findMany({
+      where,
+      orderBy: [{ date: 'desc' }, { startTime: 'desc' }],
+      include: {
+        lead: {
+          select: {
+            id: true,
+            clientName: true,
+            projectType: true,
+            werknummer: true,
+          }
+        }
+      }
+    })
+
+    return { 
+      success: true, 
+      data: entries.map(e => ({
+        ...e,
+        date: e.date.toISOString().split('T')[0],
+        createdAt: e.createdAt.toISOString(),
+        updatedAt: e.updatedAt.toISOString(),
+      }))
+    }
+  } catch (error) {
+    console.error('[DB] Error fetching time entries by user:', error)
+    return { success: false, error: 'Failed to load time entries' }
+  }
+}
+
+/**
+ * Delete a time entry
+ */
+export async function deleteTimeEntry(id: string): Promise<ActionResult> {
+  const validId = validateId(id)
+  if (!validId) return { success: false, error: 'Invalid time entry ID' }
+
+  try {
+    await prisma.timeEntry.delete({
+      where: { id: validId }
+    })
+    return { success: true }
+  } catch (error) {
+    console.error('[DB] Error deleting time entry:', error)
+    return { success: false, error: 'Failed to delete time entry' }
+  }
+}
+
+/**
+ * Get total hours per lead (for reporting)
+ */
+export async function getLeadTotalHours(leadId: string): Promise<ActionResult> {
+  const validId = validateId(leadId)
+  if (!validId) return { success: false, error: 'Invalid lead ID' }
+
+  try {
+    const result = await prisma.timeEntry.aggregate({
+      where: { leadId: validId },
+      _sum: { duration: true },
+    })
+
+    return { 
+      success: true, 
+      data: {
+        totalMinutes: result._sum.duration || 0,
+        totalHours: ((result._sum.duration || 0) / 60).toFixed(1),
+      }
+    }
+  } catch (error) {
+    console.error('[DB] Error getting lead total hours:', error)
+    return { success: false, error: 'Failed to calculate total hours' }
   }
 }

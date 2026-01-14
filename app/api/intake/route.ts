@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/db'
 import { sendIntakeConfirmation } from '@/lib/email'
+import { sendNewLeadNotification } from '@/lib/email-triggers'
 import { createActivity, checkRateLimit, createAuditLog, createDocument } from '@/lib/db-actions'
 import { PROJECT_TYPES, RATE_LIMITS } from '@/lib/config'
 import { supabase } from '@/lib/supabase'
@@ -384,6 +385,27 @@ export async function POST(request: NextRequest) {
     // Log if email failed (but don't fail the request)
     if (!emailResult.success) {
       console.error('[INTAKE] Failed to send confirmation email:', emailResult.error)
+    }
+
+    // Notify admins about new lead
+    const admins = await prisma.user.findMany({
+      where: { role: 'admin', deletedAt: null },
+      select: { email: true }
+    })
+    
+    if (admins.length > 0) {
+      sendNewLeadNotification({
+        adminEmails: admins.map(a => a.email),
+        clientName: sanitizedData.clientName,
+        projectType: sanitizedData.projectType,
+        city: sanitizedData.city,
+        address: sanitizedData.address || undefined,
+        leadId: lead.id
+      }).then(result => {
+        console.log(`[INTAKE] Admin notifications: ${result.sent} sent, ${result.failed} failed`)
+      }).catch(err => {
+        console.error('[INTAKE] Failed to send admin notifications:', err)
+      })
     }
 
     // Calculate successful uploads

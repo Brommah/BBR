@@ -49,6 +49,18 @@ model Lead {
   quoteEstimatedHours Float?              // Estimated hours for the work
   quoteFeedback       Json?               // Array of admin feedback objects
   
+  // Email automation tracking
+  quoteSentAt           DateTime?         // When quote email was sent to client
+  quoteReminder1SentAt  DateTime?         // First reminder sent
+  quoteReminder2SentAt  DateTime?         // Second reminder sent
+  orderConfirmSentAt    DateTime?         // Order confirmation sent
+  deliveryNotifSentAt   DateTime?         // Delivery notification sent
+  feedbackRequestSentAt DateTime?         // Feedback request sent
+  npsSurveySentAt       DateTime?         // NPS survey sent
+  referralInviteSentAt  DateTime?         // Referral invitation sent
+  reactivationSentAt    DateTime?         // Reactivation email sent
+  assigneeNotifiedAt    DateTime?         // When client was notified of engineer assignment
+  
   // Relations
   specifications      ProjectSpec[]
   notes               Note[]
@@ -57,6 +69,7 @@ model Lead {
   communications      Communication[]
   quoteVersions       QuoteVersion[]
   emailLogs           EmailLog[]
+  timeEntries         TimeEntry[]
 
   @@index([status])
   @@index([assignee])
@@ -237,4 +250,25 @@ model AuditLog {
   @@index([entityType, entityId])
   @@index([userId])
   @@index([createdAt])
+}
+
+// Time tracking entries for engineers
+model TimeEntry {
+  id          String   @id @default(cuid())
+  leadId      String
+  lead        Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  userId      String
+  userName    String
+  date        DateTime // The date of the work
+  startTime   String   // HH:mm format
+  endTime     String   // HH:mm format
+  duration    Int      // Duration in minutes
+  description String
+  category    String   // 'calculatie', 'overleg', 'administratie', 'site-bezoek', 'overig'
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([leadId])
+  @@index([userId])
+  @@index([date])
 }

@@ -1,6 +1,6 @@
 "use client"
 
-import { Home, Bell, Kanban, Shield, ClipboardPlus } from "lucide-react"
+import { Home, Bell, Kanban, Shield, ClipboardPlus, Briefcase } from "lucide-react"
 import Link from "next/link"
 import Image from "next/image"
 import { usePathname } from "next/navigation"
@@ -28,7 +28,13 @@ const menuItems = [
     title: "Home",
     url: "/",
     icon: Home,
-    roles: ['admin', 'engineer', 'viewer'] as const,
+    roles: ['admin', 'viewer'] as const,
+  },
+  {
+    title: "Werkvoorraad",
+    url: "/werkvoorraad",
+    icon: Briefcase,
+    roles: ['engineer'] as const,
   },
   {
     title: "Nieuw Project",
@@ -40,7 +46,7 @@ const menuItems = [
     title: "Inbox",
     url: "/inbox",
     icon: Bell,
-    roles: ['admin', 'engineer'] as const,
+    roles: ['admin'] as const,
     dynamicBadge: true, // Will be populated with actual inbox count
   },
   {

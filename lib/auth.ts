@@ -47,6 +47,7 @@ export type Permission =
   | 'leads:view-all'
   | 'leads:view-own'
   | 'leads:edit'
+  | 'leads:delete'
   | 'admin:access'
   | 'admin:manage-users'
   | 'admin:manage-pricing'
@@ -55,6 +56,12 @@ export type Permission =
 
 /**
  * Permission matrix per role
+ * 
+ * Engineer role is stripped down to minimal functionality:
+ * - Only sees assigned work (werkvoorraad)
+ * - Can view project basics: werknummer, address, phone, documents
+ * - Can register hours
+ * - Cannot edit project data, quotes, or see pipeline
  */
 const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
   admin: [
@@ -67,6 +74,7 @@ const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     'leads:assign',
     'leads:view-all',
     'leads:edit',
+    'leads:delete',
     'admin:access',
     'admin:manage-users',
     'admin:manage-pricing',
@@ -74,10 +82,12 @@ const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     'settings:edit',
   ],
   engineer: [
-    'quotes:submit',
-    'quotes:view',
+    // Engineers can ONLY:
+    // - View their own assigned leads (werkvoorraad)
+    // - View basic project info (read-only)
+    // - Register hours
+    // - Download documents
     'leads:view-own',
-    'leads:edit',
     'settings:view',
   ],
   viewer: [

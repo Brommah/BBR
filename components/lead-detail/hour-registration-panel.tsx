@@ -7,8 +7,8 @@ import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { Separator } from "@/components/ui/separator"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { Skeleton } from "@/components/ui/skeleton"
 import {
   Dialog,
   DialogContent,
@@ -37,12 +37,14 @@ import {
   Timer,
   FileText,
   Trash2,
-  Edit2,
+  Loader2,
 } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
+import { useAuthStore } from "@/lib/auth"
+import { createTimeEntry, getTimeEntries, deleteTimeEntry, type TimeCategory } from "@/lib/db-actions"
 
-/** Time entry stored in state */
+/** Time entry from database */
 interface TimeEntry {
   id: string
   date: string // YYYY-MM-DD
@@ -51,10 +53,8 @@ interface TimeEntry {
   duration: number // in minutes
   description: string
   category: TimeCategory
-  user: string
+  userName: string
 }
-
-type TimeCategory = "calculatie" | "overleg" | "administratie" | "site-bezoek" | "overig"
 
 const CATEGORY_CONFIG: Record<TimeCategory, { label: string; color: string }> = {
   calculatie: { label: "Calculatie", color: "bg-blue-500" },
@@ -73,6 +73,8 @@ export function HourRegistrationPanel({
   leadId,
   hourlyRate = 85,
 }: HourRegistrationPanelProps) {
+  const { currentUser } = useAuthStore()
+  
   // Timer state
   const [isTracking, setIsTracking] = useState(false)
   const [currentSessionStart, setCurrentSessionStart] = useState<Date | null>(null)
@@ -92,8 +94,23 @@ export function HourRegistrationPanel({
     category: "calculatie" as TimeCategory,
   })
 
-  // Time entries (local state - would be persisted to DB in future)
+  // Time entries from database
   const [timeEntries, setTimeEntries] = useState<TimeEntry[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [isSaving, setIsSaving] = useState(false)
+
+  // Load time entries from database
+  useEffect(() => {
+    async function loadEntries() {
+      setIsLoading(true)
+      const result = await getTimeEntries(leadId)
+      if (result.success && result.data) {
+        setTimeEntries(result.data as TimeEntry[])
+      }
+      setIsLoading(false)
+    }
+    loadEntries()
+  }, [leadId])
 
   // Timer effect
   useEffect(() => {
@@ -141,8 +158,8 @@ export function HourRegistrationPanel({
     toast.success("Timer gestart")
   }
 
-  const stopTracking = () => {
-    if (!currentSessionStart) return
+  const stopTracking = async () => {
+    if (!currentSessionStart || !currentUser) return
 
     const now = new Date()
     const durationMinutes = Math.round(
@@ -160,26 +177,39 @@ export function HourRegistrationPanel({
     const startTimeStr = currentSessionStart.toTimeString().slice(0, 5)
     const endTimeStr = now.toTimeString().slice(0, 5)
 
-    const entry: TimeEntry = {
-      id: Date.now().toString(),
+    setIsSaving(true)
+    const result = await createTimeEntry({
+      leadId,
+      userId: currentUser.id,
+      userName: currentUser.name,
       date: currentSessionStart.toISOString().split("T")[0],
       startTime: startTimeStr,
       endTime: endTimeStr,
       duration: durationMinutes,
       description: "Timer sessie",
       category: "calculatie",
-      user: "Angelo",
+    })
+
+    if (result.success && result.data) {
+      setTimeEntries([result.data as TimeEntry, ...timeEntries])
+      toast.success(`${formatDuration(durationMinutes)} opgeslagen`)
+    } else {
+      toast.error("Kon tijd niet opslaan")
     }
 
-    setTimeEntries([entry, ...timeEntries])
     setIsTracking(false)
     setCurrentSessionStart(null)
     setElapsedSeconds(0)
-    toast.success(`${formatDuration(durationMinutes)} opgeslagen`)
+    setIsSaving(false)
   }
 
   // Manual entry
-  const handleAddEntry = () => {
+  const handleAddEntry = async () => {
+    if (!currentUser) {
+      toast.error("Je moet ingelogd zijn")
+      return
+    }
+
     const [startH, startM] = newEntry.startTime.split(":").map(Number)
     const [endH, endM] = newEntry.endTime.split(":").map(Number)
     const startMinutes = startH * 60 + startM
@@ -191,22 +221,30 @@ export function HourRegistrationPanel({
       return
     }
 
-    const entry: TimeEntry = {
-      id: Date.now().toString(),
+    setIsSaving(true)
+    const result = await createTimeEntry({
+      leadId,
+      userId: currentUser.id,
+      userName: currentUser.name,
       date: newEntry.date,
       startTime: newEntry.startTime,
       endTime: newEntry.endTime,
       duration,
       description: newEntry.description || "Werkzaamheden",
       category: newEntry.category,
-      user: "Angelo",
+    })
+
+    if (result.success && result.data) {
+      setTimeEntries([result.data as TimeEntry, ...timeEntries].sort((a, b) => {
+        const dateCompare = b.date.localeCompare(a.date)
+        if (dateCompare !== 0) return dateCompare
+        return b.startTime.localeCompare(a.startTime)
+      }))
+      toast.success("Uren geregistreerd")
+    } else {
+      toast.error("Kon uren niet opslaan")
     }
 
-    setTimeEntries([entry, ...timeEntries].sort((a, b) => {
-      const dateCompare = b.date.localeCompare(a.date)
-      if (dateCompare !== 0) return dateCompare
-      return b.startTime.localeCompare(a.startTime)
-    }))
     setIsAddModalOpen(false)
     setNewEntry({
       date: new Date().toISOString().split("T")[0],
@@ -215,12 +253,17 @@ export function HourRegistrationPanel({
       description: "",
       category: "calculatie",
     })
-    toast.success("Uren geregistreerd")
+    setIsSaving(false)
   }
 
-  const handleDeleteEntry = (id: string) => {
-    setTimeEntries(timeEntries.filter((e) => e.id !== id))
-    toast.success("Registratie verwijderd")
+  const handleDeleteEntry = async (id: string) => {
+    const result = await deleteTimeEntry(id)
+    if (result.success) {
+      setTimeEntries(timeEntries.filter((e) => e.id !== id))
+      toast.success("Registratie verwijderd")
+    } else {
+      toast.error("Kon registratie niet verwijderen")
+    }
   }
 
   // Calendar logic
@@ -311,6 +354,37 @@ export function HourRegistrationPanel({
     return dateStr === new Date().toISOString().split("T")[0]
   }
 
+  if (isLoading) {
+    return (
+      <div className="h-full flex flex-col gap-4">
+        <Card className="shrink-0">
+          <CardContent className="py-4">
+            <div className="flex items-center gap-4">
+              <Skeleton className="w-12 h-12 rounded-xl" />
+              <div className="flex-1">
+                <Skeleton className="h-8 w-32 mb-2" />
+                <Skeleton className="h-4 w-24" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <div className="grid grid-cols-3 gap-3">
+          {[1, 2, 3].map(i => (
+            <Card key={i}>
+              <CardContent className="py-3">
+                <Skeleton className="h-12 w-full" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+        <div className="flex-1 grid grid-cols-2 gap-4">
+          <Card><CardContent className="p-4"><Skeleton className="h-full w-full" /></CardContent></Card>
+          <Card><CardContent className="p-4"><Skeleton className="h-full w-full" /></CardContent></Card>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="h-full flex flex-col gap-4">
       {/* Quick Timer */}
@@ -351,8 +425,9 @@ export function HourRegistrationPanel({
                   size="lg"
                   onClick={stopTracking}
                   className="gap-2"
+                  disabled={isSaving}
                 >
-                  <Pause className="w-4 h-4" />
+                  {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Pause className="w-4 h-4" />}
                   Stop
                 </Button>
               ) : (
@@ -360,6 +435,7 @@ export function HourRegistrationPanel({
                   size="lg"
                   onClick={startTracking}
                   className="gap-2 bg-emerald-600 hover:bg-emerald-700"
+                  disabled={!currentUser}
                 >
                   <Play className="w-4 h-4" />
                   Start
@@ -464,9 +540,12 @@ export function HourRegistrationPanel({
                   </div>
                   <DialogFooter>
                     <DialogClose asChild>
-                      <Button variant="outline">Annuleren</Button>
+                      <Button variant="outline" disabled={isSaving}>Annuleren</Button>
                     </DialogClose>
-                    <Button onClick={handleAddEntry}>Opslaan</Button>
+                    <Button onClick={handleAddEntry} disabled={isSaving}>
+                      {isSaving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                      Opslaan
+                    </Button>
                   </DialogFooter>
                 </DialogContent>
               </Dialog>
