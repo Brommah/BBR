@@ -5,7 +5,7 @@ import { AdminDashboard } from "@/components/dashboard/admin-dashboard"
 import { EngineerDashboard } from "@/components/dashboard/engineer-dashboard"
 import { DashboardSkeleton } from "@/components/ui/skeleton-loaders"
 import { Button } from "@/components/ui/button"
-import { ArrowRight } from "lucide-react"
+import { ArrowRight, Loader2 } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { useLeadStore } from "@/lib/store"
 
@@ -17,11 +17,31 @@ import { useLeadStore } from "@/lib/store"
  */
 export default function HomePage() {
   const router = useRouter()
-  const { currentUser, isAuthenticated } = useAuthStore()
-  const { isLoading } = useLeadStore()
+  const { currentUser, isAuthenticated, isInitialized, isLoading: authLoading } = useAuthStore()
+  const { isLoading: leadsLoading } = useLeadStore()
 
-  // Show skeleton loading state while data is being fetched
-  if (isLoading) {
+  // Wait for auth to initialize before making any auth-based decisions
+  // This prevents flashing login screen during HMR
+  if (!isInitialized || authLoading) {
+    // If we have a persisted user, show skeleton (likely still logged in)
+    // Otherwise show a neutral loading state
+    if (currentUser) {
+      return (
+        <div className="page-container">
+          <DashboardSkeleton />
+        </div>
+      )
+    }
+    return (
+      <div className="flex flex-col items-center justify-center h-screen gap-4">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        <p className="text-muted-foreground">Laden...</p>
+      </div>
+    )
+  }
+
+  // Show skeleton loading state while leads data is being fetched
+  if (leadsLoading) {
     return (
       <div className="page-container">
         <DashboardSkeleton />
@@ -29,7 +49,7 @@ export default function HomePage() {
     )
   }
 
-  // Show login prompt if not authenticated
+  // Show login prompt if not authenticated (only after auth is initialized)
   if (!isAuthenticated || !currentUser) {
     return (
       <div className="page-container">

@@ -11,9 +11,14 @@ import { Loader2 } from "lucide-react"
  */
 export default function AdminPage() {
     const router = useRouter()
-    const { currentUser, isAuthenticated } = useAuthStore()
+    const { currentUser, isAuthenticated, isInitialized } = useAuthStore()
 
     useEffect(() => {
+        // Don't redirect until auth is initialized (prevents HMR redirect issues)
+        if (!isInitialized) {
+            return
+        }
+        
         // Redirect admins to home (which is now the admin console)
         if (isAuthenticated && currentUser?.role === 'admin') {
             router.replace('/')
@@ -24,7 +29,7 @@ export default function AdminPage() {
             // Not authenticated, go to login
             router.replace('/login')
         }
-    }, [isAuthenticated, currentUser, router])
+    }, [isAuthenticated, currentUser, router, isInitialized])
 
     return (
         <div className="flex flex-col items-center justify-center h-screen gap-4">

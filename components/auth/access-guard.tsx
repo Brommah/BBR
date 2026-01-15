@@ -45,7 +45,7 @@ export function AccessGuard({
     fallback,
     redirectTo = "/"
 }: AccessGuardProps) {
-    const { isAuthenticated, currentUser, hasPermission } = useAuthStore()
+    const { isAuthenticated, currentUser, hasPermission, isInitialized } = useAuthStore()
     const router = useRouter()
     const isHydrated = useIsHydrated()
 
@@ -57,14 +57,15 @@ export function AccessGuard({
     }, [router, redirectTo])
 
     useEffect(() => {
-        // Only redirect after hydration is complete
-        if (isHydrated && !isAuthenticated) {
+        // Only redirect after hydration AND auth initialization is complete
+        // This prevents false redirects during HMR
+        if (isHydrated && isInitialized && !isAuthenticated) {
             handleRedirect()
         }
-    }, [isAuthenticated, isHydrated, handleRedirect])
+    }, [isAuthenticated, isHydrated, isInitialized, handleRedirect])
 
-    // Show loading state during hydration
-    if (!isHydrated) {
+    // Show loading state during hydration or auth initialization
+    if (!isHydrated || !isInitialized) {
         return (
             <div className="flex items-center justify-center min-h-screen">
                 <div className="animate-pulse text-muted-foreground">Laden...</div>

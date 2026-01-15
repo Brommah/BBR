@@ -107,6 +107,7 @@ interface AuthState {
   currentUser: User | null
   isAuthenticated: boolean
   isLoading: boolean
+  isInitialized: boolean // Prevents redirects during HMR until session is checked
   error: string | null
   
   // Actions
@@ -145,6 +146,7 @@ export const useAuthStore = create<AuthState>()(
       currentUser: null,
       isAuthenticated: false,
       isLoading: false,
+      isInitialized: false, // Set to true after first session check
       error: null,
 
       /**
@@ -247,7 +249,7 @@ export const useAuthStore = create<AuthState>()(
       checkSession: async () => {
         const supabase = getSupabaseBrowserClient()
         if (!isSupabaseConfigured() || !supabase) {
-          set({ isLoading: false })
+          set({ isLoading: false, isInitialized: true })
           return
         }
 
@@ -258,7 +260,7 @@ export const useAuthStore = create<AuthState>()(
           
           if (error) {
             console.error('[Auth] Session check error:', error)
-            set({ currentUser: null, isAuthenticated: false, isLoading: false })
+            set({ currentUser: null, isAuthenticated: false, isLoading: false, isInitialized: true })
             return
           }
 
@@ -277,7 +279,8 @@ export const useAuthStore = create<AuthState>()(
                   avatar: dbUser.avatar
                 }, 
                 isAuthenticated: true, 
-                isLoading: false 
+                isLoading: false,
+                isInitialized: true
               })
             } else {
               // Fallback to Supabase user if not in database
@@ -286,14 +289,16 @@ export const useAuthStore = create<AuthState>()(
               set({ 
                 currentUser: user, 
                 isAuthenticated: true, 
-                isLoading: false 
+                isLoading: false,
+                isInitialized: true
               })
             }
           } else {
             set({ 
               currentUser: null, 
               isAuthenticated: false, 
-              isLoading: false 
+              isLoading: false,
+              isInitialized: true
             })
           }
         } catch (err) {
@@ -301,7 +306,8 @@ export const useAuthStore = create<AuthState>()(
           set({ 
             currentUser: null, 
             isAuthenticated: false, 
-            isLoading: false 
+            isLoading: false,
+            isInitialized: true
           })
         }
       },
@@ -331,11 +337,19 @@ export const useAuthStore = create<AuthState>()(
       partialize: (state) => ({ 
         currentUser: state.currentUser
       }),
-      // On rehydration, ensure isAuthenticated starts as false
-      // until checkSession verifies the session
+      // On rehydration, keep currentUser but mark as needing session verification
+      // isInitialized stays false until checkSession completes
       onRehydrateStorage: () => (state) => {
         if (state) {
-          state.isAuthenticated = false
+          // If we have a persisted user, tentatively set authenticated
+          // This prevents flashing login screens during HMR
+          // checkSession will verify and update if needed
+          if (state.currentUser) {
+            state.isAuthenticated = true
+          } else {
+            state.isAuthenticated = false
+          }
+          state.isInitialized = false
         }
       }
     }
