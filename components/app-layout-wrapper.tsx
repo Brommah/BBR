@@ -31,7 +31,7 @@ export function AppLayoutWrapper({ children }: AppLayoutWrapperProps) {
   return (
     <SidebarProvider defaultOpen={false}>
       <AppSidebar />
-      <main className="w-full min-h-screen relative flex flex-col">
+      <main className="flex-1 min-h-screen relative flex flex-col overflow-hidden">
         <div className="absolute top-4 left-4 z-50 md:hidden">
           <SidebarTrigger />
         </div>

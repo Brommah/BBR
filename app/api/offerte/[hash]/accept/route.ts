@@ -52,7 +52,7 @@ export async function POST(
   const validation = AcceptanceSchema.safeParse(body)
   if (!validation.success) {
     return NextResponse.json(
-      { error: validation.error.errors[0]?.message || "Ongeldige invoer" },
+      { error: validation.error.issues[0]?.message || "Ongeldige invoer" },
       { status: 400 }
     )
   }
