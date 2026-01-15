@@ -1,6 +1,6 @@
 "use client"
 
-import { Home, Bell, Kanban, ClipboardPlus, AtSign } from "lucide-react"
+import { Home, Bell, Kanban, ClipboardPlus, AtSign, LayoutDashboard } from "lucide-react"
 import Link from "next/link"
 import Image from "next/image"
 import { usePathname } from "next/navigation"
@@ -111,18 +111,23 @@ export function AppSidebar() {
                 // Check if this is the notifications item and has unread notifications
                 const hasNotifications = 'notificationBadge' in item && item.notificationBadge && notificationCount > 0
                 
+                // Show "Admin Panel" for admin users on the Home item
+                const isAdminHome = item.url === "/" && currentUser?.role === "admin"
+                const displayTitle = isAdminHome ? "Admin Panel" : item.title
+                const DisplayIcon = isAdminHome ? LayoutDashboard : item.icon
+                
                 return (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton 
                     asChild 
                     isActive={pathname === item.url}
-                    tooltip={item.title}
+                    tooltip={displayTitle}
                     className="rounded-lg h-10 text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/80 data-[active=true]:bg-sidebar-primary data-[active=true]:text-sidebar-primary-foreground data-[active=true]:font-medium data-[active=true]:shadow-sm"
                   >
                     <Link href={item.url} className="flex items-center px-3 overflow-hidden">
                       {/* Show icon, with notification badge overlay when there are notifications */}
                       <div className="relative shrink-0">
-                        <item.icon className="w-5 h-5" />
+                        <DisplayIcon className="w-5 h-5" />
                         {hasNotifications && (
                           <span className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-amber-500 text-white text-[9px] font-bold flex items-center justify-center ring-2 ring-sidebar shadow-sm">
                             {notificationCount > 9 ? '9+' : notificationCount}
@@ -137,7 +142,7 @@ export function AppSidebar() {
                           marginLeft: isCollapsed ? 0 : 12
                         }}
                       >
-                        {item.title}
+                        {displayTitle}
                       </span>
                     </Link>
                   </SidebarMenuButton>

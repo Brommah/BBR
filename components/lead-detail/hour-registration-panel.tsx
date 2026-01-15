@@ -14,7 +14,6 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
   DialogFooter,
   DialogClose,
 } from "@/components/ui/dialog"
@@ -376,13 +375,7 @@ export function HourRegistrationPanel({
     <div className="h-full flex flex-col gap-4">
       {/* Add Entry Modal */}
       <Dialog open={isAddModalOpen} onOpenChange={setIsAddModalOpen}>
-                <DialogTrigger asChild>
-                  <Button variant="outline" size="lg" className="gap-2">
-                    <Plus className="w-4 h-4" />
-                    Handmatig
-                  </Button>
-                </DialogTrigger>
-                <DialogContent>
+        <DialogContent>
                   <DialogHeader>
                     <DialogTitle>Uren registreren</DialogTitle>
                   </DialogHeader>
@@ -589,23 +582,22 @@ export function HourRegistrationPanel({
       </Dialog>
 
       {/* Stats Row */}
-      <div className="grid grid-cols-4 gap-3 shrink-0">
-        <Card 
-          className="cursor-pointer hover:bg-muted/50 transition-colors border-dashed"
+      <div className="grid grid-cols-[auto_1fr_1fr_1fr] gap-3 shrink-0">
+        <Button
+          size="lg"
+          className="h-auto py-4 px-6 bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white shadow-lg shadow-emerald-500/25 hover:shadow-emerald-500/40 transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
           onClick={() => setIsAddModalOpen(true)}
         >
-          <CardContent className="py-3">
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center">
-                <Plus className="w-4 h-4 text-emerald-600" />
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Nieuw</p>
-                <p className="text-sm font-semibold text-emerald-600">Uren toevoegen</p>
-              </div>
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-white/20 backdrop-blur flex items-center justify-center">
+              <Plus className="w-5 h-5" />
             </div>
-          </CardContent>
-        </Card>
+            <div className="text-left">
+              <p className="text-xs font-medium opacity-90">Nieuw</p>
+              <p className="text-base font-bold">Uren toevoegen</p>
+            </div>
+          </div>
+        </Button>
         <Card>
           <CardContent className="py-3">
             <div className="flex items-center gap-3">

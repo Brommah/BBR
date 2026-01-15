@@ -23,10 +23,10 @@ export function NotionSyncPanel() {
         try {
             const result = await syncRoadmapToNotion()
             if (result.success) {
-                toast.success(`Synced ${result.count} roadmap items to Notion!`)
+                toast.success(`${result.count} roadmap items gesynchroniseerd naar Notion!`)
             }
         } catch {
-            toast.error("Failed to sync roadmap")
+            toast.error("Synchronisatie mislukt")
         } finally {
             setIsSyncingRoadmap(false)
         }
@@ -46,10 +46,10 @@ export function NotionSyncPanel() {
             }))
             const result = await syncLeadsToNotion(leadsToSync)
             if (result.success) {
-                toast.success(`Synced ${result.count} leads to Notion CRM!`)
+                toast.success(`${result.count} leads gesynchroniseerd naar Notion CRM!`)
             }
         } catch {
-            toast.error("Failed to sync leads")
+            toast.error("Leads synchronisatie mislukt")
         } finally {
             setIsSyncingLeads(false)
         }
@@ -60,10 +60,10 @@ export function NotionSyncPanel() {
         try {
             const result = await syncSystemOverviewToNotion()
             if (result.success) {
-                toast.success("System overview synced to Notion Hub!")
+                toast.success("Systeemoverzicht gesynchroniseerd naar Notion Hub!")
             }
         } catch {
-            toast.error("Failed to sync system overview")
+            toast.error("Overzicht synchronisatie mislukt")
         } finally {
             setIsSyncingOverview(false)
         }
@@ -77,10 +77,10 @@ export function NotionSyncPanel() {
             if (result.success) {
                 setSyncResults(result.results)
                 toast.success(`${result.message}`, {
-                    description: "Check the Notion Projects Hub for all documentation pages."
+                    description: "Bekijk de Notion Projects Hub voor alle documentatiepagina's."
                 })
             } else {
-                toast.error("Failed to sync some documentation", {
+                toast.error("Synchronisatie van documentatie deels mislukt", {
                     description: result.error
                 })
                 if (result.results) {
@@ -88,7 +88,7 @@ export function NotionSyncPanel() {
                 }
             }
         } catch (error) {
-            toast.error("Failed to sync documentation", {
+            toast.error("Documentatie synchronisatie mislukt", {
                 description: String(error)
             })
         } finally {
@@ -97,11 +97,11 @@ export function NotionSyncPanel() {
     }
 
     const pageLabels: Record<string, string> = {
-        systemOverview: "System Overview",
-        techStack: "Technical Architecture",
-        emailAutomations: "Email Automations",
-        growthStrategy: "Growth Strategy",
-        apiDocs: "API Documentation",
+        systemOverview: "Systeemoverzicht",
+        techStack: "Technische Architectuur",
+        emailAutomations: "E-mail Automatisering",
+        growthStrategy: "Groeistrategie",
+        apiDocs: "API Documentatie",
         databaseSchema: "Database Schema",
         pipelineWorkflow: "Pipeline Workflow",
     }
@@ -168,7 +168,7 @@ export function NotionSyncPanel() {
 
                 {/* Individual Syncs */}
                 <div>
-                    <p className="text-sm text-muted-foreground mb-3">Of sync individuele onderdelen:</p>
+                    <p className="text-sm text-muted-foreground mb-3">Of synchroniseer individuele onderdelen:</p>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <Button 
                             onClick={handleSyncRoadmap} 
@@ -177,7 +177,7 @@ export function NotionSyncPanel() {
                             className="h-auto py-4 flex flex-col gap-2"
                         >
                             {isSyncingRoadmap ? <RefreshCw className="w-5 h-5 animate-spin" /> : <UploadCloud className="w-5 h-5" />}
-                            <span className="text-sm">Sync Roadmap Items</span>
+                            <span className="text-sm">Sync Roadmap</span>
                         </Button>
                         
                         <Button 
@@ -187,7 +187,7 @@ export function NotionSyncPanel() {
                             className="h-auto py-4 flex flex-col gap-2"
                         >
                             {isSyncingLeads ? <RefreshCw className="w-5 h-5 animate-spin" /> : <FileCheck className="w-5 h-5" />}
-                            <span className="text-sm">Sync {leads.length} Leads</span>
+                            <span className="text-sm">Sync {leads.length} Dossiers</span>
                         </Button>
 
                         <Button 
@@ -197,7 +197,7 @@ export function NotionSyncPanel() {
                             className="h-auto py-4 flex flex-col gap-2"
                         >
                             {isSyncingOverview ? <RefreshCw className="w-5 h-5 animate-spin" /> : <Book className="w-5 h-5" />}
-                            <span className="text-sm">Sync System Overview</span>
+                            <span className="text-sm">Sync Overzicht</span>
                         </Button>
                     </div>
                 </div>

@@ -47,12 +47,23 @@ FROM_EMAIL=noreply@broersma-bouwadvies.nl
 
 # Reply-to email address
 REPLY_TO_EMAIL=info@broersma-bouwadvies.nl
+
+# Webhook secret for email tracking (opens, clicks, bounces)
+# Get this from Resend Dashboard → Webhooks → Signing Secret
+RESEND_WEBHOOK_SECRET=whsec_xxxxxxxxxxxxx
 ```
 
 **Setup:** 
 1. Create account at [resend.com](https://resend.com)
 2. Verify your domain
 3. Get API key from dashboard
+
+**Webhook Setup (for email tracking):**
+1. Go to [resend.com/webhooks](https://resend.com/webhooks)
+2. Click "Add Webhook"
+3. Enter URL: `https://your-domain.com/api/webhooks/resend`
+4. Select events: `email.delivered`, `email.opened`, `email.clicked`, `email.bounced`, `email.complained`
+5. Copy the "Signing Secret" and add it as `RESEND_WEBHOOK_SECRET`
 
 ---
 
@@ -211,6 +222,8 @@ Before deploying, verify:
 - [ ] Supabase users exist with correct roles
 - [ ] `RESEND_API_KEY` is valid (test with API)
 - [ ] Email domain is verified in Resend
+- [ ] `RESEND_WEBHOOK_SECRET` is configured (for email tracking)
+- [ ] Webhook URL is registered in Resend Dashboard
 - [ ] `NEXT_PUBLIC_SENTRY_DSN` receives test errors
 
 ---
@@ -246,6 +259,10 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
 RESEND_API_KEY=re_your_key
 FROM_EMAIL=noreply@your-domain.com
 REPLY_TO_EMAIL=info@your-domain.com
+
+# Webhook secret for email tracking (opens, clicks, bounces)
+# Get from Resend Dashboard → Webhooks → Signing Secret
+RESEND_WEBHOOK_SECRET=whsec_your_webhook_secret
 
 # ===========================================
 # Error Tracking - Sentry (Recommended)

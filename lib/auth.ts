@@ -3,6 +3,7 @@ import { persist } from 'zustand/middleware'
 import { useState, useEffect } from 'react'
 import { getSupabaseBrowserClient, isSupabaseConfigured } from './supabase-browser'
 import { getUserByEmail } from './db-actions'
+import { getUserEffectivePermissions } from './rbac-actions'
 
 /**
  * Type for Supabase Auth user
@@ -20,8 +21,8 @@ interface SupabaseUser {
 
 /**
  * User roles in the system:
- * - admin: Full access (Fred/Pim) - can approve quotes, manage users, see everything
- * - projectleider: Project delivery (Femke/Rohina) - sees assigned projects, coordinates work
+ * - admin: Full access - can approve quotes, manage users, see everything
+ * - projectleider: Project delivery - sees assigned projects, coordinates work
  * - engineer: Rekenaar or Tekenaar - Can work on assigned leads when "aan zet"
  */
 export type UserRole = 'admin' | 'projectleider' | 'engineer'
@@ -96,13 +97,13 @@ export type Permission =
 /**
  * Permission matrix per role
  * 
- * Admin role (Fred/Pim):
+ * Admin role:
  * - Full access to everything
  * - Can approve/reject quotes
  * - Can manage users and pricing
  * - Sees all leads in all statuses
  * 
- * Projectleider role (Femke/Rohina):
+ * Projectleider role:
  * - Responsible for project delivery
  * - Can assign Rekenaar and Tekenaar to leads
  * - Can set "aan zet" status
@@ -175,20 +176,24 @@ interface AuthState {
   isLoading: boolean
   isInitialized: boolean // Prevents redirects during HMR until session is checked
   error: string | null
+  userPermissions: string[] // Database-driven permissions
+  permissionsLoaded: boolean
   
   // Actions
   login: (email: string, password: string) => Promise<boolean>
   logout: () => Promise<void>
   checkSession: () => Promise<void>
   clearError: () => void
+  loadUserPermissions: () => Promise<void> // Load permissions from database
+  refreshPermissions: () => Promise<void> // Force refresh permissions
   
   // Permission checks
-  hasPermission: (permission: Permission) => boolean
+  hasPermission: (permission: Permission | string) => boolean
   isAdmin: () => boolean
   isEngineer: () => boolean
   isRekenaar: () => boolean
   isTekenaar: () => boolean
-  isProjectleider: () => boolean  // Alias for isAdmin
+  isProjectleider: () => boolean
 }
 
 /**
@@ -217,6 +222,8 @@ export const useAuthStore = create<AuthState>()(
       isAuthenticated: false,
       isLoading: false,
       isInitialized: false, // Set to true after first session check
+      userPermissions: [], // Database-driven permissions
+      permissionsLoaded: false,
       error: null,
 
       /**
@@ -386,10 +393,59 @@ export const useAuthStore = create<AuthState>()(
 
       clearError: () => set({ error: null }),
 
-      hasPermission: (permission: Permission) => {
-        const { currentUser } = get()
+      /**
+       * Load user permissions from database
+       * Falls back to legacy role-based permissions if database fetch fails
+       */
+      loadUserPermissions: async () => {
+        const { currentUser, permissionsLoaded } = get()
+        if (!currentUser || permissionsLoaded) return
+        
+        try {
+          const result = await getUserEffectivePermissions(currentUser.id)
+          if (result.success && result.data) {
+            set({ userPermissions: result.data, permissionsLoaded: true })
+          } else {
+            // Fallback to legacy role-based permissions
+            console.warn('[Auth] Failed to load DB permissions, using legacy fallback')
+            set({ 
+              userPermissions: ROLE_PERMISSIONS[currentUser.role] || [], 
+              permissionsLoaded: true 
+            })
+          }
+        } catch (error) {
+          console.error('[Auth] Error loading permissions:', error)
+          // Fallback to legacy
+          set({ 
+            userPermissions: ROLE_PERMISSIONS[currentUser.role] || [], 
+            permissionsLoaded: true 
+          })
+        }
+      },
+
+      /**
+       * Force refresh permissions from database
+       */
+      refreshPermissions: async () => {
+        set({ permissionsLoaded: false })
+        await get().loadUserPermissions()
+      },
+
+      /**
+       * Check if current user has a specific permission
+       * Uses database-driven permissions with legacy fallback
+       */
+      hasPermission: (permission: Permission | string) => {
+        const { currentUser, userPermissions, permissionsLoaded } = get()
         if (!currentUser) return false
-        return ROLE_PERMISSIONS[currentUser.role].includes(permission)
+        
+        // If permissions loaded from DB, use those
+        if (permissionsLoaded && userPermissions.length > 0) {
+          return userPermissions.includes(permission)
+        }
+        
+        // Fallback to legacy role-based permissions
+        return ROLE_PERMISSIONS[currentUser.role]?.includes(permission as Permission) || false
       },
 
       isAdmin: () => {
@@ -419,10 +475,11 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: 'broersma-auth',
-      // Only persist currentUser, NOT isAuthenticated
+      // Persist currentUser and permissions, NOT isAuthenticated
       // isAuthenticated should be verified on each page load via checkSession
       partialize: (state) => ({ 
-        currentUser: state.currentUser
+        currentUser: state.currentUser,
+        userPermissions: state.userPermissions,
       }),
       // On rehydration, keep currentUser but mark as needing session verification
       // isInitialized stays false until checkSession completes
@@ -433,8 +490,10 @@ export const useAuthStore = create<AuthState>()(
           // checkSession will verify and update if needed
           if (state.currentUser) {
             state.isAuthenticated = true
+            state.permissionsLoaded = state.userPermissions?.length > 0
           } else {
             state.isAuthenticated = false
+            state.permissionsLoaded = false
           }
           state.isInitialized = false
         }
@@ -445,9 +504,41 @@ export const useAuthStore = create<AuthState>()(
 
 /**
  * Hook to check if user can access a feature
+ * Automatically loads permissions from database if not loaded
  */
-export function usePermission(permission: Permission): boolean {
-  return useAuthStore(state => state.hasPermission(permission))
+export function usePermission(permission: Permission | string): boolean {
+  const hasPermission = useAuthStore(state => state.hasPermission(permission))
+  const currentUser = useAuthStore(state => state.currentUser)
+  const permissionsLoaded = useAuthStore(state => state.permissionsLoaded)
+  const loadUserPermissions = useAuthStore(state => state.loadUserPermissions)
+  
+  // Auto-load permissions when user is available but permissions not loaded
+  useEffect(() => {
+    if (currentUser && !permissionsLoaded) {
+      loadUserPermissions()
+    }
+  }, [currentUser, permissionsLoaded, loadUserPermissions])
+  
+  return hasPermission
+}
+
+/**
+ * Hook to get all user permissions
+ */
+export function useUserPermissions(): string[] {
+  const permissions = useAuthStore(state => state.userPermissions)
+  const currentUser = useAuthStore(state => state.currentUser)
+  const permissionsLoaded = useAuthStore(state => state.permissionsLoaded)
+  const loadUserPermissions = useAuthStore(state => state.loadUserPermissions)
+  
+  // Auto-load permissions when user is available but permissions not loaded
+  useEffect(() => {
+    if (currentUser && !permissionsLoaded) {
+      loadUserPermissions()
+    }
+  }, [currentUser, permissionsLoaded, loadUserPermissions])
+  
+  return permissions
 }
 
 /**

@@ -17,7 +17,7 @@
 
 ## 1. Rollenstructuur
 
-### 1.1 Admin (Fred & Pim)
+### 1.1 Admin (Beheerder)
 
 **Beschrijving:** Volledige beheerdersrol met toegang tot alle functionaliteit.
 
@@ -417,7 +417,7 @@ Engineers kunnen uren registreren per project:
 
 Bij vragen over dit systeem:
 - **Technisch:** Martijn (ontwikkelaar)
-- **Functioneel:** Fred/Pim (admins)
+- **Functioneel:** Beheerders (admins)
 
 ---
 

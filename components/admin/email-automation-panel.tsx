@@ -59,6 +59,7 @@ import {
     type EmailAutomationStats,
     type EmailAutomationConfig
 } from "@/lib/email-automation-actions"
+import { WebhookSetupGuide } from "./webhook-setup-guide"
 
 interface EmailAutomation {
     id: string
@@ -981,6 +982,11 @@ export function EmailAutomationPanel() {
                     </CardContent>
                 </Card>
             </div>
+
+            {/* Webhook Setup Guide - Show when no events are being tracked */}
+            {totals.totalOpened === 0 && totals.totalSent > 0 && (
+                <WebhookSetupGuide />
+            )}
 
             {/* Initialize button if no configs */}
             {configs.length === 0 && (

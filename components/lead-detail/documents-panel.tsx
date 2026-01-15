@@ -362,8 +362,13 @@ export function DocumentsPanel({ leadId, lead }: DocumentsPanelProps = {}) {
         setDeleteConfirm(null)
     }
 
-    // Check if document has a real cloud storage URL
+    // Check if document has a real/viewable URL (cloud storage, data URL, or absolute URL)
     const isPlaceholderUrl = (url: string) => {
+        // Data URLs are viewable - not placeholders
+        if (url.startsWith('data:')) return false
+        // Absolute URLs (cloud storage) are viewable - not placeholders
+        if (url.startsWith('http://') || url.startsWith('https://')) return false
+        // These are placeholder URLs that can't be viewed
         return url.startsWith('/documents/') || 
                url.startsWith('/uploads/') || 
                url.startsWith('/demo/')

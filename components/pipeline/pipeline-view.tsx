@@ -58,7 +58,7 @@ interface Filters {
 
 /**
  * Filter leads based on user role and engineer type
- * - Admin (Fred/Pim): sees all leads in all statuses
+ * - Admin: sees all leads in all statuses
  * - Projectleider (Femke/Rohina): sees leads assigned to them
  * - Rekenaar/Tekenaar: only sees leads where:
  *   1. Status is "Opdracht" (quote accepted)

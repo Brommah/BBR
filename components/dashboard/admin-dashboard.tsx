@@ -2,12 +2,15 @@
 
 import { useState } from "react"
 import { UserPermissionsTable } from "@/components/admin/user-permissions-table"
+import { RoleManagementPanel } from "@/components/admin/role-management-panel"
 import { QuoteApprovalQueue } from "@/components/admin/quote-approval-queue"
 import { NotionSyncPanel } from "@/components/admin/notion-sync-panel"
 import { EmailAutomationPanel } from "@/components/admin/email-automation-panel"
+import { AnalyticsDashboard } from "@/components/dashboard/analytics-dashboard"
 import { ComponentErrorBoundary } from "@/components/error-boundary"
 import { useAuthStore } from "@/lib/auth"
-import { Users, Database, Mail, ClipboardCheck, Link2, Copy, Check, Settings, LayoutDashboard, ExternalLink, FileText, Shield } from "lucide-react"
+import { useLeadStore } from "@/lib/store"
+import { Users, Database, Mail, ClipboardCheck, Link2, Copy, Check, Settings, LayoutDashboard, ExternalLink, FileText, Shield, BarChart3 } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -16,38 +19,39 @@ import { Badge } from "@/components/ui/badge"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 
-type AdminSection = 
-    | "goedkeuringen" 
+type TopTab = "dashboard" | "goedkeuringen" | "instellingen"
+
+type SettingsSection = 
     | "team-rechten" 
     | "email-automations"
     | "integraties"
     | "intake-formulier"
 
-const adminSections: Array<{
-    id: AdminSection
+const settingsSections: Array<{
+    id: SettingsSection
     label: string
     shortLabel: string
     icon: React.ComponentType<{ className?: string }>
     description: string
-    category: "dashboard" | "instellingen"
 }> = [
-    { id: "goedkeuringen", label: "Goedkeuringen", shortLabel: "Goedkeuringen", icon: ClipboardCheck, description: "Offerte approvals", category: "dashboard" },
-    { id: "team-rechten", label: "Team & Rechten", shortLabel: "Team", icon: Users, description: "User permissions", category: "instellingen" },
-    { id: "email-automations", label: "Email Automations", shortLabel: "Automations", icon: Mail, description: "Automated workflows & templates", category: "instellingen" },
-    { id: "integraties", label: "Integraties", shortLabel: "Integraties", icon: Database, description: "Notion & APIs", category: "instellingen" },
-    { id: "intake-formulier", label: "Intake Formulier", shortLabel: "Intake", icon: Link2, description: "Publiek aanvraagformulier", category: "instellingen" },
+    { id: "team-rechten", label: "Team & Rechten", shortLabel: "Team", icon: Users, description: "Gebruikers en rechten beheren" },
+    { id: "email-automations", label: "E-mail Automatisering", shortLabel: "E-mails", icon: Mail, description: "Automatische e-mail flows" },
+    { id: "integraties", label: "Integraties", shortLabel: "Koppelingen", icon: Database, description: "Externe koppelingen" },
+    { id: "intake-formulier", label: "Intake Formulier", shortLabel: "Intake", icon: Link2, description: "Publiek aanvraagformulier" },
 ]
-
-const dashboardSections = adminSections.filter(s => s.category === "dashboard")
-const settingsSections = adminSections.filter(s => s.category === "instellingen")
 
 /**
  * Admin Dashboard - Full admin console with approvals, team overview, and settings.
  * This is the home page for admin users.
  */
 export function AdminDashboard() {
-    const [activeSection, setActiveSection] = useState<AdminSection>("goedkeuringen")
+    const [activeTab, setActiveTab] = useState<TopTab>("dashboard")
+    const [activeSettingsSection, setActiveSettingsSection] = useState<SettingsSection>("team-rechten")
     const { currentUser } = useAuthStore()
+    const { leads } = useLeadStore()
+    
+    // Count pending quote approvals
+    const pendingApprovalsCount = leads.filter(l => l.quoteApproval === "pending").length
 
     const [copied, setCopied] = useState(false)
     
@@ -66,12 +70,15 @@ export function AdminDashboard() {
         }
     }
 
-    const renderContent = () => {
-        switch (activeSection) {
-            case "goedkeuringen":
-                return <ComponentErrorBoundary><QuoteApprovalQueue /></ComponentErrorBoundary>
+    const renderSettingsContent = () => {
+        switch (activeSettingsSection) {
             case "team-rechten":
-                return <ComponentErrorBoundary><UserPermissionsTable /></ComponentErrorBoundary>
+                return (
+                    <div className="space-y-6">
+                        <ComponentErrorBoundary><RoleManagementPanel /></ComponentErrorBoundary>
+                        <ComponentErrorBoundary><UserPermissionsTable /></ComponentErrorBoundary>
+                    </div>
+                )
             case "email-automations":
                 return <ComponentErrorBoundary><EmailAutomationPanel /></ComponentErrorBoundary>
             case "integraties":
@@ -183,12 +190,15 @@ export function AdminDashboard() {
         }
     }
 
-    const activeConfig = adminSections.find(s => s.id === activeSection)!
-    const isDashboardSection = activeConfig.category === "dashboard"
-
-    // Handler for section changes
-    const handleSectionClick = (sectionId: AdminSection) => {
-        setActiveSection(sectionId)
+    const renderContent = () => {
+        switch (activeTab) {
+            case "dashboard":
+                return <ComponentErrorBoundary><AnalyticsDashboard /></ComponentErrorBoundary>
+            case "goedkeuringen":
+                return <ComponentErrorBoundary><QuoteApprovalQueue /></ComponentErrorBoundary>
+            case "instellingen":
+                return renderSettingsContent()
+        }
     }
 
     return (
@@ -203,7 +213,7 @@ export function AdminDashboard() {
                                 <Shield className="w-5 h-5 text-amber-500" />
                             </div>
                             <div>
-                                <h1 className="text-xl font-semibold text-foreground">Admin Console</h1>
+                                <h1 className="text-xl font-semibold text-foreground">Admin Panel</h1>
                                 <p className="text-xs text-muted-foreground">
                                     Welkom, {currentUser?.name || 'Beheerder'}
                                 </p>
@@ -215,27 +225,50 @@ export function AdminDashboard() {
                         </Badge>
                     </div>
 
-                    {/* Category Tabs */}
+                    {/* Top Tabs: Dashboard | Goedkeuringen | Instellingen */}
                     <div className="flex items-center gap-6 border-b">
                         <button
                             type="button"
-                            onClick={() => handleSectionClick("goedkeuringen")}
+                            onClick={() => setActiveTab("dashboard")}
                             className={cn(
                                 "flex items-center gap-2 px-1 py-3 text-sm font-medium border-b-2 -mb-px transition-colors cursor-pointer",
-                                isDashboardSection
+                                activeTab === "dashboard"
                                     ? "border-amber-500 text-amber-600 dark:text-amber-400"
                                     : "border-transparent text-muted-foreground hover:text-foreground"
                             )}
                         >
-                            <LayoutDashboard className="w-4 h-4" />
+                            <BarChart3 className="w-4 h-4" />
                             Dashboard
                         </button>
                         <button
                             type="button"
-                            onClick={() => handleSectionClick("team-rechten")}
+                            onClick={() => setActiveTab("goedkeuringen")}
+                            className={cn(
+                                "relative flex items-center gap-2 px-1 py-3 text-sm font-medium border-b-2 -mb-px transition-colors cursor-pointer",
+                                activeTab === "goedkeuringen"
+                                    ? "border-amber-500 text-amber-600 dark:text-amber-400"
+                                    : "border-transparent text-muted-foreground hover:text-foreground"
+                            )}
+                        >
+                            <ClipboardCheck className="w-4 h-4" />
+                            Goedkeuringen
+                            {pendingApprovalsCount > 0 && (
+                                <span className={cn(
+                                    "ml-1.5 min-w-5 h-5 flex items-center justify-center rounded-full text-xs font-bold px-1.5",
+                                    activeTab === "goedkeuringen"
+                                        ? "bg-amber-600 text-white"
+                                        : "bg-red-500 text-white"
+                                )}>
+                                    {pendingApprovalsCount}
+                                </span>
+                            )}
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setActiveTab("instellingen")}
                             className={cn(
                                 "flex items-center gap-2 px-1 py-3 text-sm font-medium border-b-2 -mb-px transition-colors cursor-pointer",
-                                !isDashboardSection
+                                activeTab === "instellingen"
                                     ? "border-amber-500 text-amber-600 dark:text-amber-400"
                                     : "border-transparent text-muted-foreground hover:text-foreground"
                             )}
@@ -247,50 +280,36 @@ export function AdminDashboard() {
                 </div>
             </div>
 
-            {/* Section Tabs - Separate from header */}
-            <div className="px-6 py-3 bg-muted/30 border-b">
-                <div className="flex items-center gap-2">
-                    {(isDashboardSection ? dashboardSections : settingsSections).map((section) => {
-                        const Icon = section.icon
-                        const isActive = activeSection === section.id
-                        return (
-                            <button
-                                key={section.id}
-                                type="button"
-                                onClick={() => handleSectionClick(section.id)}
-                                className={cn(
-                                    "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap cursor-pointer",
-                                    isActive
-                                        ? "bg-amber-500 text-white shadow-sm"
-                                        : "text-muted-foreground hover:text-foreground hover:bg-muted"
-                                )}
-                            >
-                                <Icon className="w-4 h-4" />
-                                {section.shortLabel}
-                            </button>
-                        )
-                    })}
-                </div>
-            </div>
-
-            {/* Main Content Area */}
-            <div className="p-6">
-                {/* Page Header */}
-                <div className="mb-6">
-                    <div className="flex items-center gap-3 mb-2">
-                        <div className="w-10 h-10 rounded-lg bg-amber-500/10 flex items-center justify-center">
-                            <activeConfig.icon className="w-5 h-5 text-amber-500" />
-                        </div>
-                        <div>
-                            <h2 className="text-2xl font-semibold text-foreground">
-                                {activeConfig.label}
-                            </h2>
-                            <p className="text-sm text-muted-foreground">{activeConfig.description}</p>
-                        </div>
+            {/* Settings Sub-tabs - Only show when on Instellingen tab */}
+            {activeTab === "instellingen" && (
+                <div className="px-6 py-3 bg-muted/30 border-b">
+                    <div className="flex items-center gap-2">
+                        {settingsSections.map((section) => {
+                            const Icon = section.icon
+                            const isActive = activeSettingsSection === section.id
+                            return (
+                                <button
+                                    key={section.id}
+                                    type="button"
+                                    onClick={() => setActiveSettingsSection(section.id)}
+                                    className={cn(
+                                        "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap cursor-pointer",
+                                        isActive
+                                            ? "bg-amber-500 text-white shadow-sm"
+                                            : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                                    )}
+                                >
+                                    <Icon className="w-4 h-4" />
+                                    {section.shortLabel}
+                                </button>
+                            )
+                        })}
                     </div>
                 </div>
+            )}
 
-                {/* Content */}
+            {/* Main Content Area */}
+            <div className="p-4">
                 {renderContent()}
             </div>
         </div>

@@ -156,11 +156,73 @@ model User {
   id           String        @id @default(cuid())
   name         String
   email        String        @unique
-  role         String        @default("engineer") // 'admin' (Fred/Pim - full access, can approve quotes), 'projectleider' (Femke/Rohina - project delivery), 'engineer' (Rekenaar/Tekenaar - executes work)
+  roleId       String?       // Foreign key to Role (nullable during migration)
+  roleRef      Role?         @relation(fields: [roleId], references: [id])
+  role         String        @default("engineer") // Legacy field - kept for backwards compatibility
   engineerType EngineerType? // Only for engineers: 'rekenaar' or 'tekenaar'
   avatar       String?
   createdAt    DateTime      @default(now())
   deletedAt    DateTime?     // Soft delete
+  
+  // Per-user permission overrides
+  permissionOverrides UserPermission[]
+  
+  @@index([roleId])
+}
+
+// ============================================================
+// RBAC (Role-Based Access Control) Models
+// ============================================================
+
+model Role {
+  id          String   @id @default(cuid())
+  name        String   @unique  // 'admin', 'projectleider', 'engineer', or custom
+  displayName String             // 'Admin', 'Projectleider', etc.
+  description String?
+  color       String   @default("#6b7280")  // For UI badges (hex color)
+  isSystem    Boolean  @default(false)       // System roles cannot be deleted
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  users       User[]
+  permissions RolePermission[]
+  
+  @@index([isSystem])
+}
+
+model Permission {
+  id          String   @id @default(cuid())
+  key         String   @unique  // 'leads:edit', 'quotes:approve', etc.
+  name        String             // 'Edit Leads', 'Approve Quotes'
+  description String?
+  category    String             // 'leads', 'quotes', 'admin', 'settings', 'team'
+  sortOrder   Int      @default(0) // For consistent UI ordering
+  
+  rolePermissions RolePermission[]
+  userPermissions UserPermission[]
+  
+  @@index([category])
+}
+
+model RolePermission {
+  roleId       String
+  permissionId String
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  createdAt    DateTime   @default(now())
+  
+  @@id([roleId, permissionId])
+}
+
+model UserPermission {
+  userId       String
+  permissionId String
+  granted      Boolean    @default(true)  // false = explicitly denied (override role permission)
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  createdAt    DateTime   @default(now())
+  
+  @@id([userId, permissionId])
 }
 
 model CostRate {

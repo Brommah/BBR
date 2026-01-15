@@ -4,17 +4,43 @@ import { useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+    DialogDescription,
+    DialogFooter,
+} from "@/components/ui/dialog"
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select"
 import { 
     Clock, MapPin, Home as HomeIcon, Building2, 
-    CheckCircle2, XCircle, ArrowRight, Phone, Mail, Loader2
+    CheckCircle2, XCircle, ArrowRight, Phone, Mail, Loader2,
+    Hash, Users, UserCheck
 } from "lucide-react"
 import Link from "next/link"
-import { useLeadStore } from "@/lib/store"
-import { useAuthStore } from "@/lib/auth"
+import { useLeadStore, Lead } from "@/lib/store"
+import { useAuthStore, useAllUsers } from "@/lib/auth"
 import { useRouter } from "next/navigation"
 import { IsoInbox, IsoEmpty } from "@/components/ui/illustrations"
 import { toast } from "sonner"
 import { PageLoader, PageErrorBoundary } from "@/components/error-boundary"
+
+/** Configuration data when accepting a lead */
+interface AcceptConfig {
+    werknummer: string
+    assignedProjectleider: string | null
+    assignedRekenaar: string | null
+    assignedTekenaar: string | null
+}
 
 // Helper to format relative time
 function getRelativeTime(dateString: string): string {
@@ -42,10 +68,27 @@ function getPropertyType(projectType: string): string {
 }
 
 export default function InboxPage() {
-    const { leads, updateLeadStatus, assignLead, isLoading } = useLeadStore()
+    const { leads, updateLeadStatus, updateTeamAssignments, updateLead, isLoading } = useLeadStore()
     const { currentUser } = useAuthStore()
+    const { users } = useAllUsers()
     const router = useRouter()
     const [processingIds, setProcessingIds] = useState<Set<string>>(new Set())
+    
+    // Accept dialog state
+    const [acceptDialogOpen, setAcceptDialogOpen] = useState(false)
+    const [selectedLead, setSelectedLead] = useState<Lead | null>(null)
+    const [acceptConfig, setAcceptConfig] = useState<AcceptConfig>({
+        werknummer: "",
+        assignedProjectleider: null,
+        assignedRekenaar: null,
+        assignedTekenaar: null,
+    })
+    const [isSubmitting, setIsSubmitting] = useState(false)
+    
+    // Filter users by role
+    const projectleiders = users.filter(u => u.role === 'projectleider')
+    const rekenaars = users.filter(u => u.role === 'engineer' && u.engineerType === 'rekenaar')
+    const tekenaars = users.filter(u => u.role === 'engineer' && u.engineerType === 'tekenaar')
     
     // Get leads with status "Nieuw" - these are new incoming applications
     const newApplications = leads
@@ -55,51 +98,108 @@ export default function InboxPage() {
             return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
         })
 
-    const handleAccept = async (leadId: string, clientName: string) => {
-        if (!currentUser) {
+    // Generate suggested werknummer
+    const generateWerknummer = () => {
+        const year = new Date().getFullYear()
+        const existingNumbers = leads
+            .filter(l => l.werknummer?.startsWith(`${year}-`))
+            .map(l => {
+                const match = l.werknummer?.match(/\d{4}-(\d+)/)
+                return match ? parseInt(match[1], 10) : 0
+            })
+        const nextNumber = existingNumbers.length > 0 ? Math.max(...existingNumbers) + 1 : 1
+        return `${year}-${String(nextNumber).padStart(3, '0')}`
+    }
+
+    // Open accept dialog
+    const openAcceptDialog = (lead: Lead) => {
+        setSelectedLead(lead)
+        setAcceptConfig({
+            werknummer: generateWerknummer(),
+            assignedProjectleider: null,
+            assignedRekenaar: null,
+            assignedTekenaar: null,
+        })
+        setAcceptDialogOpen(true)
+    }
+
+    // Handle accept with configuration
+    const handleAcceptWithConfig = async () => {
+        if (!currentUser || !selectedLead) {
             toast.error("Niet ingelogd", {
                 description: "Log in om leads te accepteren."
             })
             return
         }
 
-        setProcessingIds(prev => new Set(prev).add(leadId))
+        // Validation
+        if (!acceptConfig.werknummer.trim()) {
+            toast.error("Werknummer vereist", {
+                description: "Vul een werknummer in voor dit project."
+            })
+            return
+        }
+
+        if (!acceptConfig.assignedProjectleider) {
+            toast.error("Projectleider vereist", {
+                description: "Wijs een projectleider toe aan dit project."
+            })
+            return
+        }
+
+        setIsSubmitting(true)
+        const leadId = selectedLead.id
+        const clientName = selectedLead.clientName
         
         try {
+            // 1. Update werknummer
+            const werknummerSuccess = await updateLead(leadId, { 
+                werknummer: acceptConfig.werknummer.trim()
+            })
+            
+            if (!werknummerSuccess) {
+                toast.error("Kon werknummer niet instellen")
+                setIsSubmitting(false)
+                return
+            }
+
+            // 2. Update team assignments
+            const teamSuccess = await updateTeamAssignments(leadId, {
+                assignedProjectleider: acceptConfig.assignedProjectleider,
+                assignedRekenaar: acceptConfig.assignedRekenaar,
+                assignedTekenaar: acceptConfig.assignedTekenaar,
+            })
+            
+            if (!teamSuccess) {
+                toast.error("Kon team niet toewijzen")
+                setIsSubmitting(false)
+                return
+            }
+
+            // 3. Update status to Calculatie
             const statusSuccess = await updateLeadStatus(leadId, "Calculatie")
             if (!statusSuccess) {
-                setProcessingIds(prev => {
-                    const newSet = new Set(prev)
-                    newSet.delete(leadId)
-                    return newSet
-                })
+                toast.error("Kon status niet bijwerken")
+                setIsSubmitting(false)
                 return
             }
 
-            const assignSuccess = await assignLead(leadId, currentUser.name)
-            if (!assignSuccess) {
-                // Rollback status change already handled by store
-                setProcessingIds(prev => {
-                    const newSet = new Set(prev)
-                    newSet.delete(leadId)
-                    return newSet
-                })
-                return
-            }
-
+            // Close dialog and show success
+            setAcceptDialogOpen(false)
+            setSelectedLead(null)
+            
             toast.success("Lead geaccepteerd!", {
-                description: `${clientName} is toegevoegd aan je werklijst.`,
+                description: `${clientName} is nu actief met werknummer ${acceptConfig.werknummer}.`,
                 action: {
                     label: "Bekijken",
                     onClick: () => router.push(`/leads/${leadId}`)
                 }
             })
+        } catch (error) {
+            console.error('Accept error:', error)
+            toast.error("Er ging iets mis")
         } finally {
-            setProcessingIds(prev => {
-                const newSet = new Set(prev)
-                newSet.delete(leadId)
-                return newSet
-            })
+            setIsSubmitting(false)
         }
     }
 
@@ -227,19 +327,19 @@ export default function InboxPage() {
 
                                 {/* Actions */}
                                 <div className="flex items-center gap-3 pt-4 mt-2 border-t border-border/50">
-                                    <Button 
-                                        size="sm" 
-                                        className="gap-2 shadow-sm"
-                                        onClick={() => handleAccept(lead.id, lead.clientName)}
-                                        disabled={isProcessing}
-                                    >
-                                        {isProcessing ? (
-                                            <Loader2 className="w-4 h-4 animate-spin" />
-                                        ) : (
-                                            <CheckCircle2 className="w-4 h-4" />
-                                        )}
-                                        Accepteren
-                                    </Button>
+                                                <Button 
+                                                        size="sm" 
+                                                        className="gap-2 shadow-sm"
+                                                        onClick={() => openAcceptDialog(lead)}
+                                                        disabled={isProcessing}
+                                                    >
+                                                        {isProcessing ? (
+                                                            <Loader2 className="w-4 h-4 animate-spin" />
+                                                        ) : (
+                                                            <CheckCircle2 className="w-4 h-4" />
+                                                        )}
+                                                        Accepteren
+                                                    </Button>
                                     <Button 
                                         size="sm" 
                                         variant="outline" 
@@ -289,6 +389,142 @@ export default function InboxPage() {
                     </div>
                 )}
             </div>
+
+            {/* Accept Configuration Dialog */}
+            <Dialog open={acceptDialogOpen} onOpenChange={setAcceptDialogOpen}>
+                <DialogContent className="max-w-md">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2">
+                            <UserCheck className="w-5 h-5 text-primary" />
+                            Project Configureren
+                        </DialogTitle>
+                        <DialogDescription>
+                            Configureer de projectdetails voor <strong>{selectedLead?.clientName}</strong> voordat deze naar de pipeline gaat.
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    <div className="space-y-4 py-4">
+                        {/* Werknummer */}
+                        <div className="space-y-2">
+                            <Label htmlFor="werknummer" className="flex items-center gap-2">
+                                <Hash className="w-4 h-4 text-muted-foreground" />
+                                Werknummer <span className="text-destructive">*</span>
+                            </Label>
+                            <Input
+                                id="werknummer"
+                                value={acceptConfig.werknummer}
+                                onChange={(e) => setAcceptConfig({ ...acceptConfig, werknummer: e.target.value })}
+                                placeholder="bijv. 2026-001"
+                                className="font-mono"
+                            />
+                            <p className="text-xs text-muted-foreground">
+                                Uniek projectnummer voor interne administratie.
+                            </p>
+                        </div>
+
+                        {/* Projectleider */}
+                        <div className="space-y-2">
+                            <Label className="flex items-center gap-2">
+                                <Users className="w-4 h-4 text-muted-foreground" />
+                                Projectleider <span className="text-destructive">*</span>
+                            </Label>
+                            <Select
+                                value={acceptConfig.assignedProjectleider || "_none"}
+                                onValueChange={(v) => setAcceptConfig({ ...acceptConfig, assignedProjectleider: v === "_none" ? null : v })}
+                            >
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Selecteer projectleider..." />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="_none" disabled>Selecteer...</SelectItem>
+                                    {projectleiders.map(user => (
+                                        <SelectItem key={user.id} value={user.name}>
+                                            {user.name}
+                                        </SelectItem>
+                                    ))}
+                                    {projectleiders.length === 0 && (
+                                        <SelectItem value="_no_users" disabled>
+                                            Geen projectleiders beschikbaar
+                                        </SelectItem>
+                                    )}
+                                </SelectContent>
+                            </Select>
+                        </div>
+
+                        {/* Rekenaar */}
+                        <div className="space-y-2">
+                            <Label className="flex items-center gap-2">
+                                <Users className="w-4 h-4 text-muted-foreground" />
+                                Rekenaar <span className="text-muted-foreground text-xs">(optioneel)</span>
+                            </Label>
+                            <Select
+                                value={acceptConfig.assignedRekenaar || "_none"}
+                                onValueChange={(v) => setAcceptConfig({ ...acceptConfig, assignedRekenaar: v === "_none" ? null : v })}
+                            >
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Selecteer rekenaar..." />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="_none">Nog niet toewijzen</SelectItem>
+                                    {rekenaars.map(user => (
+                                        <SelectItem key={user.id} value={user.name}>
+                                            {user.name}
+                                        </SelectItem>
+                                    ))}
+                                    {rekenaars.length === 0 && (
+                                        <SelectItem value="_no_users" disabled>
+                                            Geen rekenaars beschikbaar
+                                        </SelectItem>
+                                    )}
+                                </SelectContent>
+                            </Select>
+                        </div>
+
+                        {/* Tekenaar */}
+                        <div className="space-y-2">
+                            <Label className="flex items-center gap-2">
+                                <Users className="w-4 h-4 text-muted-foreground" />
+                                Tekenaar <span className="text-muted-foreground text-xs">(optioneel)</span>
+                            </Label>
+                            <Select
+                                value={acceptConfig.assignedTekenaar || "_none"}
+                                onValueChange={(v) => setAcceptConfig({ ...acceptConfig, assignedTekenaar: v === "_none" ? null : v })}
+                            >
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Selecteer tekenaar..." />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="_none">Nog niet toewijzen</SelectItem>
+                                    {tekenaars.map(user => (
+                                        <SelectItem key={user.id} value={user.name}>
+                                            {user.name}
+                                        </SelectItem>
+                                    ))}
+                                    {tekenaars.length === 0 && (
+                                        <SelectItem value="_no_users" disabled>
+                                            Geen tekenaars beschikbaar
+                                        </SelectItem>
+                                    )}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    </div>
+
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setAcceptDialogOpen(false)} disabled={isSubmitting}>
+                            Annuleren
+                        </Button>
+                        <Button onClick={handleAcceptWithConfig} disabled={isSubmitting}>
+                            {isSubmitting ? (
+                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                            ) : (
+                                <CheckCircle2 className="w-4 h-4 mr-2" />
+                            )}
+                            Accepteren & Starten
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
         </PageErrorBoundary>
     )

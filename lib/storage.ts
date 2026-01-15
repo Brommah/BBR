@@ -93,7 +93,17 @@ function getFileType(filename: string): string {
 }
 
 /**
- * Upload file - stores in Supabase if available, otherwise database-only
+ * Convert file to base64 data URL
+ */
+async function fileToDataUrl(file: File): Promise<string> {
+  const arrayBuffer = await file.arrayBuffer()
+  const buffer = Buffer.from(arrayBuffer)
+  const base64 = buffer.toString('base64')
+  return `data:${file.type || 'application/octet-stream'};base64,${base64}`
+}
+
+/**
+ * Upload file - stores in Supabase if available, otherwise as data URL in database
  */
 export async function uploadFile(formData: FormData): Promise<UploadResult> {
   try {
@@ -112,9 +122,33 @@ export async function uploadFile(formData: FormData): Promise<UploadResult> {
     const bucketExists = await checkBucketExists()
     
     if (!client || !bucketExists) {
-      // Supabase storage not available - save to database with placeholder URL
-      console.log('[STORAGE] Supabase storage not available - saving document record only')
+      // Supabase storage not available - save file as data URL for small files (<5MB)
+      console.log('[STORAGE] Supabase storage not available')
       
+      // For small files (PDFs, images <5MB), store as data URL
+      if (file.size < 5 * 1024 * 1024) {
+        console.log('[STORAGE] Storing file as data URL in database')
+        const dataUrl = await fileToDataUrl(file)
+        
+        const dbResult = await createDocument({
+          leadId,
+          name: file.name,
+          type: getFileType(file.name),
+          category,
+          size: file.size,
+          url: dataUrl,
+          uploadedBy
+        })
+        
+        if (!dbResult.success) {
+          return { success: false, error: dbResult.error }
+        }
+        
+        return { success: true, url: dataUrl }
+      }
+      
+      // For larger files, save placeholder URL and show error
+      console.log('[STORAGE] File too large for data URL, saving placeholder')
       const placeholderUrl = `/documents/${leadId}/${encodeURIComponent(file.name)}`
       
       const dbResult = await createDocument({

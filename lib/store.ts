@@ -140,8 +140,8 @@ interface LeadState {
   rejectQuote: (id: string, feedback: { authorId: string; authorName: string; message: string }) => Promise<boolean>
   /** Update project specifications */
   updateProjectSpecs: (id: string, specs: ProjectSpec[]) => Promise<boolean>
-  /** Update lead details (clientName, email, phone, address, etc.) */
-  updateLead: (id: string, data: Partial<Pick<Lead, 'clientName' | 'clientEmail' | 'clientPhone' | 'address' | 'city' | 'projectType' | 'value'>>) => Promise<boolean>
+  /** Update lead details (clientName, email, phone, address, werknummer, etc.) */
+  updateLead: (id: string, data: Partial<Pick<Lead, 'clientName' | 'clientEmail' | 'clientPhone' | 'address' | 'city' | 'projectType' | 'value' | 'werknummer'>>) => Promise<boolean>
   
   // Team management
   /** Update team assignments (Projectleider, Rekenaar and/or Tekenaar) */
