@@ -35,6 +35,7 @@ import { useAuthStore } from "@/lib/auth"
 import { getDocuments } from "@/lib/db-actions"
 import { uploadFile, deleteFile } from "@/lib/storage"
 import { cn } from "@/lib/utils"
+import { Lead, QuoteApprovalStatus } from "@/lib/store"
 
 // Format file size for display (client-side utility)
 function formatFileSize(bytes: number): string {
@@ -99,9 +100,65 @@ function getFileTypeIcon(filename: string) {
 
 interface DocumentsPanelProps {
     leadId?: string
+    lead?: Lead
 }
 
-export function DocumentsPanel({ leadId }: DocumentsPanelProps = {}) {
+/** Get quote status display info */
+function getQuoteStatusInfo(lead: Lead): { 
+    label: string
+    color: string
+    icon: typeof CheckCircle2
+} | null {
+    if (!lead.quoteValue && !lead.quoteLineItems?.length) return null
+    
+    // Check lead status for "Opdracht" (accepted)
+    if (lead.status === "Opdracht") {
+        return {
+            label: "Geaccepteerd",
+            color: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300",
+            icon: CheckCircle2
+        }
+    }
+    
+    // Check lead status for "Offerte Verzonden" (sent)
+    if (lead.status === "Offerte Verzonden") {
+        return {
+            label: "Verzonden",
+            color: "bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-300",
+            icon: CheckCircle2
+        }
+    }
+    
+    // Check approval status
+    switch (lead.quoteApproval) {
+        case "approved":
+            return {
+                label: "Goedgekeurd",
+                color: "bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300",
+                icon: CheckCircle2
+            }
+        case "pending":
+            return {
+                label: "Wacht op goedkeuring",
+                color: "bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300",
+                icon: Clock
+            }
+        case "rejected":
+            return {
+                label: "Afgekeurd",
+                color: "bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300",
+                icon: AlertCircle
+            }
+        default:
+            return {
+                label: "Opgemaakt",
+                color: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300",
+                icon: FileText
+            }
+    }
+}
+
+export function DocumentsPanel({ leadId, lead }: DocumentsPanelProps = {}) {
     const { currentUser } = useAuthStore()
     const fileInputRef = useRef<HTMLInputElement>(null)
     const dropZoneRef = useRef<HTMLDivElement>(null)
@@ -362,7 +419,7 @@ export function DocumentsPanel({ leadId }: DocumentsPanelProps = {}) {
                                 <FolderOpen className="w-5 h-5" />
                                 Documenten
                                 <span className="text-sm font-normal text-muted-foreground">
-                                    ({documents.length})
+                                    ({documents.length + (lead && getQuoteStatusInfo(lead) ? 1 : 0)})
                                 </span>
                             </CardTitle>
                             <CardDescription>
@@ -416,13 +473,75 @@ export function DocumentsPanel({ leadId }: DocumentsPanelProps = {}) {
                 <Separator />
 
                 <CardContent className="pt-4">
-                    {filteredDocuments.length === 0 ? (
+                    {/* Quote Document (if exists) */}
+                    {lead && (selectedCategory === "all" || selectedCategory === "offerte") && (() => {
+                        const quoteStatus = getQuoteStatusInfo(lead)
+                        if (!quoteStatus) return null
+                        
+                        const QuoteIcon = quoteStatus.icon
+                        const quoteTotal = lead.quoteValue || lead.quoteLineItems?.reduce((sum, item) => sum + (item.amount || 0), 0) || 0
+                        
+                        return (
+                            <div className="mb-4">
+                                <div
+                                    className="group flex items-center gap-3 p-3 rounded-lg border-2 border-emerald-200 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-950/20 hover:border-emerald-300 dark:hover:border-emerald-700 transition-all"
+                                >
+                                    <div className="flex-shrink-0">
+                                        <div className="w-10 h-10 rounded-lg bg-emerald-100 dark:bg-emerald-900 flex items-center justify-center">
+                                            <FileText className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+                                        </div>
+                                    </div>
+                                    
+                                    <div className="flex-1 min-w-0">
+                                        <p className="font-medium text-sm text-foreground">
+                                            Offerte - {lead.clientName}
+                                        </p>
+                                        <div className="flex items-center gap-2 mt-1 flex-wrap">
+                                            <Badge className={`${categoryColors.offerte} border-0 text-[10px]`}>
+                                                Offerte
+                                            </Badge>
+                                            <Badge className={`${quoteStatus.color} border-0 text-[10px] gap-1`}>
+                                                <QuoteIcon className="w-3 h-3" />
+                                                {quoteStatus.label}
+                                            </Badge>
+                                            <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-300">
+                                                €{quoteTotal.toLocaleString('nl-NL', { minimumFractionDigits: 2 })}
+                                            </span>
+                                        </div>
+                                        {lead.quoteLineItems && lead.quoteLineItems.length > 0 && (
+                                            <div className="mt-2 text-[10px] text-muted-foreground">
+                                                {lead.quoteLineItems.length} regel{lead.quoteLineItems.length !== 1 ? 's' : ''}: {' '}
+                                                {lead.quoteLineItems.slice(0, 2).map(item => item.description).join(', ')}
+                                                {lead.quoteLineItems.length > 2 && ` +${lead.quoteLineItems.length - 2} meer`}
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    <div className="flex items-center gap-1">
+                                        <Button 
+                                            variant="ghost" 
+                                            size="icon" 
+                                            className="h-8 w-8"
+                                            onClick={() => {
+                                                // Navigate to quote tab
+                                                toast.info("Bekijk de offerte in het Offerte paneel rechts")
+                                            }}
+                                        >
+                                            <Eye className="w-4 h-4" />
+                                        </Button>
+                                    </div>
+                                </div>
+                            </div>
+                        )
+                    })()}
+
+                    {filteredDocuments.length === 0 && !(lead && getQuoteStatusInfo(lead)) ? (
                         <div className="text-center py-8 text-muted-foreground">
                             <FolderOpen className="w-12 h-12 mx-auto mb-3 opacity-30" />
                             <p className="text-sm">Nog geen documenten</p>
                             <p className="text-xs mt-1">Upload bestanden om te beginnen</p>
                         </div>
-                    ) : (
+                    ) : filteredDocuments.length > 0 ? (
                         <div className="space-y-2">
                             {filteredDocuments.map((doc) => (
                                 <div
@@ -488,7 +607,7 @@ export function DocumentsPanel({ leadId }: DocumentsPanelProps = {}) {
                                 </div>
                             ))}
                         </div>
-                    )}
+                    ) : null}
                 </CardContent>
             </Card>
 

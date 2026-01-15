@@ -8,7 +8,7 @@ import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar"
 import { MapPin, User, Clock, AlertCircle, CheckCircle2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useRouter } from "next/navigation"
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip"
 import { getProjectTypeColor, getAssigneeColor } from "./pipeline-legend"
 import { useAllUsers } from "@/lib/auth"
@@ -107,6 +107,9 @@ export function LeadCard({ lead }: LeadCardProps) {
   })
   
   const [hoursSince, setHoursSince] = useState(0)
+  // Track if a drag actually happened (mouse moved after mousedown)
+  const hasDraggedRef = useRef(false)
+  const mouseDownPosRef = useRef<{ x: number; y: number } | null>(null)
   
   // Find assignee's avatar from users list
   const assigneeUser = users.find(u => u.name === lead.assignee)
@@ -117,6 +120,13 @@ export function LeadCard({ lead }: LeadCardProps) {
     const t = setTimeout(() => setHoursSince(hours), 0)
     return () => clearTimeout(t)
   }, [lead.createdAt])
+
+  // Reset drag tracking when drag state changes
+  useEffect(() => {
+    if (isDragging) {
+      hasDraggedRef.current = true
+    }
+  }, [isDragging])
 
   const style = transform ? {
     transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
@@ -134,14 +144,27 @@ export function LeadCard({ lead }: LeadCardProps) {
   const borderClass = statusConfig.border
   const indicatorClass = statusConfig.indicator
 
-  const handleCardClick = (e: React.MouseEvent) => {
-    // Don't navigate if we're dragging
-    if (isDragging) {
-      e.preventDefault()
-      e.stopPropagation()
-      return
+  const handleMouseDown = (e: React.MouseEvent) => {
+    mouseDownPosRef.current = { x: e.clientX, y: e.clientY }
+    hasDraggedRef.current = false
+  }
+
+  const handleMouseUp = (e: React.MouseEvent) => {
+    // Check if mouse moved significantly (indicating a drag)
+    if (mouseDownPosRef.current) {
+      const dx = Math.abs(e.clientX - mouseDownPosRef.current.x)
+      const dy = Math.abs(e.clientY - mouseDownPosRef.current.y)
+      if (dx > 5 || dy > 5) {
+        hasDraggedRef.current = true
+      }
     }
-    router.push(`/leads/${lead.id}`)
+    
+    // Only navigate if we didn't drag
+    if (!hasDraggedRef.current && !isDragging) {
+      router.push(`/leads/${lead.id}`)
+    }
+    
+    mouseDownPosRef.current = null
   }
 
   const formatHours = (hours: number) => {
@@ -161,9 +184,10 @@ export function LeadCard({ lead }: LeadCardProps) {
         role="listitem"
         aria-label={`Lead: ${lead.clientName}, ${lead.projectType} in ${lead.city}, €${(lead.quoteValue ?? lead.value).toLocaleString('nl-NL')}`}
         aria-grabbed={isDragging}
+        onMouseDown={handleMouseDown}
+        onMouseUp={handleMouseUp}
       >
         <Card 
-          onClick={handleCardClick}
           className={cn(
             "cursor-pointer card-hover-effect transition-all relative overflow-hidden group bg-card",
             "border",
@@ -176,9 +200,7 @@ export function LeadCard({ lead }: LeadCardProps) {
           onKeyDown={(e) => {
             if (e.key === 'Enter' || e.key === ' ') {
               e.preventDefault()
-              if (!isDragging) {
-                router.push(`/leads/${lead.id}`)
-              }
+              router.push(`/leads/${lead.id}`)
             }
           }}
         >

@@ -566,7 +566,7 @@ export default function LeadDetailPage() {
                             />
                         </TabsContent>
                                 <TabsContent value="documents" className="h-full m-0 p-4 overflow-auto">
-                                    <DocumentsPanel leadId={lead.id} />
+                                    <DocumentsPanel leadId={lead.id} lead={lead} />
                                 </TabsContent>
                                 {showGroundTab && (
                                     <TabsContent value="ground" className="h-full m-0 p-4 overflow-auto">

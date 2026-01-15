@@ -11,18 +11,20 @@ import { QueryProvider } from "@/lib/query-client"
 
 /**
  * Initializes the store by loading leads from database
- * Runs once on app mount when authenticated
+ * Runs once on app mount when authenticated AND session is verified
  */
 function StoreInitializer() {
   const loadLeads = useLeadStore(state => state.loadLeads)
   const isAuthenticated = useAuthStore(state => state.isAuthenticated)
+  const isInitialized = useAuthStore(state => state.isInitialized)
   
   useEffect(() => {
-    // Only load leads if authenticated
-    if (isAuthenticated) {
+    // Only load leads after auth is initialized AND user is authenticated
+    // This prevents loading leads before session verification
+    if (isInitialized && isAuthenticated) {
       loadLeads()
     }
-  }, [loadLeads, isAuthenticated])
+  }, [loadLeads, isAuthenticated, isInitialized])
   
   return null
 }
