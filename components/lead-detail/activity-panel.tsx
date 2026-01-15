@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar"
 import {
     Phone,
     Mail,
@@ -21,7 +22,7 @@ import { toast } from "sonner"
 import { format } from "date-fns"
 import { nl } from "date-fns/locale"
 import { cn } from "@/lib/utils"
-import { useAuthStore } from "@/lib/auth"
+import { useAuthStore, useAllUsers } from "@/lib/auth"
 import { getActivityFeed, createCommunication, addNote } from "@/lib/db-actions"
 
 // Unified activity entry type
@@ -52,6 +53,7 @@ interface ActivityPanelProps {
 
 export function ActivityPanel({ leadId, clientPhone, clientEmail }: ActivityPanelProps) {
     const { currentUser } = useAuthStore()
+    const { users } = useAllUsers()
     const [activities, setActivities] = useState<ActivityEntry[]>([])
     const [isLoading, setIsLoading] = useState(true)
     const [isSaving, setIsSaving] = useState(false)
@@ -356,13 +358,28 @@ export function ActivityPanel({ leadId, clientPhone, clientEmail }: ActivityPane
                                 </div>
                             ) : (
                                 // User activity - conversation style
+                                (() => {
+                                    const entryUser = users.find(u => u.name === entry.user)
+                                    const userAvatar = entryUser?.avatar
+                                    // Check if system entry
+                                    const isSystemEntry = ['Systeem', 'System', 'Website Intake', 'Receptie', 'Admin', 'Broersma Bouwadvies'].some(
+                                        s => entry.user.toLowerCase().includes(s.toLowerCase())
+                                    )
+                                    return (
                                 <div className="flex items-start gap-3 py-2">
-                                    <div className={cn(
-                                        "w-8 h-8 rounded-full text-white flex items-center justify-center text-xs font-bold flex-shrink-0 shadow-sm",
-                                        authorColors[entry.user] || "bg-slate-600"
-                                    )}>
-                                        {entry.user[0]}
-                                    </div>
+                                    <Avatar className="w-8 h-8 flex-shrink-0 shadow-sm">
+                                        {isSystemEntry ? (
+                                            <AvatarImage src="/branding/logo-white-gold.png" alt={entry.user} className="object-cover bg-slate-700 p-1" />
+                                        ) : userAvatar ? (
+                                            <AvatarImage src={userAvatar} alt={entry.user} />
+                                        ) : null}
+                                        <AvatarFallback className={cn(
+                                            "text-white text-xs font-bold",
+                                            isSystemEntry ? "bg-slate-700" : (authorColors[entry.user] || "bg-slate-600")
+                                        )}>
+                                            {isSystemEntry ? "BB" : entry.user[0]}
+                                        </AvatarFallback>
+                                    </Avatar>
                                     <div className="flex-1 min-w-0">
                                         <div className="flex items-center gap-2 mb-1">
                                             <span className="text-sm font-semibold text-foreground">
@@ -388,6 +405,8 @@ export function ActivityPanel({ leadId, clientPhone, clientEmail }: ActivityPane
                                         </div>
                                     </div>
                                 </div>
+                                    )
+                                })()
                             )}
                         </div>
                     ))}

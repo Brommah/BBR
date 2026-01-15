@@ -1,7 +1,8 @@
 "use client"
 
 import { Button } from "@/components/ui/button"
-import { Send, Paperclip, Loader2, AtSign } from "lucide-react"
+import { Send, Loader2, AtSign, Paperclip } from "lucide-react"
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar"
 import { useState, useEffect, useMemo } from "react"
 import { cn } from "@/lib/utils"
 import { getNotes, addNote, createMentionNotifications } from "@/lib/db-actions"
@@ -29,6 +30,9 @@ const authorColors: Record<string, string> = {
     "Angelo": "bg-blue-600",
     "Venka": "bg-purple-600",
     "Roina": "bg-emerald-600",
+    "Cathleen Broersma": "bg-amber-600",
+    "CF Broersma": "bg-teal-600",
+    "Martijn Broersma": "bg-indigo-600",
     "System": "bg-slate-500"
 }
 
@@ -40,9 +44,9 @@ export function NotesPanel({ leadId, leadName }: NotesPanelProps) {
     const currentUser = useCurrentUser()
     const { users } = useAllUsers()
 
-    // Format users for mention input
+    // Format users for mention input (including avatars)
     const mentionableUsers = useMemo(() => 
-        users.map(u => ({ id: u.id, name: u.name, role: u.role })),
+        users.map(u => ({ id: u.id, name: u.name, role: u.role, avatar: u.avatar })),
         [users]
     )
 
@@ -186,14 +190,29 @@ export function NotesPanel({ leadId, leadName }: NotesPanelProps) {
                                     <div className="flex-1 h-px bg-slate-200 dark:bg-slate-700" />
                                 </div>
                             ) : (
-                                // User note
+                                // User note - lookup avatar from users list
+                                (() => {
+                                    const authorUser = users.find(u => u.name === note.author)
+                                    const authorAvatar = authorUser?.avatar
+                                    // Check if this is a system/automated entry
+                                    const isSystemEntry = ['Systeem', 'System', 'Website Intake', 'Receptie', 'Admin', 'Broersma Bouwadvies'].some(
+                                        s => note.author.toLowerCase().includes(s.toLowerCase())
+                                    )
+                                    return (
                                 <div className="flex items-start gap-3">
-                                    <div className={cn(
-                                        "w-9 h-9 rounded-full text-white flex items-center justify-center text-sm font-bold flex-shrink-0 shadow-sm",
-                                        authorColors[note.author] || "bg-slate-600"
-                                    )}>
-                                        {note.author[0]}
-                                    </div>
+                                    <Avatar className="w-9 h-9 flex-shrink-0 shadow-sm">
+                                        {isSystemEntry ? (
+                                            <AvatarImage src="/branding/logo-white-gold.png" alt={note.author} className="object-cover bg-slate-700 p-1" />
+                                        ) : authorAvatar ? (
+                                            <AvatarImage src={authorAvatar} alt={note.author} />
+                                        ) : null}
+                                        <AvatarFallback className={cn(
+                                            "text-white text-sm font-bold",
+                                            isSystemEntry ? "bg-slate-700" : (authorColors[note.author] || "bg-slate-600")
+                                        )}>
+                                            {isSystemEntry ? "BB" : note.author[0]}
+                                        </AvatarFallback>
+                                    </Avatar>
                                     <div className="flex-1 space-y-1">
                                         <div className="flex items-center justify-between">
                                             <span className="text-sm font-bold text-slate-900 dark:text-slate-100">
@@ -208,6 +227,8 @@ export function NotesPanel({ leadId, leadName }: NotesPanelProps) {
                                         </div>
                                     </div>
                                 </div>
+                                    )
+                                })()
                             )}
                         </div>
                     ))

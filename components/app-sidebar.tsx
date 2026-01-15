@@ -63,7 +63,7 @@ export function AppSidebar() {
   const { currentUser, isAuthenticated } = useAuthStore()
   const inboxCount = useInboxCount()
   const notificationCount = useNotificationCount(currentUser?.name)
-  const { state, setOpen } = useSidebar()
+  const { state, setOpen, locked } = useSidebar()
   const isCollapsed = state === "collapsed"
 
   // Filter menu items based on user role
@@ -77,7 +77,7 @@ export function AppSidebar() {
       collapsible="icon"
       className="border-r border-sidebar-border bg-sidebar"
       onMouseEnter={() => setOpen(true)}
-      onMouseLeave={() => setOpen(false)}
+      onMouseLeave={() => !locked && setOpen(false)}
     >
       <SidebarHeader className="border-b border-sidebar-border">
         <div className="flex items-center h-14 px-3 overflow-hidden">
@@ -107,7 +107,11 @@ export function AppSidebar() {
         <SidebarGroup>
           <SidebarGroupContent>
             <SidebarMenu className="gap-1">
-              {visibleItems.map((item) => (
+              {visibleItems.map((item) => {
+                // Check if this is the notifications item and has unread notifications
+                const hasNotifications = 'notificationBadge' in item && item.notificationBadge && notificationCount > 0
+                
+                return (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton 
                     asChild 
@@ -116,7 +120,15 @@ export function AppSidebar() {
                     className="rounded-lg h-10 text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/80 data-[active=true]:bg-sidebar-primary data-[active=true]:text-sidebar-primary-foreground data-[active=true]:font-medium data-[active=true]:shadow-sm"
                   >
                     <Link href={item.url} className="flex items-center px-3 overflow-hidden">
-                      <item.icon className="w-5 h-5 shrink-0" />
+                      {/* Show icon, with notification badge overlay when there are notifications */}
+                      <div className="relative shrink-0">
+                        <item.icon className="w-5 h-5" />
+                        {hasNotifications && (
+                          <span className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-amber-500 text-white text-[9px] font-bold flex items-center justify-center ring-2 ring-sidebar shadow-sm">
+                            {notificationCount > 9 ? '9+' : notificationCount}
+                          </span>
+                        )}
+                      </div>
                       <span 
                         className="ml-3 text-sm whitespace-nowrap overflow-hidden transition-all duration-200 ease-out"
                         style={{ 
@@ -137,16 +149,8 @@ export function AppSidebar() {
                       {inboxCount}
                     </SidebarMenuBadge>
                   )}
-                  {'notificationBadge' in item && item.notificationBadge && notificationCount > 0 && (
-                    <SidebarMenuBadge 
-                      className="bg-amber-500 text-white border-none font-semibold text-[10px] min-w-5 h-5 flex items-center justify-center transition-opacity duration-200"
-                      style={{ opacity: isCollapsed ? 0 : 1 }}
-                    >
-                      {notificationCount}
-                    </SidebarMenuBadge>
-                  )}
                 </SidebarMenuItem>
-              ))}
+              )})}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>

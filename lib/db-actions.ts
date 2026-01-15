@@ -1519,6 +1519,250 @@ export async function createEmailTemplate(data: {
   }
 }
 
+/**
+ * Update an existing email template
+ * @param id - Template ID
+ * @param data - Updated template data
+ */
+export async function updateEmailTemplate(
+  id: string,
+  data: {
+    name?: string
+    subject?: string
+    body?: string
+    variables?: string[]
+    isActive?: boolean
+  }
+): Promise<ActionResult> {
+  const validId = validateId(id)
+  if (!validId) return { success: false, error: 'Invalid template ID' }
+
+  try {
+    const template = await prisma.emailTemplate.update({
+      where: { id: validId },
+      data: {
+        ...(data.name && { name: data.name }),
+        ...(data.subject && { subject: data.subject }),
+        ...(data.body !== undefined && { body: data.body }),
+        ...(data.variables && { variables: data.variables }),
+        ...(data.isActive !== undefined && { isActive: data.isActive }),
+      }
+    })
+    return { success: true, data: template }
+  } catch (error) {
+    console.error('[DB] Error updating email template:', error)
+    return { success: false, error: 'Failed to update email template' }
+  }
+}
+
+/**
+ * Delete an email template (soft delete by setting isActive to false)
+ * @param id - Template ID
+ */
+export async function deleteEmailTemplate(id: string): Promise<ActionResult> {
+  const validId = validateId(id)
+  if (!validId) return { success: false, error: 'Invalid template ID' }
+
+  try {
+    await prisma.emailTemplate.update({
+      where: { id: validId },
+      data: { isActive: false }
+    })
+    return { success: true, data: { deletedId: validId } }
+  } catch (error) {
+    console.error('[DB] Error deleting email template:', error)
+    return { success: false, error: 'Failed to delete email template' }
+  }
+}
+
+/**
+ * Get all email templates including inactive ones (for admin)
+ */
+export async function getAllEmailTemplates(): Promise<ActionResult> {
+  try {
+    const templates = await prisma.emailTemplate.findMany({
+      orderBy: { name: 'asc' }
+    })
+    return { success: true, data: templates }
+  } catch (error) {
+    console.error('[DB] Error fetching all email templates:', error)
+    return { success: false, error: 'Failed to load email templates' }
+  }
+}
+
+/**
+ * Seed default email templates if none exist
+ */
+export async function seedDefaultEmailTemplates(): Promise<ActionResult> {
+  try {
+    const existingCount = await prisma.emailTemplate.count()
+    if (existingCount > 0) {
+      return { success: true, data: { message: 'Templates already exist', seeded: 0 } }
+    }
+
+    const defaultTemplates = [
+      {
+        name: "intake-bevestiging",
+        subject: "Ontvangstbevestiging: Uw aanvraag voor {{project_type}} | Bureau Broersma",
+        body: `Beste {{client_name}},
+
+Hartelijk dank voor uw vertrouwen in Bureau Broersma!
+
+Wij hebben uw aanvraag voor een **{{project_type}}** aan de **{{address}}** te **{{city}}** in goede orde ontvangen.
+
+### Wat kunt u verwachten?
+
+📋 **Stap 1 – Beoordeling** (vandaag)
+Wij bekijken uw aanvraag en de projectgegevens.
+
+📞 **Stap 2 – Persoonlijk contact** (binnen 1-2 werkdagen)
+Een van onze ingenieurs neemt contact met u op.
+
+📄 **Stap 3 – Offerte op maat**
+U ontvangt een heldere offerte zonder verrassingen.
+
+Met vriendelijke groet,
+
+Team Bureau Broersma`,
+        variables: ["client_name", "project_type", "address", "city"]
+      },
+      {
+        name: "offerte-verzonden",
+        subject: "Uw offerte voor {{project_type}} aan {{address}} | €{{quote_value}}",
+        body: `Beste {{client_name}},
+
+Goed nieuws! De offerte voor uw **{{project_type}}** is gereed.
+
+## 📋 Offerte Samenvatting
+
+| | |
+|---|---|
+| Offertebedrag | **€{{quote_value}}** (excl. BTW) |
+| Geldig tot | {{quote_valid_until}} |
+
+## 📄 Wat is inbegrepen?
+
+✅ Volledige constructieberekening volgens Eurocode
+✅ Constructietekeningen met maatvoering  
+✅ Certificering door erkend constructeur
+✅ Ondersteuning bij vergunningsaanvraag
+
+Heeft u vragen? Neem gerust contact met ons op.
+
+Met vriendelijke groet,
+
+{{engineer_name}}
+Bureau Broersma`,
+        variables: ["client_name", "project_type", "address", "quote_value", "quote_valid_until", "engineer_name"]
+      },
+      {
+        name: "opdracht-bevestiging",
+        subject: "🎉 Opdracht bevestigd: {{project_type}} {{address}} | Bureau Broersma",
+        body: `Beste {{client_name}},
+
+Geweldig nieuws! Wij hebben uw akkoord ontvangen en gaan direct aan de slag.
+
+## ✅ Opdrachtbevestiging
+
+| | |
+|---|---|
+| Opdrachtnummer | {{order_number}} |
+| Opdrachtbedrag | €{{quote_total}} (incl. BTW) |
+
+## 📅 Planning & Doorlooptijd
+
+**Verwachte oplevering:** {{expected_delivery_date}}
+
+1. ✅ **Opdracht ontvangen** – vandaag
+2. ⏳ **Constructieberekening** – {{engineer_name}} start direct
+3. ⏳ **Interne controle** – kwaliteitscheck
+4. ⏳ **Oplevering** – digitale levering
+
+Bedankt voor uw vertrouwen!
+
+Met vriendelijke groet,
+
+Team Bureau Broersma`,
+        variables: ["client_name", "project_type", "address", "order_number", "quote_total", "expected_delivery_date", "engineer_name"]
+      },
+      {
+        name: "factuur",
+        subject: "Factuur {{invoice_number}} – {{project_type}} | €{{invoice_total}}",
+        body: `Beste {{client_name}},
+
+Hierbij ontvangt u de factuur voor uw opdracht.
+
+## 📄 Factuurgegevens
+
+| | |
+|---|---|
+| Factuurnummer | {{invoice_number}} |
+| Totaal te betalen | **€{{invoice_total}}** |
+| Betalingstermijn | {{payment_due_date}} (14 dagen) |
+
+## 🏦 Betalingsinstructies
+
+| | |
+|---|---|
+| IBAN | NL91 ABNA 0417 1643 00 |
+| T.n.v. | Bureau Broersma B.V. |
+| Omschrijving | {{invoice_number}} |
+
+Met vriendelijke groet,
+
+Administratie Bureau Broersma`,
+        variables: ["client_name", "project_type", "invoice_number", "invoice_total", "payment_due_date"]
+      },
+      {
+        name: "oplevering",
+        subject: "🎉 Uw constructieberekening is gereed! | {{project_type}} {{address}}",
+        body: `Beste {{client_name}},
+
+Fantastisch nieuws! De constructieberekening voor uw **{{project_type}}** is gereed.
+
+## 📦 Uw documenten
+
+De volgende documenten zijn bijgevoegd:
+- 📄 Constructieberekening (PDF)
+- 📄 Constructietekening (PDF)
+
+## 🏛️ Vergunningaanvraag
+
+U kunt deze documenten direct gebruiken voor uw omgevingsvergunning bij de gemeente.
+
+## ✅ Onze garantie
+
+- Berekening voldoet aan alle geldende normen
+- Kosteloos kleine aanpassingen bij gemeentelijke opmerkingen
+- 1 jaar ondersteuning bij vragen
+
+Succes met uw bouwproject!
+
+Met vriendelijke groet,
+
+{{engineer_name}}
+Bureau Broersma`,
+        variables: ["client_name", "project_type", "address", "engineer_name", "order_number"]
+      }
+    ]
+
+    const created = await prisma.emailTemplate.createMany({
+      data: defaultTemplates.map(t => ({
+        name: t.name,
+        subject: t.subject,
+        body: t.body,
+        variables: t.variables,
+        isActive: true
+      }))
+    })
+
+    return { success: true, data: { message: 'Default templates seeded', seeded: created.count } }
+  } catch (error) {
+    console.error('[DB] Error seeding email templates:', error)
+    return { success: false, error: 'Failed to seed email templates' }
+  }
+}
+
 // ============================================================
 // Email Logging
 // ============================================================
@@ -2227,6 +2471,7 @@ export async function getNotifications(
   if (!name) return { success: false, error: 'Invalid user name' }
 
   try {
+    console.log('[Notifications] Fetching notifications for user:', name)
     const notifications = await prisma.notification.findMany({
       where: {
         userName: name,
@@ -2235,6 +2480,7 @@ export async function getNotifications(
       orderBy: { createdAt: 'desc' },
       take: options?.limit || 50
     })
+    console.log('[Notifications] Found', notifications.length, 'notifications for', name)
 
     return { success: true, data: notifications }
   } catch (error) {
@@ -2336,14 +2582,17 @@ export async function createMentionNotifications(
   allUsers: Array<{ id: string; name: string }>
 ): Promise<ActionResult> {
   try {
-    // Extract mentions from note (format: @Name or @First Last)
-    const mentionRegex = /@(\w+(?:\s\w+)?)/g
+    // Extract mentions from note (format: @Name, @First Last, or @First van der Last)
+    // Supports Unicode letters and up to 4 words to handle Dutch names like "Jan de Vries"
+    const mentionRegex = /@([\p{L}\p{N}]+(?:\s[\p{L}\p{N}]+){0,3})/gu
     const mentions: string[] = []
     let match
     
     while ((match = mentionRegex.exec(noteContent)) !== null) {
-      mentions.push(match[1])
+      mentions.push(match[1].trim())
     }
+
+    console.log('[Notifications] Extracted mentions:', mentions, 'from:', noteContent.substring(0, 100))
 
     if (mentions.length === 0) {
       return { success: true, data: { notificationsCreated: 0 } }
@@ -2352,10 +2601,16 @@ export async function createMentionNotifications(
     // Find users that match the mentions
     const notificationsToCreate = []
     for (const mentionName of mentions) {
+      // Try exact match first, then starts-with, then contains
       const user = allUsers.find(u => 
-        u.name.toLowerCase() === mentionName.toLowerCase() ||
+        u.name.toLowerCase() === mentionName.toLowerCase()
+      ) || allUsers.find(u =>
         u.name.toLowerCase().startsWith(mentionName.toLowerCase())
+      ) || allUsers.find(u =>
+        mentionName.toLowerCase().startsWith(u.name.toLowerCase().split(' ')[0])
       )
+      
+      console.log('[Notifications] Matching mention:', mentionName, '-> found user:', user?.name || 'none')
       
       if (user && user.name !== fromUserName) {
         notificationsToCreate.push({
@@ -2373,9 +2628,13 @@ export async function createMentionNotifications(
 
     // Create all notifications
     if (notificationsToCreate.length > 0) {
+      console.log('[Notifications] Creating notifications for users:', notificationsToCreate.map(n => n.userName))
       await prisma.notification.createMany({
         data: notificationsToCreate
       })
+      console.log('[Notifications] Successfully created', notificationsToCreate.length, 'notifications')
+    } else {
+      console.log('[Notifications] No notifications to create. Users list:', allUsers.map(u => u.name))
     }
 
     return { success: true, data: { notificationsCreated: notificationsToCreate.length } }

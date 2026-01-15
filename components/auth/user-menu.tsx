@@ -1,9 +1,10 @@
 "use client"
 
+import { useState } from "react"
 import { useAuthStore } from "@/lib/auth"
 import { useWalkthroughStore } from "@/lib/walkthrough"
 import { useRouter } from "next/navigation"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import {
     DropdownMenu,
@@ -16,11 +17,14 @@ import {
 import { LogOut, Settings, ChevronUp, Sparkles, BookOpen } from "lucide-react"
 import { toast } from "sonner"
 import Link from "next/link"
+import { useSidebar } from "@/components/ui/sidebar"
 
 export function UserMenu() {
     const { currentUser, isAuthenticated, logout, isAdmin } = useAuthStore()
     const { startWalkthrough } = useWalkthroughStore()
     const router = useRouter()
+    const { setOpen, setLocked } = useSidebar()
+    const [dropdownOpen, setDropdownOpen] = useState(false)
 
     const handleLogout = () => {
         logout()
@@ -58,11 +62,23 @@ export function UserMenu() {
             ? 'Engineer' 
             : 'Viewer'
 
+    // Handle dropdown open/close and keep sidebar open while dropdown is open
+    const handleOpenChange = (open: boolean) => {
+        setDropdownOpen(open)
+        setLocked(open) // Lock sidebar open when dropdown is open
+        if (open) {
+            setOpen(true) // Ensure sidebar is expanded when dropdown opens
+        }
+    }
+
     return (
-        <DropdownMenu>
+        <DropdownMenu open={dropdownOpen} onOpenChange={handleOpenChange}>
             <DropdownMenuTrigger asChild>
                 <button className="flex items-center gap-3 w-full rounded-lg hover:bg-sidebar-accent transition-all duration-200 text-left group focus:outline-none focus-visible:ring-2 focus-visible:ring-ring group-data-[collapsible=icon]:justify-center p-2 group-data-[collapsible=icon]:p-1">
                     <Avatar className="h-9 w-9 shrink-0 ring-2 ring-sidebar-border transition-all duration-200 group-data-[collapsible=icon]:h-9 group-data-[collapsible=icon]:w-9">
+                        {currentUser.avatar && (
+                            <AvatarImage src={currentUser.avatar} alt={currentUser.name} />
+                        )}
                         <AvatarFallback className={currentUser.role === 'admin' 
                             ? 'bg-gradient-to-br from-amber-400 to-amber-600 text-white text-sm font-semibold'
                             : 'bg-gradient-to-br from-blue-400 to-blue-600 text-white text-sm font-semibold'
@@ -145,6 +161,9 @@ export function UserMenuCompact() {
     return (
         <div className="flex items-center gap-2">
             <Avatar className="h-8 w-8">
+                {currentUser.avatar && (
+                    <AvatarImage src={currentUser.avatar} alt={currentUser.name} />
+                )}
                 <AvatarFallback className={currentUser.role === 'admin' 
                     ? 'bg-gradient-to-br from-amber-400 to-amber-600 text-white text-xs font-semibold'
                     : 'bg-gradient-to-br from-blue-400 to-blue-600 text-white text-xs font-semibold'

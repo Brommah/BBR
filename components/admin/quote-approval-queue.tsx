@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar"
 import { 
     Dialog, 
     DialogContent, 
@@ -16,7 +17,7 @@ import {
 } from "@/components/ui/dialog"
 import { Separator } from "@/components/ui/separator"
 import { useLeadStore, QuoteLineItem } from "@/lib/store"
-import { useAuthStore } from "@/lib/auth"
+import { useAuthStore, useAllUsers } from "@/lib/auth"
 import { 
     CheckCircle2, 
     XCircle, 
@@ -47,7 +48,14 @@ interface ReviewDialogState {
 export function QuoteApprovalQueue() {
     const { leads, approveQuote, rejectQuote, isLoading } = useLeadStore()
     const { currentUser } = useAuthStore()
+    const { users } = useAllUsers()
     const [expandedId, setExpandedId] = useState<string | null>(null)
+    
+    // Helper to get user avatar
+    const getUserAvatar = (userName: string | undefined) => {
+        if (!userName) return undefined
+        return users.find(u => u.name === userName)?.avatar
+    }
     const [reviewDialog, setReviewDialog] = useState<ReviewDialogState>({
         isOpen: false,
         leadId: null,
@@ -209,8 +217,24 @@ export function QuoteApprovalQueue() {
                                                         </span>
                                                     </div>
                                                     <div className="flex items-center gap-2 shrink-0">
-                                                        <User className="w-4 h-4 text-muted-foreground hidden md:block" />
-                                                        <span className="text-sm text-muted-foreground hidden md:block">{lead.assignee || "Niet toegewezen"}</span>
+                                                        {lead.assignee ? (
+                                                            <>
+                                                                <Avatar className="w-5 h-5 hidden md:flex">
+                                                                    {getUserAvatar(lead.assignee) && (
+                                                                        <AvatarImage src={getUserAvatar(lead.assignee)} alt={lead.assignee} />
+                                                                    )}
+                                                                    <AvatarFallback className="text-[8px] bg-slate-200 dark:bg-slate-700">
+                                                                        {lead.assignee[0]}
+                                                                    </AvatarFallback>
+                                                                </Avatar>
+                                                                <span className="text-sm text-muted-foreground hidden md:block">{lead.assignee}</span>
+                                                            </>
+                                                        ) : (
+                                                            <>
+                                                                <User className="w-4 h-4 text-muted-foreground hidden md:block" />
+                                                                <span className="text-sm text-muted-foreground hidden md:block">Niet toegewezen</span>
+                                                            </>
+                                                        )}
                                                     </div>
                                                 </div>
 
@@ -417,9 +441,23 @@ export function QuoteApprovalQueue() {
                                     <span className="text-muted-foreground">Project</span>
                                     <span>{currentLead.projectType}</span>
                                 </div>
-                                <div className="flex justify-between text-sm">
+                                <div className="flex justify-between text-sm items-center">
                                     <span className="text-muted-foreground">Engineer</span>
-                                    <span>{currentLead.assignee || "Niet toegewezen"}</span>
+                                    {currentLead.assignee ? (
+                                        <span className="flex items-center gap-2">
+                                            <Avatar className="w-5 h-5">
+                                                {getUserAvatar(currentLead.assignee) && (
+                                                    <AvatarImage src={getUserAvatar(currentLead.assignee)} alt={currentLead.assignee} />
+                                                )}
+                                                <AvatarFallback className="text-[8px] bg-slate-200 dark:bg-slate-700">
+                                                    {currentLead.assignee[0]}
+                                                </AvatarFallback>
+                                            </Avatar>
+                                            {currentLead.assignee}
+                                        </span>
+                                    ) : (
+                                        <span>Niet toegewezen</span>
+                                    )}
                                 </div>
                                 <Separator />
                                 <div className="flex justify-between">

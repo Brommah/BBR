@@ -58,22 +58,27 @@ export function KeyboardShortcuts() {
     ]
 
     const handleKeyDown = useCallback((e: KeyboardEvent) => {
-        // Command/Ctrl + K for command palette
+        // Command/Ctrl + K for command palette (works everywhere)
         if ((e.metaKey || e.ctrlKey) && e.key === "k") {
             e.preventDefault()
             setIsOpen(prev => !prev)
             return
         }
 
-        // ? for shortcuts help
-        if (e.key === "?" && !e.metaKey && !e.ctrlKey) {
-            e.preventDefault()
-            setShowShortcutsHelp(true)
+        // Don't trigger shortcuts when typing in inputs, textareas, or contenteditable
+        const target = e.target as HTMLElement
+        if (
+            target instanceof HTMLInputElement || 
+            target instanceof HTMLTextAreaElement ||
+            target.isContentEditable
+        ) {
             return
         }
 
-        // Don't trigger shortcuts when typing in inputs
-        if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+        // ? for shortcuts help (only when not in input)
+        if (e.key === "?" && !e.metaKey && !e.ctrlKey) {
+            e.preventDefault()
+            setShowShortcutsHelp(true)
             return
         }
 

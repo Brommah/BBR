@@ -4,6 +4,7 @@ import { useState, useEffect, useTransition } from "react"
 import { Check, ChevronsUpDown, Loader2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar"
 import {
   Command,
   CommandEmpty,
@@ -26,6 +27,7 @@ interface Engineer {
   name: string
   email: string
   role: string
+  avatar?: string
 }
 
 export function AssigneeSelector({ leadId, currentAssignee }: { leadId: string, currentAssignee?: string }) {
@@ -98,10 +100,20 @@ export function AssigneeSelector({ leadId, currentAssignee }: { leadId: string, 
               <Loader2 className="h-3 w-3 animate-spin" />
               Toewijzen...
             </span>
-          ) : currentAssignee ? (
-            <span className="truncate">
-              {currentEngineer?.name || currentAssignee}
+          ) : currentAssignee && currentEngineer ? (
+            <span className="flex items-center gap-2 truncate">
+              <Avatar className="h-5 w-5">
+                {currentEngineer.avatar && (
+                  <AvatarImage src={currentEngineer.avatar} alt={currentEngineer.name} />
+                )}
+                <AvatarFallback className="text-[8px] bg-slate-200 dark:bg-slate-700">
+                  {currentEngineer.name[0]}
+                </AvatarFallback>
+              </Avatar>
+              {currentEngineer.name}
             </span>
+          ) : currentAssignee ? (
+            <span className="truncate">{currentAssignee}</span>
           ) : (
             <span className="text-muted-foreground">Selecteer Engineer...</span>
           )}
@@ -129,6 +141,14 @@ export function AssigneeSelector({ leadId, currentAssignee }: { leadId: string, 
                       currentAssignee === engineer.name ? "opacity-100" : "opacity-0"
                     )}
                   />
+                  <Avatar className="h-6 w-6 mr-2">
+                    {engineer.avatar && (
+                      <AvatarImage src={engineer.avatar} alt={engineer.name} />
+                    )}
+                    <AvatarFallback className="text-[10px] bg-slate-200 dark:bg-slate-700">
+                      {engineer.name[0]}
+                    </AvatarFallback>
+                  </Avatar>
                   <div className="flex flex-col">
                     <span className="font-medium">{engineer.name}</span>
                     <span className="text-xs text-muted-foreground">{engineer.email}</span>

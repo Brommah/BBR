@@ -6,9 +6,10 @@ import { QuoteApprovalQueue } from "@/components/admin/quote-approval-queue"
 import { NotionSyncPanel } from "@/components/admin/notion-sync-panel"
 import { CostDeterminationPanel } from "@/components/admin/cost-determination-panel"
 import { EmailAutomationPanel } from "@/components/admin/email-automation-panel"
+import { EmailTemplatesPanel } from "@/components/admin/email-templates-panel"
 import { ComponentErrorBoundary } from "@/components/error-boundary"
 import { useAuthStore } from "@/lib/auth"
-import { Euro, Users, Database, Mail, ClipboardCheck, FileText, Shield, Link2, Copy, Check, Settings, LayoutDashboard, ExternalLink } from "lucide-react"
+import { Euro, Users, Database, Mail, ClipboardCheck, FileText, Shield, Link2, Copy, Check, Settings, LayoutDashboard, ExternalLink, FileEdit } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -21,7 +22,8 @@ type AdminSection =
     | "goedkeuringen" 
     | "tarieven" 
     | "team-rechten" 
-    | "email-automations" 
+    | "email-automations"
+    | "email-templates"
     | "integraties"
     | "intake-formulier"
 
@@ -36,7 +38,8 @@ const adminSections: Array<{
     { id: "goedkeuringen", label: "Goedkeuringen", shortLabel: "Goedkeuringen", icon: ClipboardCheck, description: "Offerte approvals", category: "dashboard" },
     { id: "tarieven", label: "Tarieven", shortLabel: "Tarieven", icon: Euro, description: "Pricing & costs", category: "instellingen" },
     { id: "team-rechten", label: "Team & Rechten", shortLabel: "Team", icon: Users, description: "User permissions", category: "instellingen" },
-    { id: "email-automations", label: "Email Automations", shortLabel: "Email", icon: Mail, description: "Automated workflows", category: "instellingen" },
+    { id: "email-automations", label: "Email Automations", shortLabel: "Automations", icon: Mail, description: "Automated workflows", category: "instellingen" },
+    { id: "email-templates", label: "Email Templates", shortLabel: "Templates", icon: FileEdit, description: "Bewerkbare templates", category: "instellingen" },
     { id: "integraties", label: "Integraties", shortLabel: "Integraties", icon: Database, description: "Notion & APIs", category: "instellingen" },
     { id: "intake-formulier", label: "Intake Formulier", shortLabel: "Intake", icon: Link2, description: "Publiek aanvraagformulier", category: "instellingen" },
 ]
@@ -79,6 +82,8 @@ export function AdminDashboard() {
                 return <ComponentErrorBoundary><UserPermissionsTable /></ComponentErrorBoundary>
             case "email-automations":
                 return <ComponentErrorBoundary><EmailAutomationPanel /></ComponentErrorBoundary>
+            case "email-templates":
+                return <ComponentErrorBoundary><EmailTemplatesPanel /></ComponentErrorBoundary>
             case "integraties":
                 return <ComponentErrorBoundary><NotionSyncPanel /></ComponentErrorBoundary>
             case "intake-formulier":

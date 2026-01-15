@@ -10,9 +10,7 @@ import { GroundInvestigationPanel } from "@/components/lead-detail/ground-invest
 // NotesPanel merged into CommunicationPanel
 import { LocationCard } from "@/components/lead-detail/location-card"
 import { KadasterPanel } from "@/components/lead-detail/kadaster-panel"
-import { DimensionExtractorPanel } from "@/components/lead-detail/dimension-extractor-panel"
 import { ChecklistValidatorPanel } from "@/components/lead-detail/checklist-validator-panel"
-import { DocumentClassifierPanel } from "@/components/lead-detail/document-classifier-panel"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -39,7 +37,6 @@ import {
     ChevronLeft,
     MoreHorizontal,
     Pencil,
-    Sparkles,
     Building2,
     Calculator,
     User,
@@ -531,16 +528,6 @@ export default function LeadDetailPage() {
                                         <Clock className="w-4 h-4" />
                                         <span className="hidden lg:inline">Uren</span>
                                     </TabsTrigger>
-                                    
-                                    <div className="w-px h-6 bg-border/50 mx-2" />
-                                    
-                                    <TabsTrigger 
-                                        value="ai" 
-                                        className="data-[state=active]:bg-purple-50 dark:data-[state=active]:bg-purple-950/50 data-[state=active]:text-purple-700 dark:data-[state=active]:text-purple-300 rounded-lg px-4 gap-2 transition-all"
-                                    >
-                                        <Sparkles className="w-4 h-4" />
-                                        <span className="hidden lg:inline">AI</span>
-                                </TabsTrigger>
                             </TabsList>
                             </div>
                         </div>
@@ -550,14 +537,22 @@ export default function LeadDetailPage() {
                             <div className="h-full bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-border/50 overflow-hidden flex flex-col">
                                 <TabsContent value="communication" className="flex-1 min-h-0 m-0 p-4 flex flex-col overflow-hidden">
                             <CommunicationPanel 
-                                leadId={lead.id} 
+                                leadId={lead.id}
+                                leadName={lead.clientName}
                                 clientPhone={lead.clientPhone} 
                                 clientEmail={lead.clientEmail} 
                             />
                         </TabsContent>
                                 <TabsContent value="documents" className="h-full m-0 p-4 overflow-auto">
-                            <DocumentsPanel leadId={lead.id} />
-                        </TabsContent>
+                                    <div className="space-y-4">
+                                        <DocumentsPanel leadId={lead.id} />
+                                        <ChecklistValidatorPanel 
+                                            leadId={lead.id}
+                                            projectType={lead.projectType}
+                                            clientEmail={lead.clientEmail}
+                                        />
+                                    </div>
+                                </TabsContent>
                                 {showGroundTab && (
                                     <TabsContent value="ground" className="h-full m-0 p-4 overflow-auto">
                                 <GroundInvestigationPanel 
@@ -580,20 +575,6 @@ export default function LeadDetailPage() {
                                 <TabsContent value="hours" className="h-full m-0 p-4 overflow-auto">
                                     <HourRegistrationPanel leadId={lead.id} />
                                 </TabsContent>
-                                <TabsContent value="ai" className="h-full m-0 p-4 overflow-auto">
-                                    {/* AI Tools - Simple Stack */}
-                                    <div className="space-y-4">
-                                        <ChecklistValidatorPanel 
-                                            leadId={lead.id}
-                                            projectType={lead.projectType}
-                                            clientEmail={lead.clientEmail}
-                                        />
-                                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                                            <DimensionExtractorPanel leadId={lead.id} />
-                                            <DocumentClassifierPanel leadId={lead.id} />
-                                        </div>
-                                    </div>
-                        </TabsContent>
                             </div>
                         </div>
                     </Tabs>

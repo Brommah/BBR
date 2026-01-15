@@ -2,12 +2,14 @@
 
 import { useState, useRef, useEffect, useCallback } from "react"
 import { Textarea } from "@/components/ui/textarea"
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar"
 import { cn } from "@/lib/utils"
 
 interface User {
   id: string
   name: string
   role: string
+  avatar?: string
 }
 
 interface MentionInputProps {
@@ -177,16 +179,23 @@ export function MentionInput({
                 )}
                 onClick={() => insertMention(user)}
               >
-                <div className={cn(
-                  "w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-bold",
-                  user.role === 'admin' ? "bg-amber-500" : 
-                  user.role === 'engineer' ? "bg-blue-500" : "bg-slate-500"
-                )}>
-                  {user.name[0]}
-                </div>
+                <Avatar className="w-8 h-8">
+                  {user.avatar && (
+                    <AvatarImage src={user.avatar} alt={user.name} />
+                  )}
+                  <AvatarFallback className={cn(
+                    "text-white text-sm font-bold",
+                    user.role === 'admin' ? "bg-amber-500" : 
+                    user.role === 'engineer' ? "bg-blue-500" : "bg-slate-500"
+                  )}>
+                    {user.name[0]}
+                  </AvatarFallback>
+                </Avatar>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium truncate">{user.name}</p>
-                  <p className="text-xs text-muted-foreground capitalize">{user.role}</p>
+                  <p className="text-xs text-muted-foreground capitalize">
+                    {user.role === 'admin' ? 'Admin' : user.role === 'engineer' ? 'Engineer' : 'Viewer'}
+                  </p>
                 </div>
               </button>
             ))}
@@ -230,14 +239,17 @@ export function MentionText({ text, className }: { text: string; className?: str
 
 /**
  * Extract mentioned usernames from text
+ * Supports multi-word names (up to 4 words) and Unicode characters
  */
 export function extractMentions(text: string): string[] {
-  const mentionRegex = /@(\w+(?:\s\w+)?)/g
+  // Match @ followed by 1-4 words (supporting Unicode letters)
+  // This handles names like "Jan de Vries" or "Maria van der Berg"
+  const mentionRegex = /@([\p{L}\p{N}]+(?:\s[\p{L}\p{N}]+){0,3})/gu
   const mentions: string[] = []
   let match
   
   while ((match = mentionRegex.exec(text)) !== null) {
-    mentions.push(match[1])
+    mentions.push(match[1].trim())
   }
   
   return mentions

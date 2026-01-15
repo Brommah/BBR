@@ -4,12 +4,14 @@ import { useDraggable } from "@dnd-kit/core"
 import { Lead } from "@/lib/store"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar"
 import { MapPin, User, Clock, AlertCircle, CheckCircle2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useRouter } from "next/navigation"
 import { useState, useEffect } from "react"
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip"
 import { getProjectTypeColor, getAssigneeColor } from "./pipeline-legend"
+import { useAllUsers } from "@/lib/auth"
 
 interface LeadCardProps {
   lead: Lead
@@ -99,11 +101,16 @@ const STATUS_CONFIG: Record<string, {
 
 export function LeadCard({ lead }: LeadCardProps) {
   const router = useRouter()
+  const { users } = useAllUsers()
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: lead.id,
   })
   
   const [hoursSince, setHoursSince] = useState(0)
+  
+  // Find assignee's avatar from users list
+  const assigneeUser = users.find(u => u.name === lead.assignee)
+  const assigneeAvatar = assigneeUser?.avatar
 
   useEffect(() => {
     const hours = (Date.now() - new Date(lead.createdAt).getTime()) / (1000 * 60 * 60)
@@ -247,17 +254,22 @@ export function LeadCard({ lead }: LeadCardProps) {
                   )
                 )}
 
-                {/* Assignee avatar with consistent colors */}
+                {/* Assignee avatar with profile picture */}
                 {lead.assignee ? (
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <div className={cn(
-                        "avatar-sm",
-                        assigneeColors.bg,
-                        assigneeColors.text
-                      )}>
-                        {lead.assignee[0]}
-                      </div>
+                      <Avatar className="w-6 h-6">
+                        {assigneeAvatar && (
+                          <AvatarImage src={assigneeAvatar} alt={lead.assignee} />
+                        )}
+                        <AvatarFallback className={cn(
+                          "text-[10px] font-bold",
+                          assigneeColors.bg,
+                          assigneeColors.text
+                        )}>
+                          {lead.assignee[0]}
+                        </AvatarFallback>
+                      </Avatar>
                     </TooltipTrigger>
                     <TooltipContent>
                       <p>Toegewezen aan {lead.assignee}</p>
@@ -266,9 +278,11 @@ export function LeadCard({ lead }: LeadCardProps) {
                 ) : (
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <div className="avatar-sm bg-slate-200 dark:bg-slate-700" aria-label="Niet toegewezen">
-                        <User className="w-3 h-3 text-slate-500" aria-hidden="true" />
-                      </div>
+                      <Avatar className="w-6 h-6">
+                        <AvatarFallback className="bg-slate-200 dark:bg-slate-700">
+                          <User className="w-3 h-3 text-slate-500" aria-hidden="true" />
+                        </AvatarFallback>
+                      </Avatar>
                     </TooltipTrigger>
                     <TooltipContent>
                       <p>Niet toegewezen</p>

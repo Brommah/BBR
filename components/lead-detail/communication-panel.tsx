@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar"
 import {
     Phone,
     Mail,
@@ -27,7 +28,7 @@ import { format } from "date-fns"
 import { nl } from "date-fns/locale"
 import { cn } from "@/lib/utils"
 import { useCurrentUser, useAllUsers } from "@/lib/auth"
-import { getCommunications, createCommunication, addNote, getNotes, deleteNote } from "@/lib/db-actions"
+import { getCommunications, createCommunication, addNote, getNotes, deleteNote, createMentionNotifications } from "@/lib/db-actions"
 import { MentionInput, MentionText, extractMentions } from "@/components/ui/mention-input"
 
 /** Unified entry type for both notes and communications */
@@ -47,12 +48,16 @@ const authorColors: Record<string, string> = {
     "Angelo": "bg-blue-600",
     "Venka": "bg-purple-600",
     "Roina": "bg-emerald-600",
+    "Cathleen Broersma": "bg-amber-600",
+    "CF Broersma": "bg-teal-600",
+    "Martijn Broersma": "bg-indigo-600",
     "Martijn": "bg-amber-600",
     "System": "bg-slate-500",
 }
 
 interface CommunicationPanelProps {
     leadId: string
+    leadName?: string
     clientPhone?: string
     clientEmail?: string
 }
@@ -61,7 +66,7 @@ interface CommunicationPanelProps {
  * Unified Communication & Notes Panel
  * Combines notes (with @mentions) and communications (calls, emails, WhatsApp) in a single view.
  */
-export function CommunicationPanel({ leadId, clientPhone, clientEmail }: CommunicationPanelProps) {
+export function CommunicationPanel({ leadId, leadName, clientPhone, clientEmail }: CommunicationPanelProps) {
     const currentUser = useCurrentUser()
     const { users } = useAllUsers()
     const [communications, setCommunications] = useState<CommunicationEntry[]>([])
@@ -81,9 +86,9 @@ export function CommunicationPanel({ leadId, clientPhone, clientEmail }: Communi
     // Check if current user is admin
     const isAdmin = currentUser?.role === 'admin'
 
-    // Format users for mention input
+    // Format users for mention input (including avatars)
     const mentionableUsers = useMemo(() => 
-        users.map(u => ({ id: u.id, name: u.name, role: u.role })),
+        users.map(u => ({ id: u.id, name: u.name, role: u.role, avatar: u.avatar })),
         [users]
     )
 
@@ -237,13 +242,29 @@ export function CommunicationPanel({ leadId, clientPhone, clientEmail }: Communi
                 }
                 setCommunications([entry, ...communications])
                 
-                // Check for mentions and notify
+                // Check for mentions and create real notifications
                 const mentions = extractMentions(newNote)
-                if (mentions.length > 0) {
-                    const mentionedNames = mentions.join(', ')
-                    toast.success("Notitie toegevoegd", {
-                        description: `${mentionedNames} zal een notificatie ontvangen.`
-                    })
+                if (mentions.length > 0 && users.length > 0) {
+                    const notifResult = await createMentionNotifications(
+                        newNote,
+                        leadId,
+                        leadName || 'Project',
+                        currentUser.name,
+                        users.map(u => ({ id: u.id, name: u.name }))
+                    )
+                    
+                    if (notifResult.success) {
+                        const count = (notifResult.data as { notificationsCreated: number })?.notificationsCreated || 0
+                        if (count > 0) {
+                            toast.success("Notitie toegevoegd", {
+                                description: `${count} melding${count !== 1 ? 'en' : ''} verzonden.`
+                            })
+                        } else {
+                            toast.success("Notitie toegevoegd")
+                        }
+                    } else {
+                        toast.success("Notitie toegevoegd")
+                    }
                 } else {
                     toast.success("Notitie toegevoegd")
                 }
@@ -279,49 +300,6 @@ export function CommunicationPanel({ leadId, clientPhone, clientEmail }: Communi
             toast.error("Fout bij verwijderen notitie")
         } finally {
             setDeletingNoteId(null)
-        }
-    }
-
-    /** Quick action to start a call */
-    const handleQuickCall = async () => {
-        if (!currentUser) return
-
-        const result = await createCommunication({
-            leadId,
-            type: 'call',
-            direction: 'outbound',
-            content: 'Gesprek gestart...',
-            author: currentUser.name
-        })
-
-        if (result.success) {
-            const entry: CommunicationEntry = {
-                id: `call-${Date.now()}`,
-                type: "call",
-                direction: "outbound",
-                content: "Gesprek gestart...",
-                timestamp: new Date().toISOString(),
-                author: currentUser.name,
-                duration: 0
-            }
-            setCommunications([entry, ...communications])
-        }
-
-        if (clientPhone) {
-            window.open(`tel:${clientPhone}`, '_self')
-        }
-        toast.success("Gesprek geregistreerd", {
-            description: clientPhone ? `Bellen naar ${clientPhone}` : 'Gesprek gelogd'
-        })
-    }
-
-    /** Quick action to open email client */
-    const handleQuickEmail = () => {
-        if (clientEmail) {
-            window.open(`mailto:${clientEmail}`, '_blank')
-            toast.success("E-mail client geopend", {
-                description: `Mailen naar ${clientEmail}`
-            })
         }
     }
 
@@ -368,7 +346,6 @@ export function CommunicationPanel({ leadId, clientPhone, clientEmail }: Communi
 
     // Count items per type for badges
     const noteCount = communications.filter(c => c.type === 'note').length
-    const callCount = communications.filter(c => c.type === 'call').length
     const emailCount = communications.filter(c => c.type === 'email' || c.type === 'whatsapp').length
 
     if (isLoading) {
@@ -419,36 +396,11 @@ export function CommunicationPanel({ leadId, clientPhone, clientEmail }: Communi
                         </Button>
                     </div>
 
-                    {/* Quick Actions */}
-                    <div className="flex gap-2 mt-2">
-                        <Button
-                            size="sm"
-                            variant="outline"
-                            className="flex-1 gap-2 h-8"
-                            onClick={handleQuickCall}
-                            disabled={!clientPhone}
-                        >
-                            <Phone className="w-3 h-3" />
-                            Bellen
-                        </Button>
-                        <Button
-                            size="sm"
-                            variant="outline"
-                            className="flex-1 gap-2 h-8"
-                            onClick={handleQuickEmail}
-                            disabled={!clientEmail}
-                        >
-                            <Mail className="w-3 h-3" />
-                            E-mail
-                        </Button>
-                    </div>
-
                     {/* Filter Tabs */}
                     <div className="flex gap-1 mt-2">
                         {[
                             { key: "all", label: "Alles", count: communications.length },
                             { key: "note", label: "Notities", count: noteCount },
-                            { key: "call", label: "Gesprekken", count: callCount },
                             { key: "email", label: "E-mails", count: emailCount }
                         ].map(f => (
                             <Button
@@ -472,14 +424,30 @@ export function CommunicationPanel({ leadId, clientPhone, clientEmail }: Communi
                 {/* Communication & Notes List */}
                 <ScrollArea className="flex-1 min-h-0">
                     <CardContent className="pt-0 space-y-1">
-                        {filteredCommunications.map((entry) => (
+                        {filteredCommunications.map((entry) => {
+                            // Find user's avatar from users list
+                            const authorUser = users.find(u => u.name === entry.author)
+                            const authorAvatar = authorUser?.avatar
+                            // Check if this is a system/automated entry
+                            const isSystemEntry = ['Systeem', 'System', 'Website Intake', 'Receptie', 'Admin', 'Broersma Bouwadvies'].some(
+                                s => entry.author.toLowerCase().includes(s.toLowerCase())
+                            )
+                            
+                            return (
                             <div key={entry.id} className="flex items-start gap-3 py-2">
-                                <div className={cn(
-                                    "w-8 h-8 rounded-full text-white flex items-center justify-center text-xs font-bold flex-shrink-0 shadow-sm",
-                                    authorColors[entry.author] || "bg-slate-600"
-                                )}>
-                                    {entry.author[0]}
-                                </div>
+                                <Avatar className="w-8 h-8 flex-shrink-0 shadow-sm">
+                                    {isSystemEntry ? (
+                                        <AvatarImage src="/branding/logo-white-gold.png" alt={entry.author} className="object-cover bg-slate-700 p-1" />
+                                    ) : authorAvatar ? (
+                                        <AvatarImage src={authorAvatar} alt={entry.author} />
+                                    ) : null}
+                                    <AvatarFallback className={cn(
+                                        "text-white text-xs font-bold",
+                                        isSystemEntry ? "bg-slate-700" : (authorColors[entry.author] || "bg-slate-600")
+                                    )}>
+                                        {isSystemEntry ? "BB" : entry.author[0]}
+                                    </AvatarFallback>
+                                </Avatar>
                                 <div className="flex-1 min-w-0">
                                     <div className="flex items-center gap-2 mb-1">
                                         <span className="text-sm font-semibold text-foreground">
@@ -526,7 +494,7 @@ export function CommunicationPanel({ leadId, clientPhone, clientEmail }: Communi
                                     </div>
                                 </div>
                             </div>
-                        ))}
+                        )})}
 
                         {filteredCommunications.length === 0 && (
                             <div className="text-center py-8 text-muted-foreground">
