@@ -328,38 +328,43 @@ async function getCurrentPipelineDistribution(): Promise<PipelineDistribution> {
  * Get all dashboard analytics
  */
 export async function getDashboardAnalytics(): Promise<DashboardAnalytics> {
-  const [pipelineData, pipelineDistribution, conversionTime, revenueData, employeeHours] = await Promise.all([
-    getWeeklyPipelineData(3),
-    getCurrentPipelineDistribution(),
-    getConversionTimeData(),
-    getWeeklyRevenueData(3),
-    getEmployeeHoursData(),
-  ])
-  
-  // Calculate totals
-  const totalLeads = await prisma.lead.count({
-    where: { deletedAt: null },
-  })
-  
-  const completedLeads = await prisma.lead.count({
-    where: { status: 'Opdracht', deletedAt: null },
-  })
-  
-  const totalRevenue = revenueData.reduce((sum, w) => sum + w.revenue, 0)
-  const totalHours = employeeHours.reduce((sum, e) => sum + e.hours, 0)
-  const conversionRate = totalLeads > 0 ? (completedLeads / totalLeads) * 100 : 0
-  
-  return {
-    pipelineData,
-    pipelineDistribution,
-    conversionTime,
-    revenueData,
-    employeeHours,
-    totals: {
-      totalLeads,
-      totalRevenue,
-      totalHours: Math.round(totalHours),
-      conversionRate: Math.round(conversionRate * 10) / 10,
-    },
+  try {
+    const [pipelineData, pipelineDistribution, conversionTime, revenueData, employeeHours] = await Promise.all([
+      getWeeklyPipelineData(3).catch(e => { console.error('getWeeklyPipelineData failed:', e); return [] }),
+      getCurrentPipelineDistribution().catch(e => { console.error('getCurrentPipelineDistribution failed:', e); return { Nieuw: 0, Calculatie: 0, OfferteVerzonden: 0, Opdracht: 0 } }),
+      getConversionTimeData().catch(e => { console.error('getConversionTimeData failed:', e); return { current: 0, previous: 0, trend: 0, history: [] } }),
+      getWeeklyRevenueData(3).catch(e => { console.error('getWeeklyRevenueData failed:', e); return [] }),
+      getEmployeeHoursData().catch(e => { console.error('getEmployeeHoursData failed:', e); return [] }),
+    ])
+    
+    // Calculate totals
+    const totalLeads = await prisma.lead.count({
+      where: { deletedAt: null },
+    }).catch(e => { console.error('totalLeads count failed:', e); return 0 })
+    
+    const completedLeads = await prisma.lead.count({
+      where: { status: 'Opdracht', deletedAt: null },
+    }).catch(e => { console.error('completedLeads count failed:', e); return 0 })
+    
+    const totalRevenue = revenueData.reduce((sum, w) => sum + w.revenue, 0)
+    const totalHours = employeeHours.reduce((sum, e) => sum + e.hours, 0)
+    const conversionRate = totalLeads > 0 ? (completedLeads / totalLeads) * 100 : 0
+    
+    return {
+      pipelineData,
+      pipelineDistribution,
+      conversionTime,
+      revenueData,
+      employeeHours,
+      totals: {
+        totalLeads,
+        totalRevenue,
+        totalHours: Math.round(totalHours),
+        conversionRate: Math.round(conversionRate * 10) / 10,
+      },
+    }
+  } catch (error) {
+    console.error('getDashboardAnalytics failed overall:', error)
+    throw error
   }
 }
