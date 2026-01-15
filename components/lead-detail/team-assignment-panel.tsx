@@ -284,10 +284,7 @@ export function TeamAssignmentPanel({
                           {pl.name[0]}
                         </AvatarFallback>
                       </Avatar>
-                      <div className="flex flex-col">
-                        <span className="font-medium">{pl.name}</span>
-                        <span className="text-xs text-muted-foreground">{pl.email}</span>
-                      </div>
+                      <span className="font-medium">{pl.name}</span>
                     </CommandItem>
                   ))}
                 </CommandGroup>
@@ -371,10 +368,7 @@ export function TeamAssignmentPanel({
                           {engineer.name[0]}
                         </AvatarFallback>
                       </Avatar>
-                      <div className="flex flex-col">
-                        <span className="font-medium">{engineer.name}</span>
-                        <span className="text-xs text-muted-foreground">{engineer.email}</span>
-                      </div>
+                      <span className="font-medium">{engineer.name}</span>
                     </CommandItem>
                   ))}
                 </CommandGroup>
@@ -458,10 +452,7 @@ export function TeamAssignmentPanel({
                           {engineer.name[0]}
                         </AvatarFallback>
                       </Avatar>
-                      <div className="flex flex-col">
-                        <span className="font-medium">{engineer.name}</span>
-                        <span className="text-xs text-muted-foreground">{engineer.email}</span>
-                      </div>
+                      <span className="font-medium">{engineer.name}</span>
                     </CommandItem>
                   ))}
                 </CommandGroup>
