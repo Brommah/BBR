@@ -38,11 +38,8 @@ import {
     Pencil,
     Building2,
     Calculator,
-    User,
-    MapPin,
     Settings,
     ExternalLink,
-    Copy,
     Archive,
     Trash2,
     Share2,
@@ -50,7 +47,7 @@ import {
     CircleDot
 } from "lucide-react"
 import Link from "next/link"
-import { useState, useEffect, useTransition, useRef } from "react"
+import { useState, useEffect, useTransition } from "react"
 import { getLead } from "@/lib/db-actions"
 import { requiresGroundInvestigation } from "@/lib/project-utils"
 import { TeamAssignmentPanel } from "@/components/lead-detail/team-assignment-panel"

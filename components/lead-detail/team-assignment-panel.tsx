@@ -27,7 +27,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { useLeadStore, AanZet } from "@/lib/store"
-import { getUsers, getUsersByEngineerType } from "@/lib/db-actions"
+import { getUsers } from "@/lib/db-actions"
 import { useAuthStore, ENGINEER_TYPE_DISPLAY_NAMES } from "@/lib/auth"
 import { toast } from "sonner"
 
@@ -42,8 +42,8 @@ interface Engineer {
 
 interface TeamAssignmentPanelProps {
   leadId: string
-  assignedRekenaar?: string
-  assignedTekenaar?: string
+  assignedRekenaar?: string | null
+  assignedTekenaar?: string | null
   aanZet?: AanZet
 }
 
@@ -57,8 +57,7 @@ export function TeamAssignmentPanel({
   assignedTekenaar,
   aanZet 
 }: TeamAssignmentPanelProps) {
-  const [rekenaars, setRekenaars] = useState<Engineer[]>([])
-  const [tekenaars, setTekenaars] = useState<Engineer[]>([])
+  const [engineers, setEngineers] = useState<Engineer[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [isPending, startTransition] = useTransition()
   const [rekenaarOpen, setRekenaarOpen] = useState(false)
@@ -70,17 +69,16 @@ export function TeamAssignmentPanel({
   // Only Projectleider can assign
   const canAssign = isAdmin()
 
-  // Fetch engineers from database
+  // Fetch all engineers from database
   useEffect(() => {
     async function loadEngineers() {
       setIsLoading(true)
       try {
-        // Get all users and filter by engineer type
-        const result = await getUsers()
+        // Get all engineers (role='engineer')
+        const result = await getUsers('engineer')
         if (result.success && result.data) {
           const users = result.data as Engineer[]
-          setRekenaars(users.filter(u => u.engineerType === 'rekenaar'))
-          setTekenaars(users.filter(u => u.engineerType === 'tekenaar'))
+          setEngineers(users)
         } else {
           console.error('[TeamAssignment] Failed to load engineers:', result.error)
           toast.error("Kon teamleden niet laden")
@@ -136,8 +134,8 @@ export function TeamAssignmentPanel({
     })
   }
 
-  const currentRekenaar = rekenaars.find(e => e.name === assignedRekenaar)
-  const currentTekenaar = tekenaars.find(e => e.name === assignedTekenaar)
+  const currentRekenaar = engineers.find(e => e.name === assignedRekenaar)
+  const currentTekenaar = engineers.find(e => e.name === assignedTekenaar)
 
   if (!canAssign) {
     // Read-only view for non-admins
@@ -227,13 +225,13 @@ export function TeamAssignmentPanel({
           </PopoverTrigger>
           <PopoverContent className="w-[250px] p-0">
             <Command>
-              <CommandInput placeholder="Zoek rekenaar..." />
+              <CommandInput placeholder="Zoek engineer..." />
               <CommandList>
                 <CommandEmpty>
-                  {isLoading ? "Laden..." : "Geen rekenaars gevonden."}
+                  {isLoading ? "Laden..." : "Geen engineers gevonden."}
                 </CommandEmpty>
                 <CommandGroup>
-                  {rekenaars.map((engineer) => (
+                  {engineers.map((engineer) => (
                     <CommandItem
                       key={engineer.id}
                       value={engineer.name}
@@ -314,13 +312,13 @@ export function TeamAssignmentPanel({
           </PopoverTrigger>
           <PopoverContent className="w-[250px] p-0">
             <Command>
-              <CommandInput placeholder="Zoek tekenaar..." />
+              <CommandInput placeholder="Zoek engineer..." />
               <CommandList>
                 <CommandEmpty>
-                  {isLoading ? "Laden..." : "Geen tekenaars gevonden."}
+                  {isLoading ? "Laden..." : "Geen engineers gevonden."}
                 </CommandEmpty>
                 <CommandGroup>
-                  {tekenaars.map((engineer) => (
+                  {engineers.map((engineer) => (
                     <CommandItem
                       key={engineer.id}
                       value={engineer.name}

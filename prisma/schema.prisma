@@ -130,6 +130,7 @@ model Note {
   lead      Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
   content   String
   author    String
+  reactions Json?    // Emoji reactions: { "👍": ["User1", "User2"], "❤️": ["User3"] }
   createdAt DateTime @default(now())
 }
 

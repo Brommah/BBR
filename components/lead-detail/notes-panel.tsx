@@ -1,22 +1,37 @@
 "use client"
 
 import { Button } from "@/components/ui/button"
-import { Send, Loader2, AtSign, Paperclip } from "lucide-react"
+import { Send, Loader2, AtSign, Paperclip, SmilePlus } from "lucide-react"
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar"
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect, useMemo, useTransition } from "react"
 import { cn } from "@/lib/utils"
-import { getNotes, addNote, createMentionNotifications } from "@/lib/db-actions"
+import { getNotes, addNote, createMentionNotifications, toggleNoteReaction } from "@/lib/db-actions"
 import { useCurrentUser, useAllUsers } from "@/lib/auth"
 import { toast } from "sonner"
 import { format } from "date-fns"
 import { nl } from "date-fns/locale"
 import { MentionInput, MentionText, extractMentions } from "@/components/ui/mention-input"
+import {
+    Popover,
+    PopoverContent,
+    PopoverTrigger,
+} from "@/components/ui/popover"
+import {
+    Tooltip,
+    TooltipContent,
+    TooltipProvider,
+    TooltipTrigger,
+} from "@/components/ui/tooltip"
+
+// WhatsApp-style emoji reactions
+const REACTION_EMOJIS = ["👍", "❤️", "😂", "😮", "😢", "🙏"]
 
 interface Note {
     id: string
     author: string
     content: string
     createdAt: string
+    reactions?: Record<string, string[]> | null
     isSystem?: boolean
 }
 
@@ -41,6 +56,8 @@ export function NotesPanel({ leadId, leadName }: NotesPanelProps) {
     const [newNote, setNewNote] = useState("")
     const [isLoading, setIsLoading] = useState(true)
     const [isSaving, setIsSaving] = useState(false)
+    const [reactionPickerOpen, setReactionPickerOpen] = useState<string | null>(null)
+    const [isPendingReaction, startReactionTransition] = useTransition()
     const currentUser = useCurrentUser()
     const { users } = useAllUsers()
 
@@ -49,6 +66,50 @@ export function NotesPanel({ leadId, leadName }: NotesPanelProps) {
         users.map(u => ({ id: u.id, name: u.name, role: u.role, avatar: u.avatar })),
         [users]
     )
+
+    // Handle adding/removing a reaction
+    const handleReaction = async (noteId: string, emoji: string) => {
+        if (!currentUser?.name) return
+        
+        // Optimistic update
+        setNotes(prevNotes => prevNotes.map(note => {
+            if (note.id !== noteId) return note
+            
+            const reactions = { ...(note.reactions || {}) }
+            const currentReactors = reactions[emoji] || []
+            const hasReacted = currentReactors.includes(currentUser.name)
+            
+            if (hasReacted) {
+                reactions[emoji] = currentReactors.filter(name => name !== currentUser.name)
+                if (reactions[emoji].length === 0) {
+                    delete reactions[emoji]
+                }
+            } else {
+                reactions[emoji] = [...currentReactors, currentUser.name]
+            }
+            
+            return { 
+                ...note, 
+                reactions: Object.keys(reactions).length > 0 ? reactions : null 
+            }
+        }))
+        
+        setReactionPickerOpen(null)
+        
+        // Server update
+        startReactionTransition(async () => {
+            const result = await toggleNoteReaction(noteId, emoji, currentUser.name)
+            if (!result.success) {
+                // Revert on error
+                toast.error("Kon reactie niet opslaan")
+                // Reload notes to get correct state
+                const notesResult = await getNotes(leadId)
+                if (notesResult.success && notesResult.data) {
+                    setNotes(notesResult.data as Note[])
+                }
+            }
+        })
+    }
 
     // Fetch notes from database
     useEffect(() => {
@@ -222,8 +283,90 @@ export function NotesPanel({ leadId, leadName }: NotesPanelProps) {
                                                 {formatTimestamp(note.createdAt)}
                                             </span>
                                         </div>
-                                        <div className="text-sm text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 p-3 rounded-lg border border-slate-200 dark:border-slate-700 leading-relaxed">
-                                            <MentionText text={note.content} />
+                                        <div className="relative group/note">
+                                            <div className="text-sm text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 p-3 rounded-lg border border-slate-200 dark:border-slate-700 leading-relaxed">
+                                                <MentionText text={note.content} />
+                                            </div>
+                                            
+                                            {/* Reaction button - appears on hover */}
+                                            <Popover 
+                                                open={reactionPickerOpen === note.id} 
+                                                onOpenChange={(open) => setReactionPickerOpen(open ? note.id : null)}
+                                            >
+                                                <PopoverTrigger asChild>
+                                                    <button
+                                                        className={cn(
+                                                            "absolute -right-2 -top-2 p-1.5 rounded-full bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 shadow-sm transition-all duration-200",
+                                                            "opacity-0 group-hover/note:opacity-100 hover:scale-110 hover:bg-slate-50 dark:hover:bg-slate-600",
+                                                            reactionPickerOpen === note.id && "opacity-100"
+                                                        )}
+                                                        title="Reageer met emoji"
+                                                    >
+                                                        <SmilePlus className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />
+                                                    </button>
+                                                </PopoverTrigger>
+                                                <PopoverContent 
+                                                    className="w-auto p-2" 
+                                                    side="top" 
+                                                    align="end"
+                                                    sideOffset={8}
+                                                >
+                                                    <div className="flex gap-1">
+                                                        {REACTION_EMOJIS.map((emoji) => {
+                                                            const hasReacted = note.reactions?.[emoji]?.includes(currentUser?.name || '')
+                                                            return (
+                                                                <button
+                                                                    key={emoji}
+                                                                    onClick={() => handleReaction(note.id, emoji)}
+                                                                    className={cn(
+                                                                        "p-2 text-xl rounded-lg transition-all hover:scale-125 hover:bg-slate-100 dark:hover:bg-slate-700",
+                                                                        hasReacted && "bg-blue-100 dark:bg-blue-900/30"
+                                                                    )}
+                                                                    disabled={isPendingReaction}
+                                                                >
+                                                                    {emoji}
+                                                                </button>
+                                                            )
+                                                        })}
+                                                    </div>
+                                                </PopoverContent>
+                                            </Popover>
+                                            
+                                            {/* Display existing reactions */}
+                                            {note.reactions && Object.keys(note.reactions).length > 0 && (
+                                                <TooltipProvider delayDuration={200}>
+                                                    <div className="flex flex-wrap gap-1 mt-2">
+                                                        {Object.entries(note.reactions).map(([emoji, reactors]) => {
+                                                            const hasReacted = reactors.includes(currentUser?.name || '')
+                                                            return (
+                                                                <Tooltip key={emoji}>
+                                                                    <TooltipTrigger asChild>
+                                                                        <button
+                                                                            onClick={() => handleReaction(note.id, emoji)}
+                                                                            className={cn(
+                                                                                "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium transition-all",
+                                                                                "border hover:scale-105",
+                                                                                hasReacted 
+                                                                                    ? "bg-blue-100 dark:bg-blue-900/40 border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300"
+                                                                                    : "bg-slate-100 dark:bg-slate-700 border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600"
+                                                                            )}
+                                                                            disabled={isPendingReaction}
+                                                                        >
+                                                                            <span className="text-sm">{emoji}</span>
+                                                                            <span>{reactors.length}</span>
+                                                                        </button>
+                                                                    </TooltipTrigger>
+                                                                    <TooltipContent side="bottom" className="max-w-[200px]">
+                                                                        <p className="text-xs">
+                                                                            {reactors.join(', ')}
+                                                                        </p>
+                                                                    </TooltipContent>
+                                                                </Tooltip>
+                                                            )
+                                                        })}
+                                                    </div>
+                                                </TooltipProvider>
+                                            )}
                                         </div>
                                     </div>
                                 </div>

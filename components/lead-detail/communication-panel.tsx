@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect, useMemo, useTransition } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -12,6 +12,17 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar"
 import {
+    Popover,
+    PopoverContent,
+    PopoverTrigger,
+} from "@/components/ui/popover"
+import {
+    Tooltip,
+    TooltipContent,
+    TooltipProvider,
+    TooltipTrigger,
+} from "@/components/ui/tooltip"
+import {
     Phone,
     Mail,
     MessageSquare,
@@ -22,14 +33,18 @@ import {
     Paperclip,
     StickyNote,
     Trash2,
+    SmilePlus,
 } from "lucide-react"
 import { toast } from "sonner"
 import { format } from "date-fns"
 import { nl } from "date-fns/locale"
 import { cn } from "@/lib/utils"
 import { useCurrentUser, useAllUsers } from "@/lib/auth"
-import { getCommunications, createCommunication, addNote, getNotes, deleteNote, createMentionNotifications } from "@/lib/db-actions"
+import { getCommunications, createCommunication, addNote, getNotes, deleteNote, createMentionNotifications, toggleNoteReaction } from "@/lib/db-actions"
 import { MentionInput, MentionText, extractMentions } from "@/components/ui/mention-input"
+
+// WhatsApp-style emoji reactions
+const REACTION_EMOJIS = ["👍", "❤️", "😂", "😮", "😢", "🙏"]
 
 /** Unified entry type for both notes and communications */
 interface CommunicationEntry {
@@ -41,6 +56,7 @@ interface CommunicationEntry {
     timestamp: string
     author: string
     duration?: number // for calls, in seconds
+    reactions?: Record<string, string[]> | null // emoji reactions (notes only)
 }
 
 /** Avatar color mapping for consistent engineer colors */
@@ -82,9 +98,79 @@ export function CommunicationPanel({ leadId, leadName, clientPhone, clientEmail 
         subject: ""
     })
     const [deletingNoteId, setDeletingNoteId] = useState<string | null>(null)
+    const [reactionPickerOpen, setReactionPickerOpen] = useState<string | null>(null)
+    const [isPendingReaction, startReactionTransition] = useTransition()
 
     // Check if current user is admin
     const isAdmin = currentUser?.role === 'admin'
+
+    // Handle adding/removing a reaction on a note
+    const handleReaction = async (noteId: string, emoji: string) => {
+        if (!currentUser?.name) return
+        
+        // Optimistic update
+        setCommunications(prevComms => prevComms.map(entry => {
+            if (entry.id !== noteId || entry.type !== 'note') return entry
+            
+            const reactions = { ...(entry.reactions || {}) }
+            const currentReactors = reactions[emoji] || []
+            const hasReacted = currentReactors.includes(currentUser.name)
+            
+            if (hasReacted) {
+                reactions[emoji] = currentReactors.filter(name => name !== currentUser.name)
+                if (reactions[emoji].length === 0) {
+                    delete reactions[emoji]
+                }
+            } else {
+                reactions[emoji] = [...currentReactors, currentUser.name]
+            }
+            
+            return { 
+                ...entry, 
+                reactions: Object.keys(reactions).length > 0 ? reactions : null 
+            }
+        }))
+        
+        setReactionPickerOpen(null)
+        
+        // Server update
+        startReactionTransition(async () => {
+            const result = await toggleNoteReaction(noteId, emoji, currentUser.name)
+            if (!result.success) {
+                // Revert on error - reload communications
+                toast.error("Kon reactie niet opslaan")
+                const [commsResult, notesResult] = await Promise.all([
+                    getCommunications(leadId),
+                    getNotes(leadId)
+                ])
+                // Rebuild communications list
+                const comms: CommunicationEntry[] = []
+                if (commsResult.success && commsResult.data) {
+                    const commsData = commsResult.data as Array<{
+                        id: string; type: string; direction: string; subject?: string;
+                        content: string; createdAt: string; author: string; duration?: number
+                    }>
+                    comms.push(...commsData.map(c => ({
+                        id: c.id, type: c.type as "call" | "email" | "whatsapp",
+                        direction: c.direction as "inbound" | "outbound", subject: c.subject,
+                        content: c.content, timestamp: c.createdAt, author: c.author, duration: c.duration
+                    })))
+                }
+                if (notesResult.success && notesResult.data) {
+                    const notesData = notesResult.data as Array<{
+                        id: string; content: string; author: string; createdAt: string;
+                        reactions?: Record<string, string[]> | null
+                    }>
+                    comms.push(...notesData.map(n => ({
+                        id: n.id, type: "note" as const, content: n.content,
+                        timestamp: n.createdAt, author: n.author, reactions: n.reactions
+                    })))
+                }
+                comms.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+                setCommunications(comms)
+            }
+        })
+    }
 
     // Format users for mention input (including avatars)
     const mentionableUsers = useMemo(() => 
@@ -134,20 +220,22 @@ export function CommunicationPanel({ leadId, leadName, clientPhone, clientEmail 
                         })))
                     }
                     
-                    // Add notes
+                    // Add notes (with reactions)
                     if (notesResult.success && notesResult.data) {
                         const notesData = notesResult.data as Array<{
                             id: string
                             content: string
                             author: string
                             createdAt: string
+                            reactions?: Record<string, string[]> | null
                         }>
                         comms.push(...notesData.map(n => ({
                             id: n.id,
                             type: "note" as const,
                             content: n.content,
                             timestamp: n.createdAt,
-                            author: n.author
+                            author: n.author,
+                            reactions: n.reactions
                         })))
                     }
 
@@ -485,11 +573,95 @@ export function CommunicationPanel({ leadId, leadName, clientPhone, clientEmail 
                                         <p className="font-medium text-sm text-foreground">{entry.subject}</p>
                                     )}
 
-                                    <div className="text-sm text-muted-foreground bg-muted/50 p-2.5 rounded-lg border border-border/50 leading-relaxed">
-                                        {entry.type === 'note' ? (
-                                            <MentionText text={entry.content} />
-                                        ) : (
-                                            entry.content
+                                    <div className="relative group/note">
+                                        <div className="text-sm text-muted-foreground bg-muted/50 p-2.5 rounded-lg border border-border/50 leading-relaxed">
+                                            {entry.type === 'note' ? (
+                                                <MentionText text={entry.content} />
+                                            ) : (
+                                                entry.content
+                                            )}
+                                        </div>
+                                        
+                                        {/* Reaction button - notes only, appears on hover */}
+                                        {entry.type === 'note' && (
+                                            <Popover 
+                                                open={reactionPickerOpen === entry.id} 
+                                                onOpenChange={(open) => setReactionPickerOpen(open ? entry.id : null)}
+                                            >
+                                                <PopoverTrigger asChild>
+                                                    <button
+                                                        className={cn(
+                                                            "absolute -right-1 -top-1 p-1 rounded-full bg-background border border-border shadow-sm transition-all duration-200",
+                                                            "opacity-0 group-hover/note:opacity-100 hover:scale-110 hover:bg-muted",
+                                                            reactionPickerOpen === entry.id && "opacity-100"
+                                                        )}
+                                                        title="Reageer met emoji"
+                                                    >
+                                                        <SmilePlus className="w-3 h-3 text-muted-foreground" />
+                                                    </button>
+                                                </PopoverTrigger>
+                                                <PopoverContent 
+                                                    className="w-auto p-2" 
+                                                    side="top" 
+                                                    align="end"
+                                                    sideOffset={8}
+                                                >
+                                                    <div className="flex gap-1">
+                                                        {REACTION_EMOJIS.map((emoji) => {
+                                                            const hasReacted = entry.reactions?.[emoji]?.includes(currentUser?.name || '')
+                                                            return (
+                                                                <button
+                                                                    key={emoji}
+                                                                    onClick={() => handleReaction(entry.id, emoji)}
+                                                                    className={cn(
+                                                                        "p-2 text-xl rounded-lg transition-all hover:scale-125 hover:bg-muted",
+                                                                        hasReacted && "bg-primary/10"
+                                                                    )}
+                                                                    disabled={isPendingReaction}
+                                                                >
+                                                                    {emoji}
+                                                                </button>
+                                                            )
+                                                        })}
+                                                    </div>
+                                                </PopoverContent>
+                                            </Popover>
+                                        )}
+                                        
+                                        {/* Display existing reactions */}
+                                        {entry.type === 'note' && entry.reactions && Object.keys(entry.reactions).length > 0 && (
+                                            <TooltipProvider delayDuration={200}>
+                                                <div className="flex flex-wrap gap-1 mt-1.5">
+                                                    {Object.entries(entry.reactions).map(([emoji, reactors]) => {
+                                                        const hasReacted = reactors.includes(currentUser?.name || '')
+                                                        return (
+                                                            <Tooltip key={emoji}>
+                                                                <TooltipTrigger asChild>
+                                                                    <button
+                                                                        onClick={() => handleReaction(entry.id, emoji)}
+                                                                        className={cn(
+                                                                            "inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium transition-all",
+                                                                            "border hover:scale-105",
+                                                                            hasReacted 
+                                                                                ? "bg-primary/10 border-primary/30 text-primary"
+                                                                                : "bg-muted border-border text-muted-foreground hover:bg-muted/80"
+                                                                        )}
+                                                                        disabled={isPendingReaction}
+                                                                    >
+                                                                        <span className="text-xs">{emoji}</span>
+                                                                        <span>{reactors.length}</span>
+                                                                    </button>
+                                                                </TooltipTrigger>
+                                                                <TooltipContent side="bottom" className="max-w-[200px]">
+                                                                    <p className="text-xs">
+                                                                        {reactors.join(', ')}
+                                                                    </p>
+                                                                </TooltipContent>
+                                                            </Tooltip>
+                                                        )
+                                                    })}
+                                                </div>
+                                            </TooltipProvider>
                                         )}
                                     </div>
                                 </div>

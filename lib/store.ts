@@ -101,9 +101,9 @@ export interface Lead {
   
   // Team assignments (new fields)
   /** Name of assigned Rekenaar (calculator) */
-  assignedRekenaar?: string
+  assignedRekenaar?: string | null
   /** Name of assigned Tekenaar (draftsman) */
-  assignedTekenaar?: string
+  assignedTekenaar?: string | null
   /** Who is currently "aan zet" (working on the project) */
   aanZet?: AanZet
 }

@@ -35,27 +35,42 @@ interface UploadResult {
 /**
  * Check if bucket exists by attempting to list files
  * Note: listBuckets() requires service role - we use list() on the bucket instead
+ * This function retries once if the first attempt fails (handles transient errors)
  */
 async function checkBucketExists(): Promise<boolean> {
   const client = getStorageClient()
-  if (!client) return false
-  
-  try {
-    // Try to list files in the bucket
-    const { error } = await client.storage
-      .from(BUCKET_NAME)
-      .list('', { limit: 1 })
-    
-    if (error) {
-      // Bucket doesn't exist or no access
-      console.warn('[STORAGE] Bucket check failed:', error.message)
-      return false
-    }
-    return true
-  } catch (err) {
-    console.warn('[STORAGE] Bucket check failed:', err)
+  if (!client) {
+    console.warn('[STORAGE] No storage client available')
     return false
   }
+  
+  // Retry logic for transient failures
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      // Try to list files in the bucket
+      const { error } = await client.storage
+        .from(BUCKET_NAME)
+        .list('', { limit: 1 })
+      
+      if (error) {
+        console.warn(`[STORAGE] Bucket check attempt ${attempt} failed:`, error.message)
+        if (attempt < 2) {
+          await new Promise(resolve => setTimeout(resolve, 500)) // Wait 500ms before retry
+          continue
+        }
+        return false
+      }
+      return true
+    } catch (err) {
+      console.warn(`[STORAGE] Bucket check attempt ${attempt} exception:`, err)
+      if (attempt < 2) {
+        await new Promise(resolve => setTimeout(resolve, 500))
+        continue
+      }
+      return false
+    }
+  }
+  return false
 }
 
 // Get file type from extension

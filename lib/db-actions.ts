@@ -327,12 +327,15 @@ export async function getEngineers(): Promise<ActionResult> {
 }
 
 export async function getUserByEmail(email: string): Promise<ActionResult> {
+  console.log('[DB] getUserByEmail called with:', email)
   const validEmail = validateString(email, 255)
   if (!validEmail) {
+    console.log('[DB] getUserByEmail: Invalid email')
     return { success: false, error: 'Invalid email' }
   }
 
   try {
+    console.log('[DB] getUserByEmail: Querying DB for:', validEmail.toLowerCase())
     const user = await prisma.user.findUnique({
       where: { email: validEmail.toLowerCase() },
       select: {
@@ -345,13 +348,15 @@ export async function getUserByEmail(email: string): Promise<ActionResult> {
       }
     })
     
+    console.log('[DB] getUserByEmail: Query result:', user ? `Found ${user.name} with role ${user.role}` : 'NOT FOUND')
+    
     if (!user) {
       return { success: false, error: 'User not found' }
     }
     
     return { success: true, data: user }
   } catch (error) {
-    console.error('[DB] Error fetching user:', error)
+    console.error('[DB] getUserByEmail: Error:', error)
     return { success: false, error: 'Failed to load user' }
   }
 }
@@ -1349,6 +1354,76 @@ export async function getNotes(leadId: string): Promise<ActionResult> {
   } catch (error) {
     console.error('[DB] Error fetching notes:', error)
     return { success: false, error: 'Failed to load notes' }
+  }
+}
+
+/**
+ * Toggle an emoji reaction on a note (add if not present, remove if already reacted)
+ * @param noteId - The ID of the note to react to
+ * @param emoji - The emoji to add/remove
+ * @param userName - Name of the user reacting
+ */
+export async function toggleNoteReaction(
+  noteId: string,
+  emoji: string,
+  userName: string
+): Promise<ActionResult> {
+  const validId = validateId(noteId)
+  const validEmoji = validateString(emoji, 10)
+  const validUserName = validateString(userName, 200)
+  
+  if (!validId) return { success: false, error: 'Invalid note ID' }
+  if (!validEmoji) return { success: false, error: 'Emoji is required' }
+  if (!validUserName) return { success: false, error: 'User name is required' }
+
+  try {
+    // Get current note with reactions
+    const note = await prisma.note.findUnique({
+      where: { id: validId },
+      select: { reactions: true }
+    })
+    
+    if (!note) {
+      return { success: false, error: 'Note not found' }
+    }
+    
+    // Parse current reactions or start with empty object
+    const reactions = (note.reactions as Record<string, string[]>) || {}
+    
+    // Check if user already reacted with this emoji
+    const currentReactors = reactions[validEmoji] || []
+    const hasReacted = currentReactors.includes(validUserName)
+    
+    if (hasReacted) {
+      // Remove the reaction
+      reactions[validEmoji] = currentReactors.filter(name => name !== validUserName)
+      // Clean up empty emoji arrays
+      if (reactions[validEmoji].length === 0) {
+        delete reactions[validEmoji]
+      }
+    } else {
+      // Add the reaction
+      reactions[validEmoji] = [...currentReactors, validUserName]
+    }
+    
+    // Update the note
+    const updatedNote = await prisma.note.update({
+      where: { id: validId },
+      data: { 
+        reactions: Object.keys(reactions).length > 0 ? reactions : null 
+      }
+    })
+    
+    return { 
+      success: true, 
+      data: { 
+        reactions: updatedNote.reactions,
+        action: hasReacted ? 'removed' : 'added'
+      } 
+    }
+  } catch (error) {
+    console.error('[DB] Error toggling note reaction:', error)
+    return { success: false, error: 'Failed to update reaction' }
   }
 }
 

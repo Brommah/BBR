@@ -362,20 +362,25 @@ export function DocumentsPanel({ leadId, lead }: DocumentsPanelProps = {}) {
         setDeleteConfirm(null)
     }
 
+    // Check if document has a real cloud storage URL
+    const isPlaceholderUrl = (url: string) => {
+        return url.startsWith('/documents/') || 
+               url.startsWith('/uploads/') || 
+               url.startsWith('/demo/')
+    }
+
     const handleDownload = (doc: Document) => {
         // Check if it's a placeholder URL (not a real file)
-        if (doc.url.startsWith('/documents/') || doc.url.startsWith('/uploads/')) {
-            toast.error("Download niet beschikbaar", {
-                description: "Dit bestand moet opnieuw geüpload worden met cloud storage.",
-                action: {
-                    label: "Meer info",
-                    onClick: () => {
-                        toast.info("Configureer Supabase Storage", {
-                            description: "Neem contact op met de systeembeheerder om file storage in te stellen."
-                        })
-                    }
-                }
-            })
+        if (isPlaceholderUrl(doc.url)) {
+            if (doc.url.startsWith('/demo/')) {
+                toast.info("Demo bestand", {
+                    description: "Dit is een demo bestand en kan niet worden gedownload."
+                })
+            } else {
+                toast.error("Download niet beschikbaar", {
+                    description: "Upload mislukt - verwijder dit bestand en upload opnieuw."
+                })
+            }
             return
         }
         // Open in new tab for actual file downloads
@@ -384,10 +389,16 @@ export function DocumentsPanel({ leadId, lead }: DocumentsPanelProps = {}) {
 
     const handlePreview = (doc: Document) => {
         // Check if it's a placeholder URL (not a real file)
-        if (doc.url.startsWith('/documents/') || doc.url.startsWith('/uploads/')) {
-            toast.error("Preview niet beschikbaar", {
-                description: "Bestand is opgeslagen in database maar niet in cloud storage."
-            })
+        if (isPlaceholderUrl(doc.url)) {
+            if (doc.url.startsWith('/demo/')) {
+                toast.info("Demo bestand", {
+                    description: "Dit is een demo bestand en heeft geen preview."
+                })
+            } else {
+                toast.error("Preview niet beschikbaar", {
+                    description: "Upload mislukt - verwijder dit bestand en upload opnieuw."
+                })
+            }
             return
         }
         window.open(doc.url, '_blank')

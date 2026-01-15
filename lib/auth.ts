@@ -13,6 +13,7 @@ interface SupabaseUser {
   user_metadata?: {
     name?: string
     role?: 'admin' | 'engineer' | 'viewer'
+    engineerType?: 'rekenaar' | 'tekenaar'
     avatar_url?: string
   }
 }
@@ -237,11 +238,14 @@ export const useAuthStore = create<AuthState>()(
 
           if (data.user) {
             // Fetch user from database to get the correct role
+            console.log('[Auth] Fetching user from DB for email:', data.user.email)
             const dbResult = await getUserByEmail(data.user.email || '')
+            console.log('[Auth] DB result:', JSON.stringify(dbResult))
             
             if (dbResult.success && dbResult.data) {
               // Use database user with correct role
               const dbUser = dbResult.data as { id: string; name: string; email: string; role: string; engineerType?: string; avatar?: string }
+              console.log('[Auth] Using DB user:', dbUser.name, 'role:', dbUser.role)
               set({ 
                 currentUser: {
                   id: dbUser.id,
@@ -258,8 +262,9 @@ export const useAuthStore = create<AuthState>()(
               return true
             } else {
               // Fallback to Supabase user if not in database (shouldn't happen)
-              console.warn('[Auth] User not found in database, using Supabase metadata')
+              console.warn('[Auth] User not found in database, using Supabase metadata. DB error:', dbResult.error)
               const user = convertSupabaseUser(data.user as SupabaseUser)
+              console.log('[Auth] Fallback user:', user.name, 'role:', user.role)
               set({ 
                 currentUser: user, 
                 isAuthenticated: true, 
@@ -317,10 +322,13 @@ export const useAuthStore = create<AuthState>()(
 
           if (session?.user) {
             // Fetch user from database to get the correct role
+            console.log('[Auth] checkSession: Fetching user from DB for email:', session.user.email)
             const dbResult = await getUserByEmail(session.user.email || '')
+            console.log('[Auth] checkSession: DB result:', JSON.stringify(dbResult))
             
             if (dbResult.success && dbResult.data) {
               const dbUser = dbResult.data as { id: string; name: string; email: string; role: string; engineerType?: string; avatar?: string }
+              console.log('[Auth] checkSession: Using DB user:', dbUser.name, 'role:', dbUser.role)
               set({ 
                 currentUser: {
                   id: dbUser.id,
@@ -336,8 +344,9 @@ export const useAuthStore = create<AuthState>()(
               })
             } else {
               // Fallback to Supabase user if not in database
-              console.warn('[Auth] User not found in database during session check')
+              console.warn('[Auth] checkSession: User not found in database. DB error:', dbResult.error)
               const user = convertSupabaseUser(session.user as SupabaseUser)
+              console.log('[Auth] checkSession: Fallback user:', user.name, 'role:', user.role)
               set({ 
                 currentUser: user, 
                 isAuthenticated: true, 

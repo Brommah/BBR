@@ -5,12 +5,12 @@ import { Lead } from "@/lib/store"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar"
-import { MapPin, User, Clock, AlertCircle, CheckCircle2 } from "lucide-react"
+import { MapPin, Clock, AlertCircle, CheckCircle2, Calculator, PenTool } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useRouter } from "next/navigation"
 import { useState, useEffect, useRef } from "react"
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip"
-import { getProjectTypeColor, getAssigneeColor } from "./pipeline-legend"
+import { getProjectTypeColor } from "./pipeline-legend"
 import { useAllUsers } from "@/lib/auth"
 
 interface LeadCardProps {
@@ -111,9 +111,18 @@ export function LeadCard({ lead }: LeadCardProps) {
   const hasDraggedRef = useRef(false)
   const mouseDownPosRef = useRef<{ x: number; y: number } | null>(null)
   
-  // Find assignee's avatar from users list
-  const assigneeUser = users.find(u => u.name === lead.assignee)
-  const assigneeAvatar = assigneeUser?.avatar
+  // Find team members from users list
+  const rekenaarUser = users.find(u => u.name === lead.assignedRekenaar)
+  const tekenaarUser = users.find(u => u.name === lead.assignedTekenaar)
+  
+  // Helper to get user initials
+  const getInitials = (name: string) => {
+    const parts = name.split(' ')
+    if (parts.length > 1) {
+      return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase()
+    }
+    return name.substring(0, 2).toUpperCase()
+  }
 
   useEffect(() => {
     const hours = (Date.now() - new Date(lead.createdAt).getTime()) / (1000 * 60 * 60)
@@ -135,7 +144,9 @@ export function LeadCard({ lead }: LeadCardProps) {
   const ageStatus = getAgeStatus(hoursSince)
   const ageConfig = AGE_CONFIG[ageStatus]
   const projectColors = getProjectTypeColor(lead.projectType)
-  const assigneeColors = getAssigneeColor(lead.assignee)
+  
+  // Check if anyone is assigned
+  const hasTeam = lead.assignedRekenaar || lead.assignedTekenaar
   
   // Use status-based styling for borders/indicators (age urgency only for Nieuw/Calculatie)
   const statusConfig = STATUS_CONFIG[lead.status] || STATUS_CONFIG["Nieuw"]
@@ -284,41 +295,86 @@ export function LeadCard({ lead }: LeadCardProps) {
                   )
                 )}
 
-                {/* Assignee avatar with profile picture */}
-                {lead.assignee ? (
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Avatar className="w-6 h-6">
-                        {assigneeAvatar && (
-                          <AvatarImage src={assigneeAvatar} alt={lead.assignee} />
-                        )}
-                        <AvatarFallback className={cn(
-                          "text-[10px] font-bold",
-                          assigneeColors.bg,
-                          assigneeColors.text
+                {/* Team avatars - Rekenaar and Tekenaar */}
+                <div className="flex items-center -space-x-1.5">
+                  {/* Rekenaar */}
+                  {lead.assignedRekenaar ? (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div className={cn(
+                          "relative",
+                          lead.aanZet === 'rekenaar' && "ring-2 ring-blue-500 ring-offset-1 rounded-full"
                         )}>
-                          {lead.assignee[0]}
-                        </AvatarFallback>
-                      </Avatar>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>Toegewezen aan {lead.assignee}</p>
-                    </TooltipContent>
-                  </Tooltip>
-                ) : (
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Avatar className="w-6 h-6">
-                        <AvatarFallback className="bg-slate-200 dark:bg-slate-700">
-                          <User className="w-3 h-3 text-slate-500" aria-hidden="true" />
-                        </AvatarFallback>
-                      </Avatar>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>Niet toegewezen</p>
-                    </TooltipContent>
-                  </Tooltip>
-                )}
+                          <Avatar className="w-6 h-6 border-2 border-white dark:border-slate-800">
+                            {rekenaarUser?.avatar && (
+                              <AvatarImage src={rekenaarUser.avatar} alt={lead.assignedRekenaar} />
+                            )}
+                            <AvatarFallback className="text-[8px] font-bold bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300">
+                              {getInitials(lead.assignedRekenaar)}
+                            </AvatarFallback>
+                          </Avatar>
+                          <Calculator className="absolute -bottom-0.5 -right-0.5 w-3 h-3 text-blue-600 bg-white dark:bg-slate-800 rounded-full p-0.5" />
+                        </div>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p className="font-medium">{lead.assignedRekenaar}</p>
+                        <p className="text-xs text-muted-foreground">Rekenaar {lead.aanZet === 'rekenaar' && '• Aan zet'}</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  ) : (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Avatar className="w-6 h-6 border-2 border-white dark:border-slate-800 opacity-40">
+                          <AvatarFallback className="bg-slate-100 dark:bg-slate-800">
+                            <Calculator className="w-3 h-3 text-slate-400" />
+                          </AvatarFallback>
+                        </Avatar>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p className="text-muted-foreground">Geen rekenaar toegewezen</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  )}
+
+                  {/* Tekenaar */}
+                  {lead.assignedTekenaar ? (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div className={cn(
+                          "relative",
+                          lead.aanZet === 'tekenaar' && "ring-2 ring-purple-500 ring-offset-1 rounded-full"
+                        )}>
+                          <Avatar className="w-6 h-6 border-2 border-white dark:border-slate-800">
+                            {tekenaarUser?.avatar && (
+                              <AvatarImage src={tekenaarUser.avatar} alt={lead.assignedTekenaar} />
+                            )}
+                            <AvatarFallback className="text-[8px] font-bold bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300">
+                              {getInitials(lead.assignedTekenaar)}
+                            </AvatarFallback>
+                          </Avatar>
+                          <PenTool className="absolute -bottom-0.5 -right-0.5 w-3 h-3 text-purple-600 bg-white dark:bg-slate-800 rounded-full p-0.5" />
+                        </div>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p className="font-medium">{lead.assignedTekenaar}</p>
+                        <p className="text-xs text-muted-foreground">Tekenaar {lead.aanZet === 'tekenaar' && '• Aan zet'}</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  ) : (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Avatar className="w-6 h-6 border-2 border-white dark:border-slate-800 opacity-40">
+                          <AvatarFallback className="bg-slate-100 dark:bg-slate-800">
+                            <PenTool className="w-3 h-3 text-slate-400" />
+                          </AvatarFallback>
+                        </Avatar>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p className="text-muted-foreground">Geen tekenaar toegewezen</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  )}
+                </div>
               </div>
             </div>
           </CardContent>
