@@ -1,20 +1,15 @@
 "use client"
 
+import { useEffect, useMemo } from "react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
-import { ArrowUpRight, TrendingUp, Target, CalendarDays } from "lucide-react"
+import { Skeleton } from "@/components/ui/skeleton"
+import { ArrowUpRight, TrendingUp, Target, CalendarDays, ArrowDownRight } from "lucide-react"
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts"
+import { useLeadStore } from "@/lib/store"
 
-const financialData = [
-  { name: 'Jan', revenue: 45000, target: 40000 },
-  { name: 'Feb', revenue: 52000, target: 42000 },
-  { name: 'Mar', revenue: 48000, target: 45000 },
-  { name: 'Apr', revenue: 61000, target: 48000 },
-  { name: 'May', revenue: 55000, target: 50000 },
-  { name: 'Jun', revenue: 67000, target: 52000 },
-]
-
+// Static roadmap items (product roadmap, not data-driven)
 const roadmapItems = [
     {
         quarter: "Q1 2026",
@@ -40,6 +35,104 @@ const roadmapItems = [
 ]
 
 export function FinancialRoadmapView() {
+    const { leads, isLoading, loadLeads } = useLeadStore()
+
+    // Load leads on mount
+    useEffect(() => {
+        loadLeads()
+    }, [loadLeads])
+
+    // Compute financial metrics from real lead data
+    const financialMetrics = useMemo(() => {
+        const now = new Date()
+        const currentYear = now.getFullYear()
+        
+        // Calculate YTD revenue (completed orders - status Opdracht)
+        const completedLeads = leads.filter(l => l.status === "Opdracht")
+        const ytdRevenue = completedLeads.reduce((sum, l) => sum + (l.value || 0), 0)
+        
+        // Calculate average project value (from completed)
+        const avgProjectValue = completedLeads.length > 0 
+            ? Math.round(ytdRevenue / completedLeads.length) 
+            : 0
+        
+        // Quote conversion rate (Opdracht / (Opdracht + sent quotes))
+        const quoteSentLeads = leads.filter(l => l.status === "Offerte Verzonden")
+        const conversionDenominator = completedLeads.length + quoteSentLeads.length
+        const quoteConversion = conversionDenominator > 0 
+            ? Math.round((completedLeads.length / conversionDenominator) * 1000) / 10
+            : 0
+        
+        // Pipeline value (active leads not in Archief or Opdracht)
+        const pipelineLeads = leads.filter(l => 
+            l.status !== "Archief" && l.status !== "Opdracht"
+        )
+        const pipelineValue = pipelineLeads.reduce((sum, l) => sum + (l.value || 0), 0)
+        const activeLeadsCount = pipelineLeads.length
+        
+        // Monthly revenue data for chart (group by month)
+        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+        const monthlyData = monthNames.map((name, idx) => ({
+            name,
+            revenue: 0,
+            target: 40000 + (idx * 2000) // Simple target growth
+        }))
+        
+        // Populate with actual completed lead values by month
+        completedLeads.forEach(lead => {
+            const createdDate = new Date(lead.createdAt)
+            if (createdDate.getFullYear() === currentYear) {
+                const monthIdx = createdDate.getMonth()
+                monthlyData[monthIdx].revenue += (lead.value || 0)
+            }
+        })
+        
+        // Only show months up to current month + 1
+        const currentMonth = now.getMonth()
+        const chartData = monthlyData.slice(0, currentMonth + 2)
+        
+        return {
+            ytdRevenue,
+            avgProjectValue,
+            quoteConversion,
+            pipelineValue,
+            activeLeadsCount,
+            chartData
+        }
+    }, [leads])
+
+    if (isLoading) {
+        return (
+            <div className="space-y-6">
+                <div className="grid gap-4 md:grid-cols-4">
+                    {[1, 2, 3, 4].map(i => (
+                        <Card key={i}>
+                            <CardHeader className="pb-2">
+                                <Skeleton className="h-4 w-24 mb-2" />
+                                <Skeleton className="h-8 w-32" />
+                            </CardHeader>
+                            <CardContent>
+                                <Skeleton className="h-4 w-28" />
+                            </CardContent>
+                        </Card>
+                    ))}
+                </div>
+                <div className="grid gap-6 md:grid-cols-7">
+                    <Card className="md:col-span-4">
+                        <CardContent className="p-6">
+                            <Skeleton className="h-[300px] w-full" />
+                        </CardContent>
+                    </Card>
+                    <Card className="md:col-span-3">
+                        <CardContent className="p-6">
+                            <Skeleton className="h-[300px] w-full" />
+                        </CardContent>
+                    </Card>
+                </div>
+            </div>
+        )
+    }
+
     return (
         <div className="space-y-6">
             {/* Top Stats */}
@@ -47,47 +140,65 @@ export function FinancialRoadmapView() {
                 <Card className="bg-primary text-primary-foreground border-none">
                     <CardHeader className="pb-2">
                         <CardDescription className="text-primary-foreground/70">YTD Revenue</CardDescription>
-                        <CardTitle className="text-3xl font-semibold text-currency">€ 328.000</CardTitle>
+                        <CardTitle className="text-3xl font-semibold text-currency">
+                            € {financialMetrics.ytdRevenue.toLocaleString('nl-NL')}
+                        </CardTitle>
                     </CardHeader>
                     <CardContent>
                         <div className="flex items-center gap-2 text-sm">
-                            <ArrowUpRight className="w-4 h-4 text-green-300" />
-                            <span className="text-green-300 font-semibold">+12%</span>
-                            <span className="text-primary-foreground/50">vs last year</span>
+                            {financialMetrics.ytdRevenue > 0 ? (
+                                <>
+                                    <ArrowUpRight className="w-4 h-4 text-green-300" />
+                                    <span className="text-green-300 font-semibold">Live</span>
+                                </>
+                            ) : (
+                                <>
+                                    <ArrowDownRight className="w-4 h-4 text-yellow-300" />
+                                    <span className="text-yellow-300 font-semibold">Geen data</span>
+                                </>
+                            )}
+                            <span className="text-primary-foreground/50">this year</span>
                         </div>
                     </CardContent>
                 </Card>
                  <Card>
                     <CardHeader className="pb-2">
                         <CardDescription>Avg. Project Value</CardDescription>
-                        <CardTitle className="text-2xl font-semibold text-currency">€ 3.850</CardTitle>
+                        <CardTitle className="text-2xl font-semibold text-currency">
+                            € {financialMetrics.avgProjectValue.toLocaleString('nl-NL')}
+                        </CardTitle>
                     </CardHeader>
                     <CardContent>
                         <div className="flex items-center gap-2 text-sm">
                             <TrendingUp className="w-4 h-4 text-green-500" />
-                            <span className="text-green-600 font-semibold">+5%</span>
-                            <span className="text-muted-foreground">vs target</span>
+                            <span className="text-muted-foreground">
+                                van {leads.filter(l => l.status === "Opdracht").length} opdrachten
+                            </span>
                         </div>
                     </CardContent>
                 </Card>
                  <Card>
                     <CardHeader className="pb-2">
                         <CardDescription>Quote Conversion</CardDescription>
-                        <CardTitle className="text-2xl font-semibold text-value">42.8%</CardTitle>
+                        <CardTitle className="text-2xl font-semibold text-value">
+                            {financialMetrics.quoteConversion}%
+                        </CardTitle>
                     </CardHeader>
                     <CardContent>
-                         <Progress value={42.8} className="h-2 mt-2" />
+                         <Progress value={financialMetrics.quoteConversion} className="h-2 mt-2" />
                     </CardContent>
                 </Card>
                  <Card>
                     <CardHeader className="pb-2">
                         <CardDescription>Pipeline Value</CardDescription>
-                        <CardTitle className="text-2xl font-semibold text-currency">€ 145.200</CardTitle>
+                        <CardTitle className="text-2xl font-semibold text-currency">
+                            € {financialMetrics.pipelineValue.toLocaleString('nl-NL')}
+                        </CardTitle>
                     </CardHeader>
                     <CardContent>
                          <div className="flex items-center gap-2 text-sm text-muted-foreground">
                             <Target className="w-4 h-4" />
-                            <span>65 active leads</span>
+                            <span>{financialMetrics.activeLeadsCount} active leads</span>
                          </div>
                     </CardContent>
                 </Card>
@@ -98,12 +209,12 @@ export function FinancialRoadmapView() {
                 <Card className="md:col-span-4">
                     <CardHeader>
                         <CardTitle>Revenue vs Target</CardTitle>
-                        <CardDescription>Monthly financial performance 2026</CardDescription>
+                        <CardDescription>Monthly financial performance {new Date().getFullYear()}</CardDescription>
                     </CardHeader>
                     <CardContent className="pl-0">
                         <div className="h-[300px] w-full">
                             <ResponsiveContainer width="100%" height="100%">
-                                <AreaChart data={financialData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+                                <AreaChart data={financialMetrics.chartData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
                                     <defs>
                                         <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
                                             <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3}/>

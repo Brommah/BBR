@@ -180,14 +180,9 @@ export default function InboxPage() {
                                             </span>
                                         </CardDescription>
                                     </div>
-                                    <div className="flex flex-col items-end gap-2">
-                                        <Badge variant="outline" className="shrink-0 bg-background/50 backdrop-blur-sm">
-                                            {lead.projectType}
-                                        </Badge>
-                                        <span className="text-lg font-semibold text-emerald-600 font-mono">
-                                            € {lead.value.toLocaleString('nl-NL')}
-                                        </span>
-                                    </div>
+                                    <Badge variant="outline" className="shrink-0 bg-background/50 backdrop-blur-sm">
+                                        {lead.projectType}
+                                    </Badge>
                                 </div>
                             </CardHeader>
                             <CardContent className="space-y-4">

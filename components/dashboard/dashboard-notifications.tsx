@@ -1,8 +1,9 @@
 "use client"
-import { useEffect, useCallback, useRef } from "react"
+import { useEffect, useCallback, useRef, useState } from "react"
 import { toast } from "sonner"
 import { useRouter } from "next/navigation"
 import { useLeadStore, Lead } from "@/lib/store"
+import { getUnreadNotificationCount } from "@/lib/db-actions"
 
 export function DashboardNotifications() {
   const router = useRouter()
@@ -92,4 +93,77 @@ export function DashboardNotifications() {
 export function useInboxCount() {
   const { leads } = useLeadStore()
   return leads.filter(lead => lead.status === "Nieuw").length
+}
+
+/**
+ * Hook for engineer-specific updates count
+ * Counts projects with recent activity (updated in last 24h that engineer hasn't seen)
+ */
+export function useEngineerUpdatesCount(engineerName: string | undefined) {
+  const { leads } = useLeadStore()
+  
+  if (!engineerName) return 0
+  
+  const now = new Date()
+  const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000)
+  
+  // Count assigned leads with recent updates
+  return leads.filter(lead => {
+    // Only their assigned leads
+    if (lead.assignee !== engineerName) return false
+    
+    // Only active statuses
+    if (!['Calculatie', 'Opdracht'].includes(lead.status)) return false
+    
+    // Check for recent updates (updatedAt is more recent than 24h ago)
+    // Use createdAt as fallback if updatedAt is not available
+    const timestamp = lead.updatedAt || lead.createdAt
+    if (!timestamp) return false
+    
+    const updatedAt = new Date(timestamp)
+    return updatedAt > oneDayAgo
+  }).length
+}
+
+/**
+ * Types of updates engineers should see
+ */
+export interface EngineerUpdate {
+  id: string
+  leadId: string
+  leadName: string
+  type: 'status_change' | 'document_added' | 'admin_feedback' | 'priority_change' | 'deadline_set'
+  message: string
+  createdAt: string
+  read: boolean
+}
+
+/**
+ * Hook to get unread notification count from database
+ * Polls every 30 seconds to keep count updated
+ */
+export function useNotificationCount(userName: string | undefined) {
+  const [count, setCount] = useState(0)
+  
+  const fetchCount = useCallback(async () => {
+    if (!userName) {
+      setCount(0)
+      return
+    }
+    
+    const result = await getUnreadNotificationCount(userName)
+    if (result.success && typeof result.data === 'number') {
+      setCount(result.data)
+    }
+  }, [userName])
+
+  useEffect(() => {
+    fetchCount()
+    
+    // Poll every 30 seconds
+    const interval = setInterval(fetchCount, 30000)
+    return () => clearInterval(interval)
+  }, [fetchCount])
+
+  return count
 }

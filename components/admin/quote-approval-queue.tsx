@@ -182,90 +182,133 @@ export function QuoteApprovalQueue() {
                                     key={lead.id} 
                                     className="border rounded-lg overflow-hidden bg-card hover:shadow-md transition-shadow"
                                 >
-                                    {/* Main Row */}
-                                    <div 
-                                        className="p-4 flex items-center gap-4 cursor-pointer"
-                                        onClick={() => setExpandedId(expandedId === lead.id ? null : lead.id)}
-                                    >
-                                        {/* Expand indicator */}
-                                        <div className="w-8 h-8 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
-                                            {expandedId === lead.id 
-                                                ? <ChevronUp className="w-4 h-4 text-amber-600" />
-                                                : <ChevronDown className="w-4 h-4 text-amber-600" />
-                                            }
-                                        </div>
+                                    {/* Main Row - Always visible preview */}
+                                    <div className="p-4">
+                                        <div className="flex items-start gap-4">
+                                            {/* Expand indicator */}
+                                            <button
+                                                type="button"
+                                                className="w-8 h-8 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center shrink-0 hover:bg-amber-200 dark:hover:bg-amber-900/50 transition-colors"
+                                                onClick={() => setExpandedId(expandedId === lead.id ? null : lead.id)}
+                                            >
+                                                {expandedId === lead.id 
+                                                    ? <ChevronUp className="w-4 h-4 text-amber-600" />
+                                                    : <ChevronDown className="w-4 h-4 text-amber-600" />
+                                                }
+                                            </button>
 
-                                        {/* Client info */}
-                                        <div className="flex-1 min-w-0">
-                                            <div className="flex items-center gap-2">
-                                                <span className="font-semibold truncate">{lead.clientName}</span>
-                                                <Badge variant="outline" className="text-xs">{lead.projectType}</Badge>
-                                            </div>
-                                            <div className="text-sm text-muted-foreground flex items-center gap-2">
-                                                <span>{lead.city}</span>
-                                                {lead.address && <span>• {lead.address}</span>}
-                                            </div>
-                                        </div>
-
-                                        {/* Engineer */}
-                                        <div className="hidden md:flex items-center gap-2 text-sm text-muted-foreground">
-                                            <User className="w-4 h-4" />
-                                            <span>{lead.assignee || "Niet toegewezen"}</span>
-                                        </div>
-
-                                        {/* Amount */}
-                                        <div className="text-right">
-                                            <div className="text-xl font-bold font-mono">
-                                                € {(lead.quoteValue || 0).toLocaleString('nl-NL', { minimumFractionDigits: 2 })}
-                                            </div>
-                                            {lead.quoteEstimatedHours && (
-                                                <div className="text-xs text-muted-foreground">
-                                                    ~{lead.quoteEstimatedHours} uur
+                                            {/* Main Content */}
+                                            <div className="flex-1 min-w-0">
+                                                {/* Header row */}
+                                                <div className="flex items-center justify-between gap-4 mb-3">
+                                                    <div className="flex items-center gap-2 min-w-0">
+                                                        <span className="font-semibold truncate">{lead.clientName}</span>
+                                                        <Badge variant="outline" className="text-xs shrink-0">{lead.projectType}</Badge>
+                                                        <span className="text-sm text-muted-foreground hidden sm:inline">
+                                                            {lead.city}{lead.address && ` • ${lead.address}`}
+                                                        </span>
+                                                    </div>
+                                                    <div className="flex items-center gap-2 shrink-0">
+                                                        <User className="w-4 h-4 text-muted-foreground hidden md:block" />
+                                                        <span className="text-sm text-muted-foreground hidden md:block">{lead.assignee || "Niet toegewezen"}</span>
+                                                    </div>
                                                 </div>
-                                            )}
-                                        </div>
 
-                                        {/* Actions */}
-                                        <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
-                                            <Button 
-                                                size="sm" 
-                                                variant="outline" 
-                                                className="h-9 w-9 p-0"
-                                                asChild
-                                            >
-                                                <Link href={`/leads/${lead.id}`}>
-                                                    <Eye className="w-4 h-4" />
-                                                </Link>
-                                            </Button>
-                                            <Button 
-                                                size="sm" 
-                                                className="h-9 bg-emerald-600 hover:bg-emerald-700"
-                                                onClick={() => openReviewDialog(lead.id, 'approve')}
-                                            >
-                                                <CheckCircle2 className="w-4 h-4 mr-1" />
-                                                Goedkeuren
-                                            </Button>
-                                            <Button 
-                                                size="sm" 
-                                                variant="destructive"
-                                                className="h-9"
-                                                onClick={() => openReviewDialog(lead.id, 'reject')}
-                                            >
-                                                <XCircle className="w-4 h-4 mr-1" />
-                                                Afkeuren
-                                            </Button>
+                                                {/* Inline Quote Preview - always visible */}
+                                                <div className="bg-slate-50 dark:bg-slate-900/50 rounded-lg p-3 mb-3">
+                                                    <div className="flex items-center justify-between mb-2">
+                                                        <span className="text-sm font-medium text-muted-foreground">Offerte overzicht</span>
+                                                        <div className="flex items-center gap-3">
+                                                            {lead.quoteEstimatedHours && (
+                                                                <span className="text-xs text-muted-foreground flex items-center gap-1">
+                                                                    <Clock className="w-3 h-3" />
+                                                                    ~{lead.quoteEstimatedHours} uur
+                                                                </span>
+                                                            )}
+                                                            <span className="text-xl font-bold font-mono text-foreground">
+                                                                € {(lead.quoteValue || 0).toLocaleString('nl-NL', { minimumFractionDigits: 2 })}
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                    
+                                                    {/* Show first 3 line items inline */}
+                                                    {lead.quoteLineItems && lead.quoteLineItems.length > 0 && (
+                                                        <div className="space-y-1 text-sm">
+                                                            {lead.quoteLineItems.slice(0, 3).map((item: QuoteLineItem, index: number) => (
+                                                                <div key={index} className="flex justify-between text-muted-foreground">
+                                                                    <span className="truncate mr-4">{item.description}</span>
+                                                                    <span className="font-mono shrink-0">
+                                                                        € {item.amount.toLocaleString('nl-NL', { minimumFractionDigits: 2 })}
+                                                                    </span>
+                                                                </div>
+                                                            ))}
+                                                            {lead.quoteLineItems.length > 3 && (
+                                                                <button
+                                                                    type="button"
+                                                                    className="text-xs text-amber-600 hover:text-amber-700 dark:text-amber-400"
+                                                                    onClick={() => setExpandedId(lead.id)}
+                                                                >
+                                                                    +{lead.quoteLineItems.length - 3} meer regels...
+                                                                </button>
+                                                            )}
+                                                        </div>
+                                                    )}
+
+                                                    {/* Show truncated justification */}
+                                                    {lead.quoteDescription && (
+                                                        <div className="mt-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+                                                            <p className="text-xs text-muted-foreground line-clamp-2">
+                                                                <MessageSquare className="w-3 h-3 inline mr-1" />
+                                                                {lead.quoteDescription}
+                                                            </p>
+                                                        </div>
+                                                    )}
+                                                </div>
+
+                                                {/* Action buttons */}
+                                                <div className="flex items-center gap-2 flex-wrap">
+                                                    <Button 
+                                                        size="sm" 
+                                                        className="h-9 bg-emerald-600 hover:bg-emerald-700"
+                                                        onClick={() => openReviewDialog(lead.id, 'approve')}
+                                                    >
+                                                        <CheckCircle2 className="w-4 h-4 mr-1" />
+                                                        Goedkeuren
+                                                    </Button>
+                                                    <Button 
+                                                        size="sm" 
+                                                        variant="destructive"
+                                                        className="h-9"
+                                                        onClick={() => openReviewDialog(lead.id, 'reject')}
+                                                    >
+                                                        <XCircle className="w-4 h-4 mr-1" />
+                                                        Afkeuren
+                                                    </Button>
+                                                    <Button 
+                                                        size="sm" 
+                                                        variant="outline" 
+                                                        className="h-9 gap-1"
+                                                        asChild
+                                                    >
+                                                        <Link href={`/leads/${lead.id}`}>
+                                                            <Eye className="w-4 h-4" />
+                                                            Volledig dossier
+                                                        </Link>
+                                                    </Button>
+                                                </div>
+                                            </div>
                                         </div>
                                     </div>
 
-                                    {/* Expanded Details */}
+                                    {/* Expanded Details - additional context */}
                                     {expandedId === lead.id && (
                                         <div className="border-t bg-muted/30 p-4 space-y-4">
-                                            {/* Line Items */}
+                                            {/* All Line Items */}
                                             {lead.quoteLineItems && lead.quoteLineItems.length > 0 && (
                                                 <div>
                                                     <h4 className="text-sm font-semibold mb-2 flex items-center gap-2">
                                                         <FileText className="w-4 h-4" />
-                                                        Offerteregels
+                                                        Alle Offerteregels
                                                     </h4>
                                                     <div className="bg-card rounded-lg border p-3 space-y-2">
                                                         {lead.quoteLineItems.map((item: QuoteLineItem, index: number) => (
@@ -278,23 +321,35 @@ export function QuoteApprovalQueue() {
                                                         ))}
                                                         <Separator />
                                                         <div className="flex justify-between font-semibold">
-                                                            <span>Totaal</span>
+                                                            <span>Totaal (excl. BTW)</span>
                                                             <span className="font-mono">
                                                                 € {(lead.quoteValue || 0).toLocaleString('nl-NL', { minimumFractionDigits: 2 })}
+                                                            </span>
+                                                        </div>
+                                                        <div className="flex justify-between text-muted-foreground">
+                                                            <span>BTW (21%)</span>
+                                                            <span className="font-mono">
+                                                                € {((lead.quoteValue || 0) * 0.21).toLocaleString('nl-NL', { minimumFractionDigits: 2 })}
+                                                            </span>
+                                                        </div>
+                                                        <div className="flex justify-between font-bold text-lg">
+                                                            <span>Totaal (incl. BTW)</span>
+                                                            <span className="font-mono">
+                                                                € {((lead.quoteValue || 0) * 1.21).toLocaleString('nl-NL', { minimumFractionDigits: 2 })}
                                                             </span>
                                                         </div>
                                                     </div>
                                                 </div>
                                             )}
 
-                                            {/* Description / Justification */}
+                                            {/* Full Description / Justification */}
                                             {lead.quoteDescription && (
                                                 <div>
                                                     <h4 className="text-sm font-semibold mb-2 flex items-center gap-2">
                                                         <MessageSquare className="w-4 h-4" />
-                                                        Onderbouwing Engineer
+                                                        Volledige Onderbouwing
                                                     </h4>
-                                                    <div className="bg-card rounded-lg border p-3 text-sm text-muted-foreground">
+                                                    <div className="bg-card rounded-lg border p-3 text-sm text-muted-foreground whitespace-pre-wrap">
                                                         {lead.quoteDescription}
                                                     </div>
                                                 </div>

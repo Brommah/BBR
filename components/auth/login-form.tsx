@@ -9,6 +9,17 @@ import { Button } from "@/components/ui/button"
 import { Eye, EyeOff, Lock, Mail, Loader2, AlertCircle } from "lucide-react"
 import { toast } from "sonner"
 
+/**
+ * Get the default landing page based on user role
+ * All users start on / - the home page shows role-appropriate content:
+ * - Admin: sees admin console
+ * - Engineer: sees their work queue
+ * - Viewer: sees dashboard
+ */
+function getDefaultRoute(_role: string | undefined): string {
+    return '/'
+}
+
 export function LoginForm() {
     const [email, setEmail] = useState("")
     const [password, setPassword] = useState("")
@@ -32,7 +43,9 @@ export function LoginForm() {
             toast.success("Welkom terug!", {
                 description: "Je bent succesvol ingelogd."
             })
-            router.push("/")
+            // Get fresh state after login to determine role-based redirect
+            const { currentUser: user } = useAuthStore.getState()
+            router.push(getDefaultRoute(user?.role))
         }
     }
 

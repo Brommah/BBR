@@ -121,7 +121,7 @@ describe('useAuthStore', () => {
       expect(hasPermission('quotes:approve')).toBe(false)
     })
 
-    it('should allow engineers to submit quotes', () => {
+    it('should allow engineers to submit quotes for approval', () => {
       useAuthStore.setState({
         currentUser: {
           id: 'eng-1',
@@ -133,8 +133,15 @@ describe('useAuthStore', () => {
       })
       
       const { hasPermission } = useAuthStore.getState()
+      // Engineers can submit quotes for admin approval
       expect(hasPermission('quotes:submit')).toBe(true)
       expect(hasPermission('quotes:view')).toBe(true)
+      // But cannot approve quotes themselves
+      expect(hasPermission('quotes:approve')).toBe(false)
+      expect(hasPermission('quotes:reject')).toBe(false)
+      // Standard engineer permissions
+      expect(hasPermission('leads:view-own')).toBe(true)
+      expect(hasPermission('settings:view')).toBe(true)
     })
   })
 

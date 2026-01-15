@@ -1,12 +1,14 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Switch } from "@/components/ui/switch"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { Skeleton } from "@/components/ui/skeleton"
+import { toast } from "sonner"
 import { 
     Mail, 
     Send, 
@@ -31,8 +33,19 @@ import {
     MousePointer,
     Copy,
     ExternalLink,
-    Code
+    Code,
+    Loader2,
+    AlertTriangle
 } from "lucide-react"
+import {
+    getEmailAutomationStats,
+    getEmailAutomationTotals,
+    getEmailAutomationConfigs,
+    updateAutomationStatus,
+    initializeAutomationConfigs,
+    type EmailAutomationStats,
+    type EmailAutomationConfig
+} from "@/lib/email-automation-actions"
 
 interface EmailAutomation {
     id: string
@@ -60,16 +73,15 @@ interface EmailAutomation {
     doel: string[]
 }
 
-const emailAutomations: EmailAutomation[] = [
+// Static automation definitions (templates, triggers, etc.)
+const automationDefinitions: Omit<EmailAutomation, 'metrics' | 'status'>[] = [
     {
         id: "01",
         name: "Intake Bevestiging",
         description: "Automatische ontvangstbevestiging bij nieuwe aanvraag",
         trigger: "Lead aangemaakt → Status: Nieuw",
         timing: "Direct (< 2 min)",
-        status: "active",
         category: "klant",
-        metrics: { sent: 342, opened: 287, clicked: 0 },
         targets: { openRate: 50, clickRate: 0 },
         icon: <Mail className="w-4 h-4" />,
         subject: "Ontvangstbevestiging: Uw aanvraag voor {{project_type}} in {{city}} | Bureau Broersma",
@@ -105,9 +117,7 @@ Wij hebben uw aanvraag voor een **{{project_type}}** aan de **{{address}}** te *
         description: "Notificatie wanneer engineer wordt toegewezen",
         trigger: "Assignee ingesteld → Status: Calculatie",
         timing: "Direct",
-        status: "active",
         category: "klant",
-        metrics: { sent: 289, opened: 231, clicked: 145 },
         targets: { openRate: 60, clickRate: 30 },
         icon: <Users className="w-4 h-4" />,
         subject: "{{engineer_name}} gaat uw {{project_type}} berekenen | Bureau Broersma",
@@ -146,9 +156,7 @@ Goed nieuws! Uw project is toegewezen aan een van onze ervaren constructie-ingen
         description: "Offerte met CTA voor akkoord",
         trigger: "Status → Offerte Verzonden",
         timing: "Direct",
-        status: "active",
         category: "conversie",
-        metrics: { sent: 256, opened: 218, clicked: 167 },
         targets: { openRate: 70, clickRate: 40 },
         icon: <FileText className="w-4 h-4" />,
         subject: "Uw offerte voor {{project_type}} aan {{address}} | €{{quote_value}} | Bureau Broersma",
@@ -189,9 +197,7 @@ Goed nieuws! De offerte voor uw **{{project_type}}** is gereed.
         description: "Vriendelijke herinnering bij geen respons",
         trigger: "Geen respons op offerte",
         timing: "+4 dagen",
-        status: "active",
         category: "conversie",
-        metrics: { sent: 124, opened: 89, clicked: 45 },
         targets: { openRate: 50, clickRate: 20 },
         icon: <Clock className="w-4 h-4" />,
         subject: "Heeft u onze offerte ontvangen? | {{project_type}} {{address}}",
@@ -229,9 +235,7 @@ Ik wilde even checken of alles duidelijk is.
         description: "Laatste herinnering met urgentie",
         trigger: "Geen respons na herinnering #1",
         timing: "+10 dagen",
-        status: "active",
         category: "conversie",
-        metrics: { sent: 67, opened: 42, clicked: 23 },
         targets: { openRate: 40, clickRate: 15 },
         icon: <AlertCircle className="w-4 h-4" />,
         subject: "Uw offerte verloopt binnenkort | {{project_type}} {{city}}",
@@ -268,9 +272,7 @@ De offerte is nog geldig tot **{{quote_valid_until}}** – nog **{{days_remainin
         description: "Bevestiging na akkoord met planning",
         trigger: "Akkoord ontvangen → Status: Opdracht",
         timing: "Direct",
-        status: "active",
         category: "klant",
-        metrics: { sent: 189, opened: 178, clicked: 134 },
         targets: { openRate: 85, clickRate: 50 },
         icon: <CheckCircle2 className="w-4 h-4" />,
         subject: "🎉 Opdracht bevestigd: {{project_type}} {{address}} | Bureau Broersma",
@@ -309,9 +311,7 @@ Geweldig nieuws! Wij hebben uw akkoord ontvangen en gaan direct aan de slag.
         description: "Factuur met iDEAL betaallink",
         trigger: "Na opdracht bevestiging",
         timing: "+1 dag",
-        status: "active",
         category: "klant",
-        metrics: { sent: 189, opened: 172, clicked: 156 },
         targets: { openRate: 80, clickRate: 70 },
         icon: <Send className="w-4 h-4" />,
         subject: "Factuur {{invoice_number}} – {{project_type}} {{address}} | €{{invoice_total}}",
@@ -352,9 +352,7 @@ Hierbij ontvangt u de factuur voor uw opdracht.
         description: "Herinnering bij openstaande factuur",
         trigger: "Onbetaald na vervaldatum",
         timing: "+3 dagen",
-        status: "active",
         category: "klant",
-        metrics: { sent: 34, opened: 29, clicked: 24 },
         targets: { openRate: 75, clickRate: 60 },
         icon: <Bell className="w-4 h-4" />,
         subject: "Herinnering: Factuur {{invoice_number}} nog open | €{{invoice_total}}",
@@ -391,9 +389,7 @@ Heeft u de factuur niet ontvangen? Laat het me weten.`,
         description: "Documenten levering + garantie info",
         trigger: "Berekening gereed + betaling ontvangen",
         timing: "Direct",
-        status: "active",
         category: "klant",
-        metrics: { sent: 178, opened: 167, clicked: 145 },
         targets: { openRate: 90, clickRate: 70 },
         icon: <CheckCircle2 className="w-4 h-4" />,
         subject: "🎉 Uw constructieberekening is gereed! | {{project_type}} {{address}}",
@@ -434,9 +430,7 @@ U kunt deze documenten gebruiken voor uw omgevingsvergunning.
         description: "Emoji feedback + Google review verzoek",
         trigger: "Na oplevering",
         timing: "+3 dagen",
-        status: "active",
         category: "feedback",
-        metrics: { sent: 156, opened: 89, clicked: 34 },
         targets: { openRate: 30, clickRate: 20 },
         icon: <Star className="w-4 h-4" />,
         subject: "Hoe was uw ervaring met Bureau Broersma? | 30 seconden",
@@ -474,9 +468,7 @@ Iedereen die een review achterlaat, maakt kans op **€50 korting**!`,
         description: "Net Promoter Score meting",
         trigger: "Na oplevering",
         timing: "+14 dagen",
-        status: "active",
         category: "feedback",
-        metrics: { sent: 134, opened: 67, clicked: 45 },
         targets: { openRate: 25, clickRate: 15 },
         icon: <BarChart3 className="w-4 h-4" />,
         subject: "Eén vraag over Bureau Broersma | 10 seconden",
@@ -509,9 +501,7 @@ Zeer onwaarschijnlijk    Zeer waarschijnlijk`,
         description: "Referral programma voor promoters (NPS 9-10)",
         trigger: "NPS score 9+ ontvangen",
         timing: "Direct",
-        status: "active",
         category: "feedback",
-        metrics: { sent: 45, opened: 38, clicked: 23 },
         targets: { openRate: 70, clickRate: 50 },
         icon: <TrendingUp className="w-4 h-4" />,
         subject: "{{client_name}}, verdien €100 door Bureau Broersma aan te bevelen 🎁",
@@ -555,9 +545,7 @@ Zodra zij afronden, ontvangt u **€100 tegoed**
         description: "Win-back voor inactieve leads",
         trigger: "90 dagen inactief in Archief",
         timing: "Automatisch",
-        status: "draft",
         category: "campagne",
-        metrics: { sent: 0, opened: 0, clicked: 0 },
         targets: { openRate: 20, clickRate: 10 },
         icon: <RefreshCw className="w-4 h-4" />,
         subject: "{{client_name}}, zijn uw bouwplannen nog actueel?",
@@ -600,9 +588,7 @@ Ik was benieuwd: zijn deze plannen nog steeds actueel?
         description: "Voorjaar, zomer, najaar, winter campagnes",
         trigger: "Kalender-based",
         timing: "Kwartaal",
-        status: "draft",
         category: "campagne",
-        metrics: { sent: 0, opened: 0, clicked: 0 },
         targets: { openRate: 25, clickRate: 5 },
         icon: <CalendarDays className="w-4 h-4" />,
         subject: "🌷 Het bouwseizoen is begonnen – start uw project nu!",
@@ -646,9 +632,7 @@ Vergroot uw woonkamer of keuken
         description: "Alerts voor team (leads, goedkeuringen, deadlines)",
         trigger: "Diverse events",
         timing: "Direct",
-        status: "active",
         category: "intern",
-        metrics: { sent: 1245, opened: 987, clicked: 456 },
         targets: { openRate: 80, clickRate: 40 },
         icon: <Bell className="w-4 h-4" />,
         subject: "🆕 Nieuwe lead: {{project_type}} in {{city}} (€{{estimated_value}})",
@@ -705,22 +689,136 @@ const statusColors: Record<string, string> = {
 
 export function EmailAutomationPanel() {
     const [expandedId, setExpandedId] = useState<string | null>(null)
-    const [automations, setAutomations] = useState(emailAutomations)
     const [selectedTab, setSelectedTab] = useState("all")
+    const [isLoading, setIsLoading] = useState(true)
+    const [isInitializing, setIsInitializing] = useState(false)
+    
+    // Real data from database
+    const [stats, setStats] = useState<EmailAutomationStats[]>([])
+    const [configs, setConfigs] = useState<EmailAutomationConfig[]>([])
+    const [totals, setTotals] = useState({
+        totalSent: 0,
+        totalOpened: 0,
+        totalClicked: 0,
+        avgOpenRate: 0,
+        avgClickRate: 0,
+        activeFlows: 13,
+        totalFlows: 15,
+    })
 
-    const toggleStatus = (id: string) => {
-        setAutomations(prev => prev.map(a => 
-            a.id === id 
-                ? { ...a, status: a.status === "active" ? "paused" : "active" as const }
-                : a
-        ))
+    // Merge static definitions with real data
+    const automations: EmailAutomation[] = automationDefinitions.map(def => {
+        const stat = stats.find(s => s.flowId === def.id)
+        const config = configs.find(c => c.flowId === def.id)
+        
+        return {
+            ...def,
+            status: (config?.status || (def.id === '13' || def.id === '14' ? 'draft' : 'active')) as 'active' | 'paused' | 'draft',
+            metrics: {
+                sent: stat?.sent || 0,
+                opened: stat?.opened || 0,
+                clicked: stat?.clicked || 0,
+            }
+        }
+    })
+
+    const fetchData = useCallback(async () => {
+        try {
+            const [statsResult, totalsResult, configsResult] = await Promise.all([
+                getEmailAutomationStats(),
+                getEmailAutomationTotals(),
+                getEmailAutomationConfigs(),
+            ])
+
+            if (statsResult.success && statsResult.data) {
+                setStats(statsResult.data)
+            }
+            if (totalsResult.success && totalsResult.data) {
+                setTotals(totalsResult.data)
+            }
+            if (configsResult.success && configsResult.data) {
+                setConfigs(configsResult.data)
+            }
+        } catch (error) {
+            console.error('Failed to fetch email automation data:', error)
+        } finally {
+            setIsLoading(false)
+        }
+    }, [])
+
+    useEffect(() => {
+        fetchData()
+    }, [fetchData])
+
+    const handleInitialize = async () => {
+        setIsInitializing(true)
+        try {
+            const result = await initializeAutomationConfigs()
+            if (result.success) {
+                toast.success('Automation configuraties geïnitialiseerd')
+                await fetchData()
+            } else {
+                toast.error('Kon configuraties niet initialiseren')
+            }
+        } catch {
+            toast.error('Er ging iets mis')
+        } finally {
+            setIsInitializing(false)
+        }
     }
 
-    const totalSent = automations.reduce((sum, a) => sum + a.metrics.sent, 0)
-    const totalOpened = automations.reduce((sum, a) => sum + a.metrics.opened, 0)
-    const totalClicked = automations.reduce((sum, a) => sum + a.metrics.clicked, 0)
-    const avgOpenRate = totalSent > 0 ? Math.round((totalOpened / totalSent) * 100) : 0
-    const avgClickRate = totalOpened > 0 ? Math.round((totalClicked / totalOpened) * 100) : 0
+    const toggleStatus = async (id: string) => {
+        const automation = automations.find(a => a.id === id)
+        if (!automation || automation.status === 'draft') return
+
+        const newStatus = automation.status === 'active' ? 'paused' : 'active'
+        
+        // Optimistic update
+        setConfigs(prev => {
+            const existing = prev.find(c => c.flowId === id)
+            if (existing) {
+                return prev.map(c => c.flowId === id ? { ...c, status: newStatus } : c)
+            }
+            return [...prev, { flowId: id, name: automation.name, status: newStatus, category: automation.category }]
+        })
+
+        try {
+            const result = await updateAutomationStatus(id, newStatus)
+            if (!result.success) {
+                // Revert on error
+                setConfigs(prev => prev.map(c => 
+                    c.flowId === id ? { ...c, status: automation.status } : c
+                ))
+                toast.error('Kon status niet bijwerken')
+            } else {
+                toast.success(`${automation.name} ${newStatus === 'active' ? 'geactiveerd' : 'gepauzeerd'}`)
+            }
+        } catch {
+            toast.error('Er ging iets mis')
+        }
+    }
+
+    // Loading state
+    if (isLoading) {
+        return (
+            <div className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    {[...Array(4)].map((_, i) => (
+                        <Card key={i}>
+                            <CardContent className="p-4">
+                                <Skeleton className="h-12 w-full" />
+                            </CardContent>
+                        </Card>
+                    ))}
+                </div>
+                <Card>
+                    <CardContent className="p-6">
+                        <Skeleton className="h-32 w-full" />
+                    </CardContent>
+                </Card>
+            </div>
+        )
+    }
 
     return (
         <div className="space-y-6">
@@ -731,7 +829,7 @@ export function EmailAutomationPanel() {
                         <div className="flex items-center justify-between">
                             <div>
                                 <p className="text-sm text-muted-foreground">Totaal Verzonden</p>
-                                <p className="text-2xl font-bold text-blue-600">{totalSent.toLocaleString()}</p>
+                                <p className="text-2xl font-bold text-blue-600">{totals.totalSent.toLocaleString()}</p>
                             </div>
                             <div className="w-10 h-10 rounded-full bg-blue-500/20 flex items-center justify-center">
                                 <Send className="w-5 h-5 text-blue-600" />
@@ -745,7 +843,15 @@ export function EmailAutomationPanel() {
                         <div className="flex items-center justify-between">
                             <div>
                                 <p className="text-sm text-muted-foreground">Open Rate</p>
-                                <p className="text-2xl font-bold text-emerald-600">{avgOpenRate}%</p>
+                                <div className="flex items-baseline gap-2">
+                                    <p className="text-2xl font-bold text-emerald-600">{totals.avgOpenRate}%</p>
+                                    {totals.totalOpened === 0 && totals.totalSent > 0 && (
+                                        <Badge variant="outline" className="text-[10px] text-amber-600 border-amber-300">
+                                            <AlertTriangle className="w-3 h-3 mr-1" />
+                                            Webhook nodig
+                                        </Badge>
+                                    )}
+                                </div>
                             </div>
                             <div className="w-10 h-10 rounded-full bg-emerald-500/20 flex items-center justify-center">
                                 <Eye className="w-5 h-5 text-emerald-600" />
@@ -759,7 +865,15 @@ export function EmailAutomationPanel() {
                         <div className="flex items-center justify-between">
                             <div>
                                 <p className="text-sm text-muted-foreground">Click Rate</p>
-                                <p className="text-2xl font-bold text-amber-600">{avgClickRate}%</p>
+                                <div className="flex items-baseline gap-2">
+                                    <p className="text-2xl font-bold text-amber-600">{totals.avgClickRate}%</p>
+                                    {totals.totalClicked === 0 && totals.totalSent > 0 && (
+                                        <Badge variant="outline" className="text-[10px] text-amber-600 border-amber-300">
+                                            <AlertTriangle className="w-3 h-3 mr-1" />
+                                            Webhook nodig
+                                        </Badge>
+                                    )}
+                                </div>
                             </div>
                             <div className="w-10 h-10 rounded-full bg-amber-500/20 flex items-center justify-center">
                                 <MousePointer className="w-5 h-5 text-amber-600" />
@@ -784,6 +898,27 @@ export function EmailAutomationPanel() {
                     </CardContent>
                 </Card>
             </div>
+
+            {/* Initialize button if no configs */}
+            {configs.length === 0 && (
+                <Card className="border-dashed">
+                    <CardContent className="p-6 text-center">
+                        <p className="text-muted-foreground mb-4">
+                            Configuraties niet gevonden. Initialiseer de standaard automation flows.
+                        </p>
+                        <Button onClick={handleInitialize} disabled={isInitializing}>
+                            {isInitializing ? (
+                                <>
+                                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                    Initialiseren...
+                                </>
+                            ) : (
+                                'Initialiseer Configuraties'
+                            )}
+                        </Button>
+                    </CardContent>
+                </Card>
+            )}
 
             {/* Flow Visualization */}
             <Card>
@@ -1075,9 +1210,11 @@ export function EmailAutomationPanel() {
                                                         <Copy className="w-3 h-3" />
                                                         Kopieer HTML
                                                     </Button>
-                                                    <Button size="sm" variant="outline" className="gap-1">
-                                                        <ExternalLink className="w-3 h-3" />
-                                                        Docs
+                                                    <Button size="sm" variant="outline" className="gap-1" asChild>
+                                                        <a href={`/docs/email-automations/${automation.id.padStart(2, '0')}`} target="_blank">
+                                                            <ExternalLink className="w-3 h-3" />
+                                                            Docs
+                                                        </a>
                                                     </Button>
                                                     <Button size="sm" variant="outline" className="gap-1">
                                                         <BarChart3 className="w-3 h-3" />

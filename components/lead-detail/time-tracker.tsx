@@ -5,45 +5,65 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
-import { Play, Pause, Clock, History, Euro, TrendingUp } from "lucide-react"
+import { Skeleton } from "@/components/ui/skeleton"
+import { Play, Pause, Clock, History, Euro, TrendingUp, Loader2 } from "lucide-react"
 import { toast } from "sonner"
+import { getTimeEntries, createTimeEntry } from "@/lib/db-actions"
+import { useCurrentUser } from "@/lib/auth"
 
 interface TimeEntry {
     id: string
+    date: string
     startTime: string
-    endTime?: string
-    duration: number // in seconds
+    endTime: string
+    duration: number // in minutes
     description: string
-    user: string
+    userName: string
+    category: string
 }
 
 interface TimeTrackerProps {
-    leadId?: string
+    leadId: string
     hourlyRate?: number
 }
 
-export function TimeTracker({ hourlyRate = 85 }: TimeTrackerProps) {
+export function TimeTracker({ leadId, hourlyRate = 85 }: TimeTrackerProps) {
     const [isTracking, setIsTracking] = useState(false)
     const [currentSessionStart, setCurrentSessionStart] = useState<Date | null>(null)
     const [elapsedTime, setElapsedTime] = useState(0)
-    const [timeEntries, setTimeEntries] = useState<TimeEntry[]>([
-        {
-            id: "1",
-            startTime: "2026-01-12T09:30:00",
-            endTime: "2026-01-12T10:15:00",
-            duration: 2700,
-            description: "Initiële analyse en BAG check",
-            user: "Angelo"
-        },
-        {
-            id: "2",
-            startTime: "2026-01-12T14:00:00",
-            endTime: "2026-01-12T14:45:00",
-            duration: 2700,
-            description: "Constructieberekening",
-            user: "Angelo"
+    const [timeEntries, setTimeEntries] = useState<TimeEntry[]>([])
+    const [isLoading, setIsLoading] = useState(true)
+    const [isSaving, setIsSaving] = useState(false)
+    const currentUser = useCurrentUser()
+
+    // Fetch time entries from database
+    useEffect(() => {
+        let isMounted = true
+
+        async function loadTimeEntries() {
+            if (!leadId) return
+            setIsLoading(true)
+
+            try {
+                const result = await getTimeEntries(leadId)
+                if (isMounted && result.success && result.data) {
+                    setTimeEntries(result.data as TimeEntry[])
+                }
+            } catch (error) {
+                console.error('[TimeTracker] Failed to load time entries:', error)
+            } finally {
+                if (isMounted) {
+                    setIsLoading(false)
+                }
+            }
         }
-    ])
+
+        loadTimeEntries()
+
+        return () => {
+            isMounted = false
+        }
+    }, [leadId])
 
     // Timer effect
     useEffect(() => {
@@ -73,13 +93,6 @@ export function TimeTracker({ hourlyRate = 85 }: TimeTrackerProps) {
         return `${minutes}:${secs.toString().padStart(2, '0')}`
     }, [])
 
-    const formatTime = (isoString: string) => {
-        return new Date(isoString).toLocaleTimeString('nl-NL', { 
-            hour: '2-digit', 
-            minute: '2-digit' 
-        })
-    }
-
     const startTracking = () => {
         setIsTracking(true)
         setCurrentSessionStart(new Date())
@@ -89,34 +102,75 @@ export function TimeTracker({ hourlyRate = 85 }: TimeTrackerProps) {
         })
     }
 
-    const stopTracking = () => {
-        if (!currentSessionStart) return
+    const stopTracking = async () => {
+        if (!currentSessionStart || !leadId || !currentUser) return
         
         const now = new Date()
-        const duration = Math.floor((now.getTime() - currentSessionStart.getTime()) / 1000)
+        const durationSeconds = Math.floor((now.getTime() - currentSessionStart.getTime()) / 1000)
+        const durationMinutes = Math.ceil(durationSeconds / 60)
         
-        const newEntry: TimeEntry = {
-            id: Date.now().toString(),
-            startTime: currentSessionStart.toISOString(),
-            endTime: now.toISOString(),
-            duration,
-            description: "Werkzaamheden",
-            user: "Angelo"
+        setIsSaving(true)
+        try {
+            const startTimeStr = currentSessionStart.toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' })
+            const endTimeStr = now.toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' })
+            
+            const result = await createTimeEntry({
+                leadId,
+                userId: currentUser.id,
+                userName: currentUser.name,
+                date: now.toISOString().split('T')[0],
+                startTime: startTimeStr,
+                endTime: endTimeStr,
+                duration: durationMinutes,
+                description: "Werkzaamheden",
+                category: "calculatie"
+            })
+
+            if (result.success && result.data) {
+                setTimeEntries([result.data as TimeEntry, ...timeEntries])
+                toast.success("Tijdregistratie opgeslagen", {
+                    description: `${formatDuration(durationSeconds)} geregistreerd.`
+                })
+            } else {
+                toast.error("Kon tijd niet opslaan")
+            }
+        } catch (error) {
+            console.error('[TimeTracker] Failed to save time entry:', error)
+            toast.error("Fout bij opslaan tijdregistratie")
+        } finally {
+            setIsTracking(false)
+            setCurrentSessionStart(null)
+            setElapsedTime(0)
+            setIsSaving(false)
         }
-        
-        setTimeEntries([newEntry, ...timeEntries])
-        setIsTracking(false)
-        setCurrentSessionStart(null)
-        setElapsedTime(0)
-        
-        toast.success("Tijdregistratie opgeslagen", {
-            description: `${formatDuration(duration)} geregistreerd.`
-        })
     }
 
-    const totalTime = timeEntries.reduce((acc, entry) => acc + entry.duration, 0) + (isTracking ? elapsedTime : 0)
-    const totalHours = totalTime / 3600
+    // Duration is stored in minutes, elapsedTime is in seconds
+    const totalMinutes = timeEntries.reduce((acc, entry) => acc + entry.duration, 0)
+    const totalSeconds = (totalMinutes * 60) + (isTracking ? elapsedTime : 0)
+    const totalHours = totalSeconds / 3600
     const estimatedCost = totalHours * hourlyRate
+
+    if (isLoading) {
+        return (
+            <Card className="border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20">
+                <CardHeader className="pb-3">
+                    <CardTitle className="flex items-center gap-2 text-base">
+                        <Clock className="w-4 h-4 text-amber-600" />
+                        Tijdregistratie
+                    </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                    <Skeleton className="h-16 w-full" />
+                    <div className="grid grid-cols-3 gap-2">
+                        <Skeleton className="h-20" />
+                        <Skeleton className="h-20" />
+                        <Skeleton className="h-20" />
+                    </div>
+                </CardContent>
+            </Card>
+        )
+    }
 
     return (
         <Card className="border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20">
@@ -132,8 +186,9 @@ export function TimeTracker({ hourlyRate = 85 }: TimeTrackerProps) {
                             variant="destructive" 
                             onClick={stopTracking}
                             className="gap-1 h-7"
+                            disabled={isSaving}
                         >
-                            <Pause className="w-3 h-3" />
+                            {isSaving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Pause className="w-3 h-3" />}
                             Stop
                         </Button>
                     ) : (
@@ -163,7 +218,7 @@ export function TimeTracker({ hourlyRate = 85 }: TimeTrackerProps) {
                 <div className="grid grid-cols-3 gap-2">
                     <div className="bg-white dark:bg-slate-900 p-2 rounded-lg text-center">
                         <History className="w-4 h-4 mx-auto text-slate-500 mb-1" />
-                        <p className="text-lg font-bold font-mono">{formatDuration(totalTime)}</p>
+                        <p className="text-lg font-bold font-mono">{formatDuration(totalSeconds)}</p>
                         <p className="text-[10px] text-muted-foreground">Totaal</p>
                     </div>
                     <div className="bg-white dark:bg-slate-900 p-2 rounded-lg text-center">
@@ -187,24 +242,30 @@ export function TimeTracker({ hourlyRate = 85 }: TimeTrackerProps) {
                         Recente registraties
                     </h4>
                     <div className="space-y-1 max-h-32 overflow-y-auto">
-                        {timeEntries.slice(0, 5).map((entry) => (
-                            <div 
-                                key={entry.id}
-                                className="flex items-center justify-between p-2 bg-white dark:bg-slate-900 rounded text-sm"
-                            >
-                                <div className="flex items-center gap-2">
-                                    <Badge variant="outline" className="text-[10px] font-mono">
-                                        {formatTime(entry.startTime)}
-                                    </Badge>
-                                    <span className="text-muted-foreground truncate max-w-[120px]">
-                                        {entry.description}
+                        {timeEntries.length === 0 ? (
+                            <div className="text-center py-4 text-muted-foreground text-xs">
+                                Nog geen uren geregistreerd
+                            </div>
+                        ) : (
+                            timeEntries.slice(0, 5).map((entry) => (
+                                <div 
+                                    key={entry.id}
+                                    className="flex items-center justify-between p-2 bg-white dark:bg-slate-900 rounded text-sm"
+                                >
+                                    <div className="flex items-center gap-2">
+                                        <Badge variant="outline" className="text-[10px] font-mono">
+                                            {entry.startTime}
+                                        </Badge>
+                                        <span className="text-muted-foreground truncate max-w-[120px]">
+                                            {entry.description}
+                                        </span>
+                                    </div>
+                                    <span className="font-mono font-medium text-xs">
+                                        {formatDuration(entry.duration * 60)}
                                     </span>
                                 </div>
-                                <span className="font-mono font-medium text-xs">
-                                    {formatDuration(entry.duration)}
-                                </span>
-                            </div>
-                        ))}
+                            ))
+                        )}
                     </div>
                 </div>
 

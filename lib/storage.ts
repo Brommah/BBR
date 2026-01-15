@@ -1,9 +1,30 @@
 "use server"
 
-import { supabase } from './supabase'
+import { createClient } from '@supabase/supabase-js'
 import { createDocument, deleteDocument as deleteDocumentDb } from './db-actions'
 
 const BUCKET_NAME = 'documents'
+
+// Server-side Supabase client with service role key (bypasses RLS)
+// Falls back to anon key if service role key is not available
+function getStorageClient() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+  if (!supabaseUrl) return null
+
+  // Prefer service role key for server-side storage operations
+  const key = serviceRoleKey || anonKey
+  if (!key) return null
+
+  return createClient(supabaseUrl, key, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+    }
+  })
+}
 
 interface UploadResult {
   success: boolean
@@ -11,17 +32,26 @@ interface UploadResult {
   error?: string
 }
 
-// Check if bucket exists (don't try to create - requires admin)
+/**
+ * Check if bucket exists by attempting to list files
+ * Note: listBuckets() requires service role - we use list() on the bucket instead
+ */
 async function checkBucketExists(): Promise<boolean> {
-  if (!supabase) return false
+  const client = getStorageClient()
+  if (!client) return false
   
   try {
-    const { data: buckets, error } = await supabase.storage.listBuckets()
+    // Try to list files in the bucket
+    const { error } = await client.storage
+      .from(BUCKET_NAME)
+      .list('', { limit: 1 })
+    
     if (error) {
-      console.warn('[STORAGE] Cannot list buckets:', error.message)
+      // Bucket doesn't exist or no access
+      console.warn('[STORAGE] Bucket check failed:', error.message)
       return false
     }
-    return buckets?.some(b => b.name === BUCKET_NAME) ?? false
+    return true
   } catch (err) {
     console.warn('[STORAGE] Bucket check failed:', err)
     return false
@@ -47,7 +77,9 @@ function getFileType(filename: string): string {
   }
 }
 
-// Upload file - stores in Supabase if available, otherwise database-only
+/**
+ * Upload file - stores in Supabase if available, otherwise database-only
+ */
 export async function uploadFile(formData: FormData): Promise<UploadResult> {
   try {
     const file = formData.get('file') as File | null
@@ -59,10 +91,12 @@ export async function uploadFile(formData: FormData): Promise<UploadResult> {
       return { success: false, error: 'Missing required fields' }
     }
 
+    const client = getStorageClient()
+    
     // Check if Supabase storage is available
     const bucketExists = await checkBucketExists()
     
-    if (!supabase || !bucketExists) {
+    if (!client || !bucketExists) {
       // Supabase storage not available - save to database with placeholder URL
       console.log('[STORAGE] Supabase storage not available - saving document record only')
       
@@ -94,8 +128,10 @@ export async function uploadFile(formData: FormData): Promise<UploadResult> {
     const arrayBuffer = await file.arrayBuffer()
     const buffer = Buffer.from(arrayBuffer)
     
+    console.log(`[STORAGE] Uploading to ${BUCKET_NAME}/${path}`)
+    
     // Upload to Supabase Storage
-    const { error: uploadError } = await supabase.storage
+    const { error: uploadError } = await client.storage
       .from(BUCKET_NAME)
       .upload(path, buffer, {
         contentType: file.type || 'application/octet-stream',
@@ -103,7 +139,7 @@ export async function uploadFile(formData: FormData): Promise<UploadResult> {
       })
     
     if (uploadError) {
-      console.error('[STORAGE] Upload error:', uploadError)
+      console.error('[STORAGE] Upload error:', uploadError.message)
       
       // Fall back to database-only if upload fails
       console.log('[STORAGE] Falling back to database-only storage')
@@ -126,8 +162,10 @@ export async function uploadFile(formData: FormData): Promise<UploadResult> {
       return { success: true, url: placeholderUrl }
     }
     
+    console.log('[STORAGE] Upload successful')
+    
     // Get public URL
-    const { data: urlData } = supabase.storage
+    const { data: urlData } = client.storage
       .from(BUCKET_NAME)
       .getPublicUrl(path)
     
@@ -144,7 +182,7 @@ export async function uploadFile(formData: FormData): Promise<UploadResult> {
     
     if (!dbResult.success) {
       // Cleanup uploaded file
-      await supabase.storage.from(BUCKET_NAME).remove([path])
+      await client.storage.from(BUCKET_NAME).remove([path])
       return { success: false, error: dbResult.error }
     }
     
@@ -158,18 +196,23 @@ export async function uploadFile(formData: FormData): Promise<UploadResult> {
   }
 }
 
-// Delete file from storage and database
+/**
+ * Delete file from storage and database
+ */
 export async function deleteFile(documentId: string, url: string): Promise<{ success: boolean; error?: string }> {
   try {
+    const client = getStorageClient()
+    
     // Only try to delete from Supabase if it's a Supabase URL
-    if (supabase && url.includes('supabase')) {
+    if (client && url.includes('supabase')) {
       try {
         const urlObj = new URL(url)
         const pathMatch = urlObj.pathname.match(/\/storage\/v1\/object\/public\/documents\/(.+)/)
         
         if (pathMatch) {
           const filePath = decodeURIComponent(pathMatch[1])
-          await supabase.storage.from(BUCKET_NAME).remove([filePath])
+          await client.storage.from(BUCKET_NAME).remove([filePath])
+          console.log('[STORAGE] File deleted from storage:', filePath)
         }
       } catch (storageErr) {
         console.warn('[STORAGE] Could not delete from storage:', storageErr)
@@ -189,14 +232,17 @@ export async function deleteFile(documentId: string, url: string): Promise<{ suc
   }
 }
 
-// Get signed URL for private file access
+/**
+ * Get signed URL for private file access
+ */
 export async function getSignedUrl(path: string, expiresIn: number = 3600): Promise<string | null> {
-  if (!supabase) {
+  const client = getStorageClient()
+  if (!client) {
     console.error('[STORAGE] Supabase not configured')
     return null
   }
   
-  const { data, error } = await supabase.storage
+  const { data, error } = await client.storage
     .from(BUCKET_NAME)
     .createSignedUrl(path, expiresIn)
   

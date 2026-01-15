@@ -5,8 +5,17 @@ import { useRouter } from "next/navigation"
 import { useAuthStore } from "@/lib/auth"
 import { LoginForm } from "@/components/auth/login-form"
 
+/**
+ * Get the default landing page based on user role
+ * - Admin: starts on /admin
+ * - Engineer/Viewer: starts on / (werkvoorraad/werken)
+ */
+function getDefaultRoute(role: string | undefined): string {
+    return role === 'admin' ? '/admin' : '/'
+}
+
 export default function LoginPage() {
-    const { isAuthenticated, checkSession } = useAuthStore()
+    const { isAuthenticated, checkSession, currentUser } = useAuthStore()
     const router = useRouter()
 
     // Check session on mount
@@ -14,12 +23,12 @@ export default function LoginPage() {
         checkSession()
     }, [checkSession])
 
-    // Redirect to home if authenticated
+    // Redirect based on role if authenticated
     useEffect(() => {
-        if (isAuthenticated) {
-            router.push("/")
+        if (isAuthenticated && currentUser) {
+            router.push(getDefaultRoute(currentUser.role))
         }
-    }, [isAuthenticated, router])
+    }, [isAuthenticated, currentUser, router])
 
     // Always show the login form - the redirect will happen via useEffect
     // This prevents blank screen issues

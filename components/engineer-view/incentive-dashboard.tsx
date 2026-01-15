@@ -1,30 +1,101 @@
 "use client"
 
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { Separator } from "@/components/ui/separator"
+import { Skeleton } from "@/components/ui/skeleton"
 import { Trophy, Zap, Target, TrendingUp, Star, Flame, Award, Euro } from "lucide-react"
-import { DEFAULT_ENGINEER_PROFILE, INCENTIVE_TIERS } from "@/lib/incentives"
+import { INCENTIVE_TIERS, XP_ACTIONS, getTierForXp } from "@/lib/incentives"
+import { getEngineerLeaderboard, getEngineerStats, EngineerStats } from "@/lib/db-actions"
+import { useCurrentUser } from "@/lib/auth"
 
-const leaderboard = [
-    { name: "Angelo", quotesWon: 14, revenue: 42500, streak: 12 },
-    { name: "Venka", quotesWon: 11, revenue: 38200, streak: 8 },
-    { name: "Roina", quotesWon: 9, revenue: 31000, streak: 5 },
-]
-
-const xpActions = [
-    { action: "Offerte verzonden", xp: 25 },
-    { action: "Offerte gewonnen", xp: 100 },
-    { action: "Reactie < 2 uur", xp: 15 },
-    { action: "5-sterren review", xp: 50 },
-    { action: "Dagelijkse streak", xp: 10 },
-]
+interface LeaderboardEntry {
+    name: string
+    avatar: string
+    quotesWon: number
+    revenue: number
+    hoursLogged: number
+}
 
 export function IncentiveDashboard() {
-    const stats = DEFAULT_ENGINEER_PROFILE
-    const xpProgress = (stats.xp / stats.xpToNext) * 100
-    const conversionRate = (stats.monthlyStats.quotesWon / stats.monthlyStats.quotesGenerated) * 100
+    const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([])
+    const [myStats, setMyStats] = useState<{
+        quotesGenerated: number
+        quotesWon: number
+        revenue: number
+        avgResponseTimeHours: number
+        conversionRate: number
+    } | null>(null)
+    const [isLoading, setIsLoading] = useState(true)
+    const currentUser = useCurrentUser()
+
+    // Fetch leaderboard and user stats
+    useEffect(() => {
+        let isMounted = true
+
+        async function loadData() {
+            setIsLoading(true)
+            try {
+                // Fetch leaderboard
+                const leaderboardResult = await getEngineerLeaderboard()
+                if (isMounted && leaderboardResult.success && leaderboardResult.data) {
+                    setLeaderboard(leaderboardResult.data as LeaderboardEntry[])
+                }
+
+                // Fetch current user's stats
+                if (currentUser?.name) {
+                    const statsResult = await getEngineerStats(currentUser.name)
+                    if (isMounted && statsResult.success && statsResult.data) {
+                        setMyStats(statsResult.data as typeof myStats)
+                    }
+                }
+            } catch (error) {
+                console.error('[IncentiveDashboard] Failed to load data:', error)
+            } finally {
+                if (isMounted) {
+                    setIsLoading(false)
+                }
+            }
+        }
+
+        loadData()
+
+        return () => {
+            isMounted = false
+        }
+    }, [currentUser?.name])
+
+    // Calculate XP based on real performance (simplified formula)
+    const calculateXP = () => {
+        if (!myStats) return 0
+        return (myStats.quotesWon * 100) + (myStats.quotesGenerated * 25)
+    }
+
+    const xp = calculateXP()
+    const { current: currentTier, next: nextTier } = getTierForXp(xp)
+    const xpToNext = nextTier ? nextTier.minXP : currentTier.minXP + 1000
+    const xpProgress = nextTier ? ((xp - currentTier.minXP) / (nextTier.minXP - currentTier.minXP)) * 100 : 100
+    const conversionRate = myStats?.conversionRate || 0
+    if (isLoading) {
+        return (
+            <div className="space-y-6">
+                <Skeleton className="h-48 w-full" />
+                <div className="grid gap-4 md:grid-cols-5">
+                    {[1, 2, 3, 4, 5].map(i => (
+                        <Skeleton key={i} className="h-24" />
+                    ))}
+                </div>
+                <div className="grid gap-6 md:grid-cols-2">
+                    <Skeleton className="h-64" />
+                    <Skeleton className="h-64" />
+                </div>
+            </div>
+        )
+    }
+
+    const myRank = leaderboard.findIndex(e => e.name === currentUser?.name) + 1
 
     return (
         <div className="space-y-6">
@@ -35,25 +106,27 @@ export function IncentiveDashboard() {
                     <div className="flex items-center justify-between">
                         <div className="flex items-center gap-4">
                             <div className="w-16 h-16 rounded-full bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center text-2xl font-bold shadow-lg shadow-amber-500/30">
-                                {stats.avatar}
+                                {currentUser?.name?.[0] || "?"}
                             </div>
                             <div>
-                                <CardTitle className="text-2xl">{stats.name}</CardTitle>
+                                <CardTitle className="text-2xl">{currentUser?.name || "Engineer"}</CardTitle>
                                 <div className="flex items-center gap-2 mt-1">
                                     <Badge className="bg-amber-500/20 text-amber-300 border-amber-500/30">
-                                        Level {stats.level}
+                                        {currentTier.name}
                                     </Badge>
-                                    <Badge className="bg-purple-500/20 text-purple-300 border-purple-500/30">
-                                        #{stats.leaderboardRank} Leaderboard
-                                    </Badge>
+                                    {myRank > 0 && (
+                                        <Badge className="bg-purple-500/20 text-purple-300 border-purple-500/30">
+                                            #{myRank} Leaderboard
+                                        </Badge>
+                                    )}
                                 </div>
                             </div>
                         </div>
                         <div className="text-right">
                             <div className="flex items-center gap-2 text-amber-400">
-                                <Flame className="w-5 h-5" />
-                                <span className="text-2xl font-bold">{stats.currentStreakDays}</span>
-                                <span className="text-sm text-white/60">dagen streak</span>
+                                <Trophy className="w-5 h-5" />
+                                <span className="text-2xl font-bold">{myStats?.quotesWon || 0}</span>
+                                <span className="text-sm text-white/60">gewonnen</span>
                             </div>
                         </div>
                     </div>
@@ -62,31 +135,31 @@ export function IncentiveDashboard() {
                     {/* XP Progress */}
                     <div className="space-y-2">
                         <div className="flex justify-between text-sm">
-                            <span className="text-white/60">XP Progress naar Level {stats.level + 1}</span>
-                            <span className="font-mono">{stats.xp.toLocaleString()} / {stats.xpToNext.toLocaleString()}</span>
+                            <span className="text-white/60">XP Progress naar {nextTier?.name || "Max Level"}</span>
+                            <span className="font-mono">{xp.toLocaleString()} / {xpToNext.toLocaleString()}</span>
                         </div>
                         <div className="relative">
                             <Progress value={xpProgress} className="h-3 bg-white/10" />
                             <div 
                                 className="absolute top-0 left-0 h-3 rounded-full bg-gradient-to-r from-amber-400 to-amber-600 transition-all duration-500"
-                                style={{ width: `${xpProgress}%` }}
+                                style={{ width: `${Math.min(xpProgress, 100)}%` }}
                             />
                         </div>
                     </div>
 
-                    {/* Badges */}
-                    <div className="flex items-center gap-3 pt-2">
-                        {stats.badges.map((badge) => (
-                            <div 
-                                key={badge.id}
-                                className="w-12 h-12 rounded-xl bg-white/10 flex items-center justify-center text-2xl hover:scale-110 transition-transform cursor-pointer"
-                                title={badge.name}
-                            >
-                                {badge.icon}
-                            </div>
-                        ))}
-                        <div className="w-12 h-12 rounded-xl border-2 border-dashed border-white/20 flex items-center justify-center text-white/30 text-xl">
-                            ?
+                    {/* Quick Stats */}
+                    <div className="flex items-center gap-6 pt-2">
+                        <div className="text-center">
+                            <p className="text-2xl font-bold text-amber-400">{xp}</p>
+                            <p className="text-[10px] uppercase tracking-wider text-white/50">XP Totaal</p>
+                        </div>
+                        <div className="text-center">
+                            <p className="text-2xl font-bold text-emerald-400">{conversionRate}%</p>
+                            <p className="text-[10px] uppercase tracking-wider text-white/50">Conversie</p>
+                        </div>
+                        <div className="text-center">
+                            <p className="text-2xl font-bold text-purple-400">{myStats?.quotesGenerated || 0}</p>
+                            <p className="text-[10px] uppercase tracking-wider text-white/50">Offertes</p>
                         </div>
                     </div>
                 </CardContent>
@@ -102,7 +175,7 @@ export function IncentiveDashboard() {
                             </div>
                             <div>
                                 <p className="text-xs text-emerald-700 dark:text-emerald-400 font-medium">Conversie</p>
-                                <p className="text-2xl font-bold text-emerald-800 dark:text-emerald-300">{conversionRate.toFixed(0)}%</p>
+                                <p className="text-2xl font-bold text-emerald-800 dark:text-emerald-300">{conversionRate}%</p>
                             </div>
                         </div>
                     </CardContent>
@@ -116,7 +189,7 @@ export function IncentiveDashboard() {
                             </div>
                             <div>
                                 <p className="text-xs text-blue-700 dark:text-blue-400 font-medium">Reactietijd</p>
-                                <p className="text-2xl font-bold text-blue-800 dark:text-blue-300">{stats.monthlyStats.avgResponseTimeHours}u</p>
+                                <p className="text-2xl font-bold text-blue-800 dark:text-blue-300">{myStats?.avgResponseTimeHours || 0}u</p>
                             </div>
                         </div>
                     </CardContent>
@@ -130,7 +203,7 @@ export function IncentiveDashboard() {
                             </div>
                             <div>
                                 <p className="text-xs text-purple-700 dark:text-purple-400 font-medium">Offertes</p>
-                                <p className="text-2xl font-bold text-purple-800 dark:text-purple-300">{stats.monthlyStats.quotesGenerated}</p>
+                                <p className="text-2xl font-bold text-purple-800 dark:text-purple-300">{myStats?.quotesGenerated || 0}</p>
                             </div>
                         </div>
                     </CardContent>
@@ -144,7 +217,7 @@ export function IncentiveDashboard() {
                             </div>
                             <div>
                                 <p className="text-xs text-amber-700 dark:text-amber-400 font-medium">Omzet</p>
-                                <p className="text-2xl font-bold text-amber-800 dark:text-amber-300">€{(stats.monthlyStats.revenueEur/1000).toFixed(0)}k</p>
+                                <p className="text-2xl font-bold text-amber-800 dark:text-amber-300">€{((myStats?.revenue || 0) / 1000).toFixed(0)}k</p>
                             </div>
                         </div>
                     </CardContent>
@@ -157,8 +230,8 @@ export function IncentiveDashboard() {
                                 <Star className="w-5 h-5 text-white" />
                             </div>
                             <div>
-                                <p className="text-xs text-rose-700 dark:text-rose-400 font-medium">Rating</p>
-                                <p className="text-2xl font-bold text-rose-800 dark:text-rose-300">{stats.monthlyStats.clientSatisfaction}</p>
+                                <p className="text-xs text-rose-700 dark:text-rose-400 font-medium">Gewonnen</p>
+                                <p className="text-2xl font-bold text-rose-800 dark:text-rose-300">{myStats?.quotesWon || 0}</p>
                             </div>
                         </div>
                     </CardContent>
@@ -171,37 +244,45 @@ export function IncentiveDashboard() {
                     <CardHeader className="pb-3">
                         <CardTitle className="flex items-center gap-2 text-lg">
                             <Trophy className="w-5 h-5 text-amber-500" />
-                            Leaderboard - Januari 2026
+                            Leaderboard - {new Date().toLocaleDateString('nl-NL', { month: 'long', year: 'numeric' })}
                         </CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-3">
-                        {leaderboard.map((engineer, index) => (
-                            <div 
-                                key={engineer.name}
-                                className={`flex items-center gap-4 p-3 rounded-lg ${
-                                    index === 0 ? 'bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800' :
-                                    'bg-slate-50 dark:bg-slate-800/50'
-                                }`}
-                            >
-                                <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold ${
-                                    index === 0 ? 'bg-amber-500 text-white' :
-                                    index === 1 ? 'bg-slate-400 text-white' :
-                                    'bg-amber-700 text-white'
-                                }`}>
-                                    {index + 1}
-                                </div>
-                                <div className="flex-1">
-                                    <p className="font-semibold">{engineer.name}</p>
-                                    <p className="text-xs text-muted-foreground">
-                                        {engineer.quotesWon} gewonnen • €{engineer.revenue.toLocaleString()}
-                                    </p>
-                                </div>
-                                <div className="flex items-center gap-1 text-amber-600">
-                                    <Flame className="w-4 h-4" />
-                                    <span className="font-bold">{engineer.streak}</span>
-                                </div>
+                        {leaderboard.length === 0 ? (
+                            <div className="text-center py-8 text-muted-foreground">
+                                <Trophy className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                                <p className="text-sm">Nog geen leaderboard data</p>
                             </div>
-                        ))}
+                        ) : (
+                            leaderboard.slice(0, 5).map((engineer, index) => (
+                                <div 
+                                    key={engineer.name}
+                                    className={`flex items-center gap-4 p-3 rounded-lg ${
+                                        engineer.name === currentUser?.name ? 'bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800' :
+                                        'bg-slate-50 dark:bg-slate-800/50'
+                                    }`}
+                                >
+                                    <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold ${
+                                        index === 0 ? 'bg-amber-500 text-white' :
+                                        index === 1 ? 'bg-slate-400 text-white' :
+                                        index === 2 ? 'bg-amber-700 text-white' :
+                                        'bg-slate-300 text-slate-700'
+                                    }`}>
+                                        {index + 1}
+                                    </div>
+                                    <div className="flex-1">
+                                        <p className="font-semibold">{engineer.name}</p>
+                                        <p className="text-xs text-muted-foreground">
+                                            {engineer.quotesWon} gewonnen • €{engineer.revenue.toLocaleString()}
+                                        </p>
+                                    </div>
+                                    <div className="flex items-center gap-1 text-emerald-600">
+                                        <TrendingUp className="w-4 h-4" />
+                                        <span className="font-bold">{engineer.hoursLogged}u</span>
+                                    </div>
+                                </div>
+                            ))
+                        )}
                     </CardContent>
                 </Card>
 
@@ -219,7 +300,7 @@ export function IncentiveDashboard() {
                         <div className="space-y-2">
                             <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">XP Verdienen</p>
                             <div className="grid grid-cols-2 gap-2">
-                                {xpActions.map((item) => (
+                                {XP_ACTIONS.map((item) => (
                                     <div key={item.action} className="flex items-center justify-between p-2 bg-slate-50 dark:bg-slate-800/50 rounded-md text-sm">
                                         <span className="text-muted-foreground">{item.action}</span>
                                         <Badge variant="secondary" className="font-mono">+{item.xp}</Badge>
@@ -238,17 +319,17 @@ export function IncentiveDashboard() {
                                     <div 
                                         key={tier.level}
                                         className={`flex items-center justify-between p-2 rounded-md ${
-                                            stats.xp >= tier.minXP ? 'bg-emerald-50 dark:bg-emerald-950/30' : 'bg-slate-50 dark:bg-slate-800/30'
+                                            xp >= tier.minXP ? 'bg-emerald-50 dark:bg-emerald-950/30' : 'bg-slate-50 dark:bg-slate-800/30'
                                         }`}
                                     >
                                         <div className="flex items-center gap-2">
                                             <div className={`w-3 h-3 rounded-full ${tier.colorClass}`} />
-                                            <span className={stats.xp >= tier.minXP ? 'font-medium' : 'text-muted-foreground'}>
+                                            <span className={xp >= tier.minXP ? 'font-medium' : 'text-muted-foreground'}>
                                                 {tier.name}
                                             </span>
                                             <span className="text-xs text-muted-foreground">({tier.minXP}+ XP)</span>
                                         </div>
-                                        <span className={`font-bold ${stats.xp >= tier.minXP ? 'text-emerald-600' : 'text-muted-foreground'}`}>
+                                        <span className={`font-bold ${xp >= tier.minXP ? 'text-emerald-600' : 'text-muted-foreground'}`}>
                                             €{tier.monthlyBonusEur}
                                         </span>
                                     </div>

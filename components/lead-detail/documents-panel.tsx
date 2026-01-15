@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -20,16 +20,21 @@ import {
     CheckCircle2,
     Clock,
     Loader2,
-    AlertCircle
+    AlertCircle,
+    CloudUpload,
+    X,
+    Monitor
 } from "lucide-react"
 import { toast } from "sonner"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Label } from "@/components/ui/label"
 import { format } from "date-fns"
 import { nl } from "date-fns/locale"
 import { useAuthStore } from "@/lib/auth"
 import { getDocuments } from "@/lib/db-actions"
 import { uploadFile, deleteFile } from "@/lib/storage"
+import { cn } from "@/lib/utils"
 
 // Format file size for display (client-side utility)
 function formatFileSize(bytes: number): string {
@@ -68,6 +73,30 @@ const categoryColors: Record<string, string> = {
     overig: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300"
 }
 
+/** Get icon for file type based on filename extension */
+function getFileTypeIcon(filename: string) {
+    const ext = filename.split('.').pop()?.toLowerCase()
+    switch (ext) {
+        case 'pdf': 
+            return <FileText className="w-5 h-5 text-red-500" />
+        case 'jpg':
+        case 'jpeg':
+        case 'png':
+        case 'gif':
+        case 'webp': 
+            return <ImageIcon className="w-5 h-5 text-purple-500" />
+        case 'xlsx':
+        case 'xls':
+        case 'csv': 
+            return <FileSpreadsheet className="w-5 h-5 text-emerald-500" />
+        case 'dwg':
+        case 'dxf': 
+            return <File className="w-5 h-5 text-blue-500" />
+        default: 
+            return <File className="w-5 h-5 text-slate-500" />
+    }
+}
+
 interface DocumentsPanelProps {
     leadId?: string
 }
@@ -75,14 +104,16 @@ interface DocumentsPanelProps {
 export function DocumentsPanel({ leadId }: DocumentsPanelProps = {}) {
     const { currentUser } = useAuthStore()
     const fileInputRef = useRef<HTMLInputElement>(null)
+    const dropZoneRef = useRef<HTMLDivElement>(null)
     const [documents, setDocuments] = useState<Document[]>([])
     const [isLoading, setIsLoading] = useState(true)
     const [isUploading, setIsUploading] = useState(false)
     const [selectedCategory, setSelectedCategory] = useState<string>("all")
-    const [uploadCategory, setUploadCategory] = useState<string>("overig")
     const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false)
     const [pendingFiles, setPendingFiles] = useState<File[]>([])
+    const [fileCategories, setFileCategories] = useState<Record<string, string>>({})
     const [deleteConfirm, setDeleteConfirm] = useState<Document | null>(null)
+    const [isDragging, setIsDragging] = useState(false)
 
     // Load documents from database
     useEffect(() => {
@@ -135,12 +166,89 @@ export function DocumentsPanel({ leadId }: DocumentsPanelProps = {}) {
         ? documents 
         : documents.filter(d => d.category === selectedCategory)
 
+    /** Add files to pending list and initialize categories */
+    const addFilesToPending = useCallback((files: File[]) => {
+        if (files.length > 0) {
+            setPendingFiles(prev => [...prev, ...files])
+            // Initialize each file with default category based on extension
+            const newCategories: Record<string, string> = {}
+            files.forEach(file => {
+                const ext = file.name.split('.').pop()?.toLowerCase()
+                // Smart default category based on file type
+                if (['pdf', 'dwg', 'dxf'].includes(ext || '')) {
+                    newCategories[file.name] = 'tekening'
+                } else if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext || '')) {
+                    newCategories[file.name] = 'foto'
+                } else if (['xlsx', 'xls', 'csv'].includes(ext || '')) {
+                    newCategories[file.name] = 'offerte'
+                } else {
+                    newCategories[file.name] = 'overig'
+                }
+            })
+            setFileCategories(prev => ({ ...prev, ...newCategories }))
+        }
+    }, [])
+
+    /** Handle drag events for drop zone */
+    const handleDragEnter = useCallback((e: React.DragEvent) => {
+        e.preventDefault()
+        e.stopPropagation()
+        setIsDragging(true)
+    }, [])
+
+    const handleDragLeave = useCallback((e: React.DragEvent) => {
+        e.preventDefault()
+        e.stopPropagation()
+        // Only set dragging to false if we're leaving the drop zone entirely
+        if (!dropZoneRef.current?.contains(e.relatedTarget as Node)) {
+            setIsDragging(false)
+        }
+    }, [])
+
+    const handleDragOver = useCallback((e: React.DragEvent) => {
+        e.preventDefault()
+        e.stopPropagation()
+    }, [])
+
+    const handleDrop = useCallback((e: React.DragEvent) => {
+        e.preventDefault()
+        e.stopPropagation()
+        setIsDragging(false)
+        
+        const files = Array.from(e.dataTransfer.files)
+        addFilesToPending(files)
+    }, [addFilesToPending])
+
     const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
         const files = Array.from(event.target.files || [])
-        if (files.length > 0) {
-            setPendingFiles(files)
-            setIsUploadDialogOpen(true)
+        addFilesToPending(files)
+        // Reset file input
+        if (fileInputRef.current) {
+            fileInputRef.current.value = ""
         }
+    }
+
+    const removeFile = (fileName: string) => {
+        setPendingFiles(prev => prev.filter(f => f.name !== fileName))
+        setFileCategories(prev => {
+            const newCategories = { ...prev }
+            delete newCategories[fileName]
+            return newCategories
+        })
+    }
+
+    const updateFileCategory = (fileName: string, category: string) => {
+        setFileCategories(prev => ({ ...prev, [fileName]: category }))
+    }
+
+    const handleOpenUploadDialog = () => {
+        setIsUploadDialogOpen(true)
+    }
+
+    const handleCloseUploadDialog = () => {
+        setIsUploadDialogOpen(false)
+        setPendingFiles([])
+        setFileCategories({})
     }
 
     const handleUpload = async () => {
@@ -155,7 +263,7 @@ export function DocumentsPanel({ leadId }: DocumentsPanelProps = {}) {
             const formData = new FormData()
             formData.append('file', file)
             formData.append('leadId', leadId)
-            formData.append('category', uploadCategory)
+            formData.append('category', fileCategories[file.name] || 'overig')
             formData.append('uploadedBy', currentUser.name)
 
             const result = await uploadFile(formData)
@@ -176,20 +284,13 @@ export function DocumentsPanel({ leadId }: DocumentsPanelProps = {}) {
         }
 
         setIsUploading(false)
-        setIsUploadDialogOpen(false)
-        setPendingFiles([])
-        setUploadCategory("overig")
+        handleCloseUploadDialog()
 
         if (successCount > 0) {
             toast.success(`${successCount} bestand${successCount > 1 ? 'en' : ''} geüpload`)
         }
         if (errorCount > 0) {
             toast.error(`${errorCount} bestand${errorCount > 1 ? 'en' : ''} mislukt`)
-        }
-
-        // Reset file input
-        if (fileInputRef.current) {
-            fileInputRef.current.value = ""
         }
     }
 
@@ -208,10 +309,19 @@ export function DocumentsPanel({ leadId }: DocumentsPanelProps = {}) {
         // Check if it's a placeholder URL (not a real file)
         if (doc.url.startsWith('/documents/') || doc.url.startsWith('/uploads/')) {
             toast.error("Download niet beschikbaar", {
-                description: "Bestand is opgeslagen in database maar niet in cloud storage. Configureer Supabase Storage om downloads te activeren."
+                description: "Dit bestand moet opnieuw geüpload worden met cloud storage.",
+                action: {
+                    label: "Meer info",
+                    onClick: () => {
+                        toast.info("Configureer Supabase Storage", {
+                            description: "Neem contact op met de systeembeheerder om file storage in te stellen."
+                        })
+                    }
+                }
             })
             return
         }
+        // Open in new tab for actual file downloads
         window.open(doc.url, '_blank')
     }
 
@@ -271,7 +381,7 @@ export function DocumentsPanel({ leadId }: DocumentsPanelProps = {}) {
                             <Button 
                                 size="sm" 
                                 className="gap-2"
-                                onClick={() => fileInputRef.current?.click()}
+                                onClick={handleOpenUploadDialog}
                             >
                                 <Upload className="w-4 h-4" />
                                 Upload
@@ -363,14 +473,17 @@ export function DocumentsPanel({ leadId }: DocumentsPanelProps = {}) {
                                         >
                                             <Download className="w-4 h-4" />
                                         </Button>
-                                        <Button 
-                                            variant="ghost" 
-                                            size="icon" 
-                                            className="h-8 w-8 text-destructive hover:text-destructive"
-                                            onClick={() => setDeleteConfirm(doc)}
-                                        >
-                                            <Trash2 className="w-4 h-4" />
-                                        </Button>
+                                        {/* Only admins can delete documents */}
+                                        {currentUser?.role === 'admin' && (
+                                            <Button 
+                                                variant="ghost" 
+                                                size="icon" 
+                                                className="h-8 w-8 text-destructive hover:text-destructive"
+                                                onClick={() => setDeleteConfirm(doc)}
+                                            >
+                                                <Trash2 className="w-4 h-4" />
+                                            </Button>
+                                        )}
                                     </div>
                                 </div>
                             ))}
@@ -379,57 +492,140 @@ export function DocumentsPanel({ leadId }: DocumentsPanelProps = {}) {
                 </CardContent>
             </Card>
 
-            {/* Upload Category Dialog */}
-            <Dialog open={isUploadDialogOpen} onOpenChange={setIsUploadDialogOpen}>
-                <DialogContent>
+            {/* Upload Classification Dialog */}
+            <Dialog open={isUploadDialogOpen} onOpenChange={(open) => !open && handleCloseUploadDialog()}>
+                <DialogContent className="sm:max-w-lg">
                     <DialogHeader>
-                        <DialogTitle>Bestanden Uploaden</DialogTitle>
+                        <DialogTitle className="flex items-center gap-2">
+                            <CloudUpload className="w-5 h-5" />
+                            Documenten Uploaden
+                        </DialogTitle>
+                        <DialogDescription>
+                            Sleep bestanden hierheen of kies vanuit je computer. Classificeer elk document voor betere organisatie.
+                        </DialogDescription>
                     </DialogHeader>
 
-                    <div className="space-y-4 py-4">
-                        <div className="space-y-2">
-                            <label className="text-sm font-medium">Geselecteerde bestanden</label>
-                            <div className="space-y-1">
-                                {pendingFiles.map((file, i) => (
-                                    <div key={i} className="flex items-center gap-2 text-sm p-2 bg-muted rounded">
-                                        <File className="w-4 h-4" />
-                                        <span className="truncate flex-1">{file.name}</span>
-                                        <span className="text-muted-foreground text-xs">
-                                            {formatFileSize(file.size)}
-                                        </span>
-                                    </div>
-                                ))}
+                    <div className="space-y-4 py-2">
+                        {/* Drag and Drop Zone */}
+                        <div
+                            ref={dropZoneRef}
+                            onDragEnter={handleDragEnter}
+                            onDragLeave={handleDragLeave}
+                            onDragOver={handleDragOver}
+                            onDrop={handleDrop}
+                            className={cn(
+                                "border-2 border-dashed rounded-lg p-8 text-center transition-all cursor-pointer",
+                                isDragging 
+                                    ? "border-primary bg-primary/5 scale-[1.02]" 
+                                    : "border-muted-foreground/25 hover:border-primary/50 hover:bg-muted/50"
+                            )}
+                            onClick={() => fileInputRef.current?.click()}
+                        >
+                            <div className="flex flex-col items-center gap-3">
+                                <div className={cn(
+                                    "w-12 h-12 rounded-full flex items-center justify-center transition-colors",
+                                    isDragging ? "bg-primary/10" : "bg-muted"
+                                )}>
+                                    <CloudUpload className={cn(
+                                        "w-6 h-6 transition-colors",
+                                        isDragging ? "text-primary" : "text-muted-foreground"
+                                    )} />
+                                </div>
+                                <div>
+                                    <p className="font-medium text-sm">
+                                        {isDragging ? "Laat los om te uploaden" : "Sleep bestanden hierheen"}
+                                    </p>
+                                    <p className="text-xs text-muted-foreground mt-1">
+                                        of klik om te bladeren
+                                    </p>
+                                </div>
+                                <Button 
+                                    type="button"
+                                    variant="outline" 
+                                    size="sm" 
+                                    className="gap-2"
+                                    onClick={(e) => {
+                                        e.stopPropagation()
+                                        fileInputRef.current?.click()
+                                    }}
+                                >
+                                    <Monitor className="w-4 h-4" />
+                                    Kies van computer
+                                </Button>
                             </div>
                         </div>
 
-                        <div className="space-y-2">
-                            <label className="text-sm font-medium">Categorie</label>
-                            <Select value={uploadCategory} onValueChange={setUploadCategory}>
-                                <SelectTrigger>
-                                    <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {Object.entries(categoryLabels).map(([key, label]) => (
-                                        <SelectItem key={key} value={key}>{label}</SelectItem>
+                        {/* Selected Files with Classification */}
+                        {pendingFiles.length > 0 && (
+                            <div className="space-y-2">
+                                <Label className="text-sm font-medium flex items-center justify-between">
+                                    <span>Geselecteerde bestanden ({pendingFiles.length})</span>
+                                    <span className="text-xs text-muted-foreground font-normal">
+                                        Selecteer een categorie per document
+                                    </span>
+                                </Label>
+                                <div className="space-y-2 max-h-[240px] overflow-y-auto pr-1">
+                                    {pendingFiles.map((file) => (
+                                        <div 
+                                            key={file.name} 
+                                            className="flex items-center gap-2 p-3 bg-muted/50 rounded-lg border border-border"
+                                        >
+                                            <div className="flex-shrink-0">
+                                                {getFileTypeIcon(file.name)}
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                                <p className="text-sm font-medium truncate">{file.name}</p>
+                                                <p className="text-xs text-muted-foreground">
+                                                    {formatFileSize(file.size)}
+                                                </p>
+                                            </div>
+                                            <Select 
+                                                value={fileCategories[file.name] || 'overig'} 
+                                                onValueChange={(value) => updateFileCategory(file.name, value)}
+                                            >
+                                                <SelectTrigger className="w-[130px] h-8 text-xs">
+                                                    <SelectValue />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    {Object.entries(categoryLabels).map(([key, label]) => (
+                                                        <SelectItem key={key} value={key} className="text-xs">
+                                                            {label}
+                                                        </SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                            <Button 
+                                                variant="ghost" 
+                                                size="icon" 
+                                                className="h-8 w-8 flex-shrink-0 text-muted-foreground hover:text-destructive"
+                                                onClick={() => removeFile(file.name)}
+                                            >
+                                                <X className="w-4 h-4" />
+                                            </Button>
+                                        </div>
                                     ))}
-                                </SelectContent>
-                            </Select>
-                        </div>
+                                </div>
+                            </div>
+                        )}
                     </div>
 
-                    <DialogFooter>
+                    <DialogFooter className="gap-2 sm:gap-0">
                         <Button 
                             variant="outline" 
-                            onClick={() => {
-                                setIsUploadDialogOpen(false)
-                                setPendingFiles([])
-                            }}
+                            onClick={handleCloseUploadDialog}
                         >
                             Annuleren
                         </Button>
-                        <Button onClick={handleUpload} disabled={isUploading}>
-                            {isUploading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                            {isUploading ? "Uploaden..." : "Uploaden"}
+                        <Button 
+                            onClick={handleUpload} 
+                            disabled={isUploading || pendingFiles.length === 0}
+                            className="gap-2"
+                        >
+                            {isUploading && <Loader2 className="w-4 h-4 animate-spin" />}
+                            {isUploading 
+                                ? "Uploaden..." 
+                                : `Upload${pendingFiles.length > 0 ? ` (${pendingFiles.length})` : ''}`
+                            }
                         </Button>
                     </DialogFooter>
                 </DialogContent>

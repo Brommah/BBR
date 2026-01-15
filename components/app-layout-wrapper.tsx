@@ -24,9 +24,9 @@ export function AppLayoutWrapper({ children }: AppLayoutWrapperProps) {
     )
   }
 
-  // Standard layout with sidebar
+  // Standard layout with sidebar - starts collapsed, expands on hover
   return (
-    <SidebarProvider>
+    <SidebarProvider defaultOpen={false}>
       <AppSidebar />
       <main className="w-full min-h-screen relative flex flex-col">
         <div className="absolute top-4 left-4 z-50 md:hidden">

@@ -1,11 +1,11 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
+import { Skeleton } from "@/components/ui/skeleton"
 import { 
     Phone, 
     Mail, 
@@ -16,75 +16,74 @@ import {
     ArrowDownLeft,
     User,
     ChevronDown,
-    ChevronUp
+    ChevronUp,
+    Loader2
 } from "lucide-react"
 import { toast } from "sonner"
 import { format } from "date-fns"
 import { nl } from "date-fns/locale"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Textarea } from "@/components/ui/textarea"
+import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { getCommunications, createCommunication } from "@/lib/db-actions"
+import { useCurrentUser } from "@/lib/auth"
 
 interface CommunicationEntry {
     id: string
-    type: "call" | "email" | "note"
-    direction?: "inbound" | "outbound"
-    subject?: string
+    type: "call" | "email" | "whatsapp"
+    direction: "inbound" | "outbound"
+    subject?: string | null
     content: string
-    timestamp: string
-    user: string
-    duration?: number // for calls, in seconds
+    createdAt: string
+    author: string
+    duration?: number | null // for calls, in seconds
 }
 
-const mockCommunications: CommunicationEntry[] = [
-    {
-        id: "1",
-        type: "call",
-        direction: "outbound",
-        content: "Klant gebeld over offerte. Besproken: dakkapel afmetingen 4m breed. Klant wil graag een bezoek op locatie.",
-        timestamp: "2026-01-12T14:30:00",
-        user: "Angelo",
-        duration: 480
-    },
-    {
-        id: "2",
-        type: "email",
-        direction: "outbound",
-        subject: "Offerte Dakkapel - J. de Vries",
-        content: "Offerte verzonden met bezoek op locatie als optie.",
-        timestamp: "2026-01-12T14:45:00",
-        user: "Angelo"
-    },
-    {
-        id: "3",
-        type: "call",
-        direction: "inbound",
-        content: "Klant belt terug. Gaat akkoord met offerte inclusief bezoek.",
-        timestamp: "2026-01-12T16:20:00",
-        user: "Angelo",
-        duration: 180
-    },
-    {
-        id: "4",
-        type: "note",
-        content: "Afspraak gepland voor woensdag 15 jan. Adres: Keizersgracht 100",
-        timestamp: "2026-01-12T16:25:00",
-        user: "Angelo"
-    }
-]
-
 interface CommunicationLogProps {
-    leadId?: string
+    leadId: string
     clientPhone?: string
     clientEmail?: string
 }
 
-export function CommunicationLog({ clientPhone = "+31 6 12345678", clientEmail = "j.devries@email.nl" }: CommunicationLogProps) {
-    const [entries, setEntries] = useState<CommunicationEntry[]>(mockCommunications)
+export function CommunicationLog({ leadId, clientPhone, clientEmail }: CommunicationLogProps) {
+    const [entries, setEntries] = useState<CommunicationEntry[]>([])
+    const [isLoading, setIsLoading] = useState(true)
+    const [isSaving, setIsSaving] = useState(false)
+    const currentUser = useCurrentUser()
+
+    // Fetch communications from database
+    useEffect(() => {
+        let isMounted = true
+
+        async function loadCommunications() {
+            if (!leadId) return
+            setIsLoading(true)
+
+            try {
+                const result = await getCommunications(leadId)
+                if (isMounted && result.success && result.data) {
+                    setEntries(result.data as CommunicationEntry[])
+                }
+            } catch (error) {
+                console.error('[CommunicationLog] Failed to load communications:', error)
+            } finally {
+                if (isMounted) {
+                    setIsLoading(false)
+                }
+            }
+        }
+
+        loadCommunications()
+
+        return () => {
+            isMounted = false
+        }
+    }, [leadId])
     const [isExpanded, setIsExpanded] = useState(true)
     const [isAddOpen, setIsAddOpen] = useState(false)
     const [newEntry, setNewEntry] = useState({
-        type: "note" as "call" | "email" | "note",
+        type: "call" as "call" | "email" | "whatsapp",
         direction: "outbound" as "inbound" | "outbound",
         content: "",
         subject: ""
@@ -104,8 +103,10 @@ export function CommunicationLog({ clientPhone = "+31 6 12345678", clientEmail =
                     : <ArrowUpRight className="w-4 h-4 text-blue-500" />
             case "email":
                 return <Mail className="w-4 h-4 text-purple-500" />
-            case "note":
-                return <MessageSquare className="w-4 h-4 text-amber-500" />
+            case "whatsapp":
+                return <MessageSquare className="w-4 h-4 text-emerald-500" />
+            default:
+                return <MessageSquare className="w-4 h-4 text-slate-500" />
         }
     }
 
@@ -123,56 +124,82 @@ export function CommunicationLog({ clientPhone = "+31 6 12345678", clientEmail =
                 )
             case "email":
                 return <Badge className="bg-purple-100 text-purple-700 border-0 text-[10px]">E-mail</Badge>
-            case "note":
-                return <Badge className="bg-amber-100 text-amber-700 border-0 text-[10px]">Notitie</Badge>
+            case "whatsapp":
+                return <Badge className="bg-emerald-100 text-emerald-700 border-0 text-[10px]">WhatsApp</Badge>
+            default:
+                return <Badge className="bg-slate-100 text-slate-700 border-0 text-[10px]">{entry.type}</Badge>
         }
     }
 
-    const handleQuickCall = () => {
-        // Add call entry
-        const entry: CommunicationEntry = {
-            id: Date.now().toString(),
-            type: "call",
-            direction: "outbound",
-            content: "Gesprek gestart...",
-            timestamp: new Date().toISOString(),
-            user: "Angelo",
-            duration: 0
+    const handleQuickCall = async () => {
+        if (!leadId) return
+        
+        // Open phone dialer first (on supported devices)
+        if (clientPhone) {
+            window.open(`tel:${clientPhone}`, '_self')
         }
-        setEntries([entry, ...entries])
         
-        // Open phone dialer (on supported devices)
-        window.open(`tel:${clientPhone}`, '_self')
-        
-        toast.success("Gesprek geregistreerd", {
-            description: `Bellen naar ${clientPhone}`
-        })
+        // Create call entry in database
+        try {
+            const result = await createCommunication({
+                leadId,
+                type: "call",
+                direction: "outbound",
+                content: "Uitgaand gesprek gestart",
+                author: currentUser?.name || "Onbekend"
+            })
+            
+            if (result.success && result.data) {
+                setEntries([result.data as CommunicationEntry, ...entries])
+                toast.success("Gesprek geregistreerd", {
+                    description: clientPhone ? `Bellen naar ${clientPhone}` : undefined
+                })
+            }
+        } catch (error) {
+            console.error('[CommunicationLog] Failed to log call:', error)
+        }
     }
 
     const handleQuickEmail = () => {
-        window.open(`mailto:${clientEmail}`, '_blank')
-        
-        toast.success("E-mail client geopend", {
-            description: `Mailen naar ${clientEmail}`
-        })
+        if (clientEmail) {
+            window.open(`mailto:${clientEmail}`, '_blank')
+            toast.success("E-mail client geopend", {
+                description: `Mailen naar ${clientEmail}`
+            })
+        }
     }
 
-    const handleAddEntry = () => {
-        const entry: CommunicationEntry = {
-            id: Date.now().toString(),
-            type: newEntry.type,
-            direction: newEntry.type === "note" ? undefined : newEntry.direction,
-            subject: newEntry.subject || undefined,
-            content: newEntry.content,
-            timestamp: new Date().toISOString(),
-            user: "Angelo"
+    const handleAddEntry = async () => {
+        if (!leadId || !newEntry.content.trim()) return
+        
+        setIsSaving(true)
+        try {
+            // Map 'note' type to 'whatsapp' since DB only has call/email/whatsapp
+            const dbType = newEntry.type === "call" ? "call" : newEntry.type === "email" ? "email" : "whatsapp"
+            
+            const result = await createCommunication({
+                leadId,
+                type: dbType,
+                direction: newEntry.direction,
+                subject: newEntry.subject || undefined,
+                content: newEntry.content,
+                author: currentUser?.name || "Onbekend"
+            })
+            
+            if (result.success && result.data) {
+                setEntries([result.data as CommunicationEntry, ...entries])
+                setIsAddOpen(false)
+                setNewEntry({ type: "call", direction: "outbound", content: "", subject: "" })
+                toast.success("Communicatie gelogd")
+            } else {
+                toast.error("Kon communicatie niet opslaan")
+            }
+        } catch (error) {
+            console.error('[CommunicationLog] Failed to create communication:', error)
+            toast.error("Fout bij opslaan")
+        } finally {
+            setIsSaving(false)
         }
-        
-        setEntries([entry, ...entries])
-        setIsAddOpen(false)
-        setNewEntry({ type: "note", direction: "outbound", content: "", subject: "" })
-        
-        toast.success("Communicatie gelogd")
     }
 
     return (
@@ -236,45 +263,63 @@ export function CommunicationLog({ clientPhone = "+31 6 12345678", clientEmail =
                         
                         {/* Communication Timeline */}
                         <div className="space-y-3 max-h-64 overflow-y-auto">
-                            {entries.map((entry, index) => (
-                                <div key={entry.id} className="flex gap-3">
-                                    {/* Timeline Line */}
-                                    <div className="flex flex-col items-center">
-                                        <div className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center">
-                                            {getIcon(entry)}
+                            {isLoading ? (
+                                <div className="space-y-3">
+                                    {[1, 2, 3].map(i => (
+                                        <div key={i} className="flex gap-3">
+                                            <Skeleton className="w-8 h-8 rounded-full" />
+                                            <div className="flex-1 space-y-2">
+                                                <Skeleton className="h-4 w-24" />
+                                                <Skeleton className="h-3 w-full" />
+                                            </div>
                                         </div>
-                                        {index < entries.length - 1 && (
-                                            <div className="w-px h-full bg-slate-200 dark:bg-slate-700 my-1" />
-                                        )}
-                                    </div>
-
-                                    {/* Content */}
-                                    <div className="flex-1 pb-3">
-                                        <div className="flex items-center gap-2 mb-1">
-                                            {getTypeBadge(entry)}
-                                            {entry.duration && (
-                                                <span className="text-[10px] text-muted-foreground font-mono">
-                                                    {formatDuration(entry.duration)}
-                                                </span>
+                                    ))}
+                                </div>
+                            ) : entries.length === 0 ? (
+                                <div className="text-center py-4 text-muted-foreground text-sm">
+                                    Geen communicatie gelogd
+                                </div>
+                            ) : (
+                                entries.map((entry, index) => (
+                                    <div key={entry.id} className="flex gap-3">
+                                        {/* Timeline Line */}
+                                        <div className="flex flex-col items-center">
+                                            <div className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center">
+                                                {getIcon(entry)}
+                                            </div>
+                                            {index < entries.length - 1 && (
+                                                <div className="w-px h-full bg-slate-200 dark:bg-slate-700 my-1" />
                                             )}
                                         </div>
-                                        
-                                        {entry.subject && (
-                                            <p className="font-medium text-sm">{entry.subject}</p>
-                                        )}
-                                        
-                                        <p className="text-sm text-muted-foreground">{entry.content}</p>
-                                        
-                                        <div className="flex items-center gap-2 mt-1 text-[10px] text-muted-foreground">
-                                            <Clock className="w-3 h-3" />
-                                            {format(new Date(entry.timestamp), "d MMM HH:mm", { locale: nl })}
-                                            <span>•</span>
-                                            <User className="w-3 h-3" />
-                                            {entry.user}
+
+                                        {/* Content */}
+                                        <div className="flex-1 pb-3">
+                                            <div className="flex items-center gap-2 mb-1">
+                                                {getTypeBadge(entry)}
+                                                {entry.duration && (
+                                                    <span className="text-[10px] text-muted-foreground font-mono">
+                                                        {formatDuration(entry.duration)}
+                                                    </span>
+                                                )}
+                                            </div>
+                                            
+                                            {entry.subject && (
+                                                <p className="font-medium text-sm">{entry.subject}</p>
+                                            )}
+                                            
+                                            <p className="text-sm text-muted-foreground">{entry.content}</p>
+                                            
+                                            <div className="flex items-center gap-2 mt-1 text-[10px] text-muted-foreground">
+                                                <Clock className="w-3 h-3" />
+                                                {format(new Date(entry.createdAt), "d MMM HH:mm", { locale: nl })}
+                                                <span>•</span>
+                                                <User className="w-3 h-3" />
+                                                {entry.author}
+                                            </div>
                                         </div>
                                     </div>
-                                </div>
-                            ))}
+                                ))
+                            )}
                         </div>
                     </CardContent>
                 )}
@@ -293,7 +338,7 @@ export function CommunicationLog({ clientPhone = "+31 6 12345678", clientEmail =
                                 <label className="text-sm font-medium">Type</label>
                                 <Select 
                                     value={newEntry.type} 
-                                    onValueChange={(v) => setNewEntry({ ...newEntry, type: v as "call" | "email" | "note" })}
+                                    onValueChange={(v) => setNewEntry({ ...newEntry, type: v as "call" | "email" | "whatsapp" })}
                                 >
                                     <SelectTrigger>
                                         <SelectValue />
@@ -301,12 +346,12 @@ export function CommunicationLog({ clientPhone = "+31 6 12345678", clientEmail =
                                     <SelectContent>
                                         <SelectItem value="call">Telefoongesprek</SelectItem>
                                         <SelectItem value="email">E-mail</SelectItem>
-                                        <SelectItem value="note">Notitie</SelectItem>
+                                        <SelectItem value="whatsapp">WhatsApp</SelectItem>
                                     </SelectContent>
                                 </Select>
                             </div>
                             
-                            {newEntry.type !== "note" && (
+                            {newEntry.type !== "whatsapp" && (
                                 <div className="space-y-2">
                                     <label className="text-sm font-medium">Richting</label>
                                     <Select 
@@ -331,7 +376,7 @@ export function CommunicationLog({ clientPhone = "+31 6 12345678", clientEmail =
                                 <Input 
                                     placeholder="E-mail onderwerp..."
                                     value={newEntry.subject}
-                                    onChange={(e) => setNewEntry({ ...newEntry, subject: e.target.value })}
+                                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewEntry({ ...newEntry, subject: e.target.value })}
                                 />
                             </div>
                         )}
@@ -348,10 +393,11 @@ export function CommunicationLog({ clientPhone = "+31 6 12345678", clientEmail =
                     </div>
 
                     <DialogFooter>
-                        <Button variant="outline" onClick={() => setIsAddOpen(false)}>
+                        <Button variant="outline" onClick={() => setIsAddOpen(false)} disabled={isSaving}>
                             Annuleren
                         </Button>
-                        <Button onClick={handleAddEntry} disabled={!newEntry.content}>
+                        <Button onClick={handleAddEntry} disabled={!newEntry.content || isSaving}>
+                            {isSaving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
                             Opslaan
                         </Button>
                     </DialogFooter>

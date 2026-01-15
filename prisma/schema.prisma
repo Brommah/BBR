@@ -24,6 +24,12 @@ enum QuoteApprovalStatus {
   rejected
 }
 
+enum Priority {
+  normal
+  high
+  urgent
+}
+
 model Lead {
   id                  String              @id @default(cuid())
   clientName          String
@@ -40,6 +46,8 @@ model Lead {
   assignee            String?
   addressValid        Boolean             @default(false)
   werknummer          String?             // Work number for the project
+  priority            Priority            @default(normal) // Admin-set urgency level
+  deadline            DateTime?           // Optional deadline for the project
   
   // Quote data
   quoteApproval       QuoteApprovalStatus @default(none)
@@ -205,22 +213,27 @@ model EmailTemplate {
 
 // Email send log
 model EmailLog {
-  id         String   @id @default(cuid())
-  leadId     String?
-  lead       Lead?    @relation(fields: [leadId], references: [id], onDelete: SetNull)
-  templateId String?
-  to         String
-  subject    String
-  body       String
-  status     String   // 'sent', 'delivered', 'failed', 'bounced'
-  messageId  String?  // From email provider
-  error      String?
-  sentBy     String
-  createdAt  DateTime @default(now())
+  id               String   @id @default(cuid())
+  leadId           String?
+  lead             Lead?    @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  templateId       String?
+  automationFlowId String?  // Which automation flow (e.g., "01", "02", "03") triggered this email
+  to               String
+  subject          String
+  body             String
+  status           String   // 'sent', 'delivered', 'failed', 'bounced'
+  messageId        String?  // From email provider
+  error            String?
+  sentBy           String
+  openedAt         DateTime? // When email was first opened
+  clickedAt        DateTime? // When link was first clicked
+  createdAt        DateTime @default(now())
 
   @@index([leadId])
   @@index([createdAt])
   @@index([status])
+  @@index([automationFlowId])
+  @@index([messageId])
 }
 
 // Rate limiting storage
@@ -271,4 +284,51 @@ model TimeEntry {
   @@index([leadId])
   @@index([userId])
   @@index([date])
+}
+
+// Email Automation Configuration
+model EmailAutomationConfig {
+  id          String   @id @default(cuid())
+  flowId      String   @unique // e.g., "01", "02", "03" - matches the automation ID
+  name        String
+  status      String   @default("active") // 'active', 'paused', 'draft'
+  category    String   // 'klant', 'conversie', 'feedback', 'intern', 'campagne'
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// Email Event Tracking (for webhooks from Resend)
+model EmailEvent {
+  id          String   @id @default(cuid())
+  emailLogId  String?  // Reference to the original email log
+  messageId   String?  // From email provider (Resend)
+  eventType   String   // 'delivered', 'opened', 'clicked', 'bounced', 'complained'
+  automationFlowId String? // Which automation flow this belongs to (e.g., "01", "02")
+  metadata    Json?    // Additional data like click URLs, etc.
+  createdAt   DateTime @default(now())
+
+  @@index([messageId])
+  @@index([eventType])
+  @@index([automationFlowId])
+  @@index([createdAt])
+}
+
+// User notifications (for @mentions, status changes, etc.)
+model Notification {
+  id          String   @id @default(cuid())
+  userId      String   // The user who should see this notification
+  userName    String   // Denormalized for display
+  type        String   // 'mention', 'status_change', 'quote_feedback', 'document', 'assignment'
+  title       String
+  message     String
+  leadId      String?  // Related lead (optional)
+  leadName    String?  // Denormalized for display
+  fromUserId  String?  // Who triggered the notification
+  fromUserName String? // Denormalized for display
+  read        Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  @@index([userId, read])
+  @@index([userId, createdAt])
+  @@index([leadId])
 }

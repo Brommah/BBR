@@ -264,7 +264,7 @@ export function ContextPanel({ lead }: { lead: Lead }) {
                     )}
                 </div>
 
-                {/* Client Name & Assignee */}
+                {/* Client Name */}
                 <div className="space-y-2">
                     {isEditing ? (
                         <div className="p-2 rounded-md bg-slate-50 dark:bg-slate-800">
@@ -278,28 +278,16 @@ export function ContextPanel({ lead }: { lead: Lead }) {
                             />
                         </div>
                     ) : (
-                        <div className="flex justify-between items-start">
-                            <div>
-                                <span className="text-[10px] uppercase tracking-wider text-slate-500 dark:text-slate-400 font-semibold block">
-                                    Klant
-                                </span>
-                                <h4 className="text-lg font-bold text-slate-900 dark:text-slate-100">{lead.clientName}</h4>
-                            </div>
-                            <AssigneeSelector leadId={lead.id} currentAssignee={lead.assignee} />
+                        <div>
+                            <span className="text-[10px] uppercase tracking-wider text-slate-500 dark:text-slate-400 font-semibold block">
+                                Klant
+                            </span>
+                            <h4 className="text-lg font-bold text-slate-900 dark:text-slate-100">{lead.clientName}</h4>
                         </div>
                     )}
                 </div>
 
-                {/* Werknummer */}
-                <EditableField
-                    label="Werknummer"
-                    value={editedLead.werknummer}
-                    onChange={(v) => setEditedLead({ ...editedLead, werknummer: v })}
-                    isEditing={isEditing}
-                    icon={<Hash className="w-4 h-4" />}
-                />
-
-                {/* Project Type */}
+                {/* Project Type - Full display */}
                 {isEditing ? (
                     <div className="p-2 rounded-md bg-slate-50 dark:bg-slate-800">
                         <label className="text-[10px] uppercase tracking-wider text-slate-500 dark:text-slate-400 font-semibold block mb-1">
@@ -320,26 +308,50 @@ export function ContextPanel({ lead }: { lead: Lead }) {
                         </Select>
                     </div>
                 ) : (
-                    <div className="flex flex-wrap gap-2">
-                        <Badge variant="outline" className="rounded-sm uppercase tracking-wider text-[10px] bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 border-slate-300 dark:border-slate-600 font-semibold">
+                    <div className="space-y-1">
+                        <span className="text-[10px] uppercase tracking-wider text-slate-500 dark:text-slate-400 font-semibold block">
+                            Projecttype
+                        </span>
+                        <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
                             {lead.projectType}
-                        </Badge>
-                        <Badge variant="secondary" className="rounded-sm uppercase tracking-wider text-[10px] bg-slate-200 dark:bg-slate-600 text-slate-700 dark:text-slate-200 font-semibold">
+                        </p>
+                        <Badge variant="secondary" className="rounded-sm uppercase tracking-wider text-[10px] bg-slate-200 dark:bg-slate-600 text-slate-700 dark:text-slate-200 font-semibold mt-1">
                             {lead.city}
                         </Badge>
                     </div>
                 )}
 
-                {/* Value */}
+                {/* Engineer/Assignee - Below project type */}
+                <div className="space-y-1">
+                    <span className="text-[10px] uppercase tracking-wider text-slate-500 dark:text-slate-400 font-semibold block">
+                        Toegewezen aan
+                    </span>
+                    <AssigneeSelector leadId={lead.id} currentAssignee={lead.assignee} />
+                </div>
+
+                {/* Werknummer */}
                 <EditableField
-                    label="Projectwaarde"
-                    value={isEditing ? editedLead.value.toString() : lead.value.toLocaleString()}
-                    onChange={(v) => setEditedLead({ ...editedLead, value: parseFloat(v) || 0 })}
+                    label="Werknummer"
+                    value={editedLead.werknummer}
+                    onChange={(v) => setEditedLead({ ...editedLead, werknummer: v })}
                     isEditing={isEditing}
-                    icon={<Euro className="w-4 h-4" />}
-                    type="number"
-                    prefix="€ "
+                    icon={<Hash className="w-4 h-4" />}
                 />
+
+                {/* Confirmed Offer Value - Only show when quote is approved */}
+                {lead.quoteApproval === 'approved' && lead.quoteValue != null && (
+                    <div className="p-3 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800">
+                        <span className="text-[10px] uppercase tracking-wider text-emerald-600 dark:text-emerald-400 font-semibold block">
+                            Offertewaarde
+                        </span>
+                        <div className="flex items-center gap-2 mt-1">
+                            <Euro className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                            <span className="text-xl font-bold text-emerald-700 dark:text-emerald-300">
+                                € {lead.quoteValue.toLocaleString('nl-NL', { minimumFractionDigits: 2 })}
+                            </span>
+                        </div>
+                    </div>
+                )}
 
                 {/* Status Selector */}
                 <div>

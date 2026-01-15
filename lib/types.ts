@@ -11,6 +11,7 @@ import { LEAD_STATUSES, QUOTE_APPROVAL_STATUSES } from './config'
 
 export type LeadStatus = keyof typeof LEAD_STATUSES
 export type QuoteApprovalStatus = keyof typeof QUOTE_APPROVAL_STATUSES
+export type Priority = 'normal' | 'high' | 'urgent'
 
 export interface Lead {
   id: string
@@ -27,6 +28,8 @@ export interface Lead {
   assignee: string | null
   addressValid: boolean
   deletedAt: string | null // Soft delete
+  priority: Priority // Admin-set urgency level
+  deadline: string | null // Optional deadline
   
   // Quote data
   quoteApproval: QuoteApprovalStatus
@@ -305,4 +308,25 @@ export interface AuditEntry {
   userName: string
   timestamp: string
   ipAddress?: string
+}
+
+// ============================================================
+// Time Entry Types
+// ============================================================
+
+export type TimeCategory = 'calculatie' | 'overleg' | 'administratie' | 'site-bezoek' | 'overig'
+
+export interface TimeEntry {
+  id: string
+  leadId: string
+  userId: string
+  userName: string
+  date: string
+  startTime: string
+  endTime: string
+  duration: number
+  description: string
+  category: TimeCategory
+  createdAt: string
+  updatedAt: string
 }

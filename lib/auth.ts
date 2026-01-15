@@ -57,11 +57,14 @@ export type Permission =
 /**
  * Permission matrix per role
  * 
- * Engineer role is stripped down to minimal functionality:
- * - Only sees assigned work (werkvoorraad)
+ * Engineer role:
+ * - Views assigned work (werkvoorraad)
  * - Can view project basics: werknummer, address, phone, documents
  * - Can register hours
- * - Cannot edit project data, quotes, or see pipeline
+ * - Can create and SUBMIT quotes (for admin approval)
+ * - Cannot approve quotes or edit other project data
+ * 
+ * Workflow: Engineer submits quote → Admin approves → Quote sent to client
  */
 const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
   admin: [
@@ -82,12 +85,15 @@ const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     'settings:edit',
   ],
   engineer: [
-    // Engineers can ONLY:
+    // Engineers can:
     // - View their own assigned leads (werkvoorraad)
-    // - View basic project info (read-only)
+    // - View basic project info
     // - Register hours
     // - Download documents
+    // - Create and submit quotes FOR APPROVAL
     'leads:view-own',
+    'quotes:submit',    // Can submit quotes for admin approval
+    'quotes:view',      // Can view quote details
     'settings:view',
   ],
   viewer: [

@@ -143,7 +143,7 @@ export async function POST(request: NextRequest) {
     let city: string | undefined
     let address: string | undefined
     let description: string | undefined
-    let files: File[] = []
+    const files: File[] = []
 
     if (contentType.includes('multipart/form-data')) {
       // Parse multipart form data

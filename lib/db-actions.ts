@@ -127,7 +127,9 @@ export interface LeadFilters {
 // Status Conversion Helpers
 // ============================================================
 
-const statusDbToFrontend: Record<LeadStatus, string> = {
+type FrontendStatus = "Nieuw" | "Calculatie" | "Offerte Verzonden" | "Opdracht" | "Archief"
+
+const statusDbToFrontend: Record<LeadStatus, FrontendStatus> = {
   Nieuw: "Nieuw",
   Calculatie: "Calculatie",
   OfferteVerzonden: "Offerte Verzonden",
@@ -498,6 +500,7 @@ export async function updateLeadStatus(id: string, status: string, triggeredBy?:
     })
     
     // Trigger status change emails (async, don't block response)
+    // Note: Email triggers expect LeadStatus from types.ts which uses the DB format (keyof LEAD_STATUSES)
     if (currentLead.clientEmail && triggeredBy) {
       triggerStatusChangeEmail(
         {
@@ -507,13 +510,13 @@ export async function updateLeadStatus(id: string, status: string, triggeredBy?:
           projectType: currentLead.projectType,
           city: currentLead.city,
           address: currentLead.address,
-          status: newStatus as 'Nieuw' | 'Calculatie' | 'Offerte Verzonden' | 'Opdracht' | 'Archief',
+          status: newStatus as LeadStatus,
           assignee: currentLead.assignee,
           quoteValue: currentLead.quoteValue,
           quoteDescription: currentLead.quoteDescription
         },
-        oldStatus as 'Nieuw' | 'Calculatie' | 'Offerte Verzonden' | 'Opdracht' | 'Archief',
-        newStatus as 'Nieuw' | 'Calculatie' | 'Offerte Verzonden' | 'Opdracht' | 'Archief',
+        oldStatus as LeadStatus,
+        newStatus as LeadStatus,
         triggeredBy
       ).then(result => {
         if (result.sent) {
@@ -1032,6 +1035,55 @@ export async function getNotes(leadId: string): Promise<ActionResult> {
   }
 }
 
+/**
+ * Delete a note (admin only)
+ * @param noteId - The ID of the note to delete
+ * @param adminName - Name of the admin performing the deletion (for audit log)
+ */
+export async function deleteNote(
+  noteId: string,
+  adminName: string
+): Promise<ActionResult> {
+  const validId = validateId(noteId)
+  const validAdmin = validateString(adminName, 200)
+  
+  if (!validId) return { success: false, error: 'Invalid note ID' }
+  if (!validAdmin) return { success: false, error: 'Admin name is required' }
+
+  try {
+    // Get the note first to log what was deleted
+    const note = await prisma.note.findUnique({
+      where: { id: validId },
+      include: { lead: { select: { id: true, clientName: true } } }
+    })
+
+    if (!note) {
+      return { success: false, error: 'Note not found' }
+    }
+
+    // Delete the note
+    await prisma.note.delete({
+      where: { id: validId }
+    })
+
+    // Log the deletion as an activity
+    await prisma.activity.create({
+      data: {
+        leadId: note.leadId,
+        type: 'note_deleted',
+        content: `Notitie verwijderd door ${validAdmin}`,
+        author: validAdmin
+      }
+    })
+
+    console.log(`[DB] Note ${validId} deleted by ${validAdmin} from lead ${note.leadId}`)
+    return { success: true, data: { deletedNoteId: validId } }
+  } catch (error) {
+    console.error('[DB] Error deleting note:', error)
+    return { success: false, error: 'Failed to delete note' }
+  }
+}
+
 export async function getActivities(leadId: string): Promise<ActionResult> {
   const validId = validateId(leadId)
   if (!validId) return { success: false, error: 'Invalid lead ID' }
@@ -1474,6 +1526,7 @@ export async function createEmailTemplate(data: {
 export async function logEmail(data: {
   leadId?: string
   templateId?: string
+  automationFlowId?: string
   to: string
   subject: string
   body: string
@@ -1487,6 +1540,7 @@ export async function logEmail(data: {
       data: {
         leadId: data.leadId,
         templateId: data.templateId,
+        automationFlowId: data.automationFlowId,
         to: data.to,
         subject: data.subject,
         body: data.body,
@@ -1971,5 +2025,362 @@ export async function getLeadTotalHours(leadId: string): Promise<ActionResult> {
   } catch (error) {
     console.error('[DB] Error getting lead total hours:', error)
     return { success: false, error: 'Failed to calculate total hours' }
+  }
+}
+
+// ============================================================
+// Engineer Performance & Leaderboard
+// ============================================================
+
+export interface EngineerStats {
+  name: string
+  avatar: string
+  quotesGenerated: number
+  quotesWon: number
+  revenue: number
+  hoursLogged: number
+}
+
+/**
+ * Get leaderboard data for engineers based on real leads data
+ */
+export async function getEngineerLeaderboard(): Promise<ActionResult> {
+  try {
+    // Get all engineers
+    const engineers = await prisma.user.findMany({
+      where: { 
+        role: 'engineer',
+        deletedAt: null
+      }
+    })
+
+    // Get leads with quotes won (status = Opdracht) per assignee
+    const leadsGrouped = await prisma.lead.groupBy({
+      by: ['assignee'],
+      where: {
+        deletedAt: null,
+        assignee: { not: null }
+      },
+      _count: { id: true },
+      _sum: { quoteValue: true }
+    })
+
+    // Get won leads (Opdracht status) per assignee
+    const wonLeadsGrouped = await prisma.lead.groupBy({
+      by: ['assignee'],
+      where: {
+        deletedAt: null,
+        assignee: { not: null },
+        status: 'Opdracht'
+      },
+      _count: { id: true },
+      _sum: { quoteValue: true }
+    })
+
+    // Get total hours per user
+    const hoursGrouped = await prisma.timeEntry.groupBy({
+      by: ['userName'],
+      _sum: { duration: true }
+    })
+
+    // Build stats for each engineer
+    const stats: EngineerStats[] = engineers.map(eng => {
+      const leadData = leadsGrouped.find(l => l.assignee === eng.name)
+      const wonData = wonLeadsGrouped.find(l => l.assignee === eng.name)
+      const hoursData = hoursGrouped.find(h => h.userName === eng.name)
+
+      return {
+        name: eng.name,
+        avatar: eng.avatar || eng.name[0],
+        quotesGenerated: leadData?._count.id || 0,
+        quotesWon: wonData?._count.id || 0,
+        revenue: wonData?._sum.quoteValue || 0,
+        hoursLogged: Math.round((hoursData?._sum.duration || 0) / 60) // Convert minutes to hours
+      }
+    })
+
+    // Sort by revenue descending
+    stats.sort((a, b) => b.revenue - a.revenue)
+
+    return { success: true, data: stats }
+  } catch (error) {
+    console.error('[DB] Error fetching engineer leaderboard:', error)
+    return { success: false, error: 'Failed to load leaderboard' }
+  }
+}
+
+/**
+ * Get performance stats for a specific engineer
+ */
+export async function getEngineerStats(engineerName: string): Promise<ActionResult> {
+  const name = validateString(engineerName, 100)
+  if (!name) return { success: false, error: 'Invalid engineer name' }
+
+  try {
+    // Get current month date range
+    const now = new Date()
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
+    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0)
+
+    // Get all leads for this engineer
+    const leads = await prisma.lead.findMany({
+      where: {
+        assignee: name,
+        deletedAt: null,
+        createdAt: {
+          gte: startOfMonth,
+          lte: endOfMonth
+        }
+      }
+    })
+
+    // Count by status
+    const quotesGenerated = leads.length
+    const quotesWon = leads.filter(l => l.status === 'Opdracht').length
+    const revenue = leads
+      .filter(l => l.status === 'Opdracht')
+      .reduce((sum, l) => sum + (l.quoteValue || 0), 0)
+
+    // Get average response time from activities (time between lead creation and first quote)
+    const avgResponseHours = 2.0 // Placeholder - would need activity tracking for real value
+
+    // Get time entries for this month
+    const timeEntries = await prisma.timeEntry.aggregate({
+      where: {
+        userName: name,
+        date: {
+          gte: startOfMonth,
+          lte: endOfMonth
+        }
+      },
+      _sum: { duration: true }
+    })
+
+    return {
+      success: true,
+      data: {
+        name,
+        quotesGenerated,
+        quotesWon,
+        revenue,
+        avgResponseTimeHours: avgResponseHours,
+        hoursLogged: Math.round((timeEntries._sum.duration || 0) / 60),
+        conversionRate: quotesGenerated > 0 ? Math.round((quotesWon / quotesGenerated) * 100) : 0
+      }
+    }
+  } catch (error) {
+    console.error('[DB] Error fetching engineer stats:', error)
+    return { success: false, error: 'Failed to load engineer stats' }
+  }
+}
+
+// ============================================================
+// Notification Operations
+// ============================================================
+
+export type NotificationType = 'mention' | 'status_change' | 'quote_feedback' | 'document' | 'assignment'
+
+/**
+ * Create a notification for a user
+ */
+export async function createNotification(data: {
+  userId: string
+  userName: string
+  type: NotificationType
+  title: string
+  message: string
+  leadId?: string
+  leadName?: string
+  fromUserId?: string
+  fromUserName?: string
+}): Promise<ActionResult> {
+  try {
+    const notification = await prisma.notification.create({
+      data: {
+        userId: data.userId,
+        userName: data.userName,
+        type: data.type,
+        title: data.title,
+        message: data.message,
+        leadId: data.leadId,
+        leadName: data.leadName,
+        fromUserId: data.fromUserId,
+        fromUserName: data.fromUserName,
+      }
+    })
+
+    return { success: true, data: notification }
+  } catch (error) {
+    console.error('[DB] Error creating notification:', error)
+    return { success: false, error: 'Failed to create notification' }
+  }
+}
+
+/**
+ * Get notifications for a user
+ */
+export async function getNotifications(
+  userName: string,
+  options?: { unreadOnly?: boolean; limit?: number }
+): Promise<ActionResult> {
+  const name = validateString(userName, 100)
+  if (!name) return { success: false, error: 'Invalid user name' }
+
+  try {
+    const notifications = await prisma.notification.findMany({
+      where: {
+        userName: name,
+        ...(options?.unreadOnly ? { read: false } : {})
+      },
+      orderBy: { createdAt: 'desc' },
+      take: options?.limit || 50
+    })
+
+    return { success: true, data: notifications }
+  } catch (error) {
+    console.error('[DB] Error fetching notifications:', error)
+    return { success: false, error: 'Failed to load notifications' }
+  }
+}
+
+/**
+ * Get unread notification count for a user
+ */
+export async function getUnreadNotificationCount(userName: string): Promise<ActionResult<number>> {
+  const name = validateString(userName, 100)
+  if (!name) return { success: false, error: 'Invalid user name' }
+
+  try {
+    const count = await prisma.notification.count({
+      where: {
+        userName: name,
+        read: false
+      }
+    })
+
+    return { success: true, data: count }
+  } catch (error) {
+    console.error('[DB] Error fetching notification count:', error)
+    return { success: false, error: 'Failed to load notification count' }
+  }
+}
+
+/**
+ * Mark a notification as read
+ */
+export async function markNotificationRead(notificationId: string): Promise<ActionResult> {
+  const id = validateString(notificationId, 50)
+  if (!id) return { success: false, error: 'Invalid notification ID' }
+
+  try {
+    await prisma.notification.update({
+      where: { id },
+      data: { read: true }
+    })
+
+    return { success: true }
+  } catch (error) {
+    console.error('[DB] Error marking notification read:', error)
+    return { success: false, error: 'Failed to update notification' }
+  }
+}
+
+/**
+ * Mark all notifications as read for a user
+ */
+export async function markAllNotificationsRead(userName: string): Promise<ActionResult> {
+  const name = validateString(userName, 100)
+  if (!name) return { success: false, error: 'Invalid user name' }
+
+  try {
+    await prisma.notification.updateMany({
+      where: { userName: name, read: false },
+      data: { read: true }
+    })
+
+    return { success: true }
+  } catch (error) {
+    console.error('[DB] Error marking all notifications read:', error)
+    return { success: false, error: 'Failed to update notifications' }
+  }
+}
+
+/**
+ * Delete a notification
+ */
+export async function deleteNotification(notificationId: string): Promise<ActionResult> {
+  const id = validateString(notificationId, 50)
+  if (!id) return { success: false, error: 'Invalid notification ID' }
+
+  try {
+    await prisma.notification.delete({
+      where: { id }
+    })
+
+    return { success: true }
+  } catch (error) {
+    console.error('[DB] Error deleting notification:', error)
+    return { success: false, error: 'Failed to delete notification' }
+  }
+}
+
+/**
+ * Create notifications for @mentions in a note
+ * Parses the note content and creates notifications for each mentioned user
+ */
+export async function createMentionNotifications(
+  noteContent: string,
+  leadId: string,
+  leadName: string,
+  fromUserName: string,
+  allUsers: Array<{ id: string; name: string }>
+): Promise<ActionResult> {
+  try {
+    // Extract mentions from note (format: @Name or @First Last)
+    const mentionRegex = /@(\w+(?:\s\w+)?)/g
+    const mentions: string[] = []
+    let match
+    
+    while ((match = mentionRegex.exec(noteContent)) !== null) {
+      mentions.push(match[1])
+    }
+
+    if (mentions.length === 0) {
+      return { success: true, data: { notificationsCreated: 0 } }
+    }
+
+    // Find users that match the mentions
+    const notificationsToCreate = []
+    for (const mentionName of mentions) {
+      const user = allUsers.find(u => 
+        u.name.toLowerCase() === mentionName.toLowerCase() ||
+        u.name.toLowerCase().startsWith(mentionName.toLowerCase())
+      )
+      
+      if (user && user.name !== fromUserName) {
+        notificationsToCreate.push({
+          userId: user.id,
+          userName: user.name,
+          type: 'mention' as const,
+          title: 'Je bent genoemd',
+          message: noteContent.length > 100 ? noteContent.substring(0, 100) + '...' : noteContent,
+          leadId,
+          leadName,
+          fromUserName,
+        })
+      }
+    }
+
+    // Create all notifications
+    if (notificationsToCreate.length > 0) {
+      await prisma.notification.createMany({
+        data: notificationsToCreate
+      })
+    }
+
+    return { success: true, data: { notificationsCreated: notificationsToCreate.length } }
+  } catch (error) {
+    console.error('[DB] Error creating mention notifications:', error)
+    return { success: false, error: 'Failed to create mention notifications' }
   }
 }

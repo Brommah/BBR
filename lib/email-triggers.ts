@@ -49,8 +49,8 @@ export async function triggerStatusChangeEmail(
   }
 
   try {
-    // → Offerte Verzonden: Quote was approved and sent
-    if (newStatus === 'Offerte Verzonden' && oldStatus !== 'Offerte Verzonden') {
+    // → OfferteVerzonden: Quote was approved and sent
+    if (newStatus === 'OfferteVerzonden' && oldStatus !== 'OfferteVerzonden') {
       if (lead.quoteValue) {
         const result = await sendQuoteEmail({
           to: lead.clientEmail,

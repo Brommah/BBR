@@ -61,8 +61,8 @@ export function UserMenu() {
     return (
         <DropdownMenu>
             <DropdownMenuTrigger asChild>
-                <button className="flex items-center gap-3 w-full p-2 rounded-lg hover:bg-sidebar-accent transition-colors text-left group focus:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-                    <Avatar className="h-9 w-9 shrink-0 ring-2 ring-sidebar-border">
+                <button className="flex items-center gap-3 w-full rounded-lg hover:bg-sidebar-accent transition-all duration-200 text-left group focus:outline-none focus-visible:ring-2 focus-visible:ring-ring group-data-[collapsible=icon]:justify-center p-2 group-data-[collapsible=icon]:p-1">
+                    <Avatar className="h-9 w-9 shrink-0 ring-2 ring-sidebar-border transition-all duration-200 group-data-[collapsible=icon]:h-9 group-data-[collapsible=icon]:w-9">
                         <AvatarFallback className={currentUser.role === 'admin' 
                             ? 'bg-gradient-to-br from-amber-400 to-amber-600 text-white text-sm font-semibold'
                             : 'bg-gradient-to-br from-blue-400 to-blue-600 text-white text-sm font-semibold'
@@ -70,7 +70,7 @@ export function UserMenu() {
                             {initials}
                         </AvatarFallback>
                     </Avatar>
-                    <div className="flex-1 min-w-0">
+                    <div className="flex-1 min-w-0 transition-all duration-200 group-data-[collapsible=icon]:hidden group-data-[collapsible=icon]:w-0 group-data-[collapsible=icon]:opacity-0">
                         <p className="text-sm font-medium text-sidebar-foreground truncate">
                             {currentUser.name}
                         </p>
@@ -78,7 +78,7 @@ export function UserMenu() {
                             {roleLabel}
                         </p>
                     </div>
-                    <ChevronUp className="h-4 w-4 text-sidebar-foreground/40 group-hover:text-sidebar-foreground/70 transition-colors shrink-0" />
+                    <ChevronUp className="h-4 w-4 text-sidebar-foreground/40 group-hover:text-sidebar-foreground/70 transition-all duration-200 shrink-0 group-data-[collapsible=icon]:hidden group-data-[collapsible=icon]:w-0 group-data-[collapsible=icon]:opacity-0" />
                 </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent 

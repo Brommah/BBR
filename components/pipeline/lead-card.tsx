@@ -146,7 +146,7 @@ export function LeadCard({ lead }: LeadCardProps) {
         {...attributes} 
         className="mb-3"
         role="listitem"
-        aria-label={`Lead: ${lead.clientName}, ${lead.projectType} in ${lead.city}, €${lead.value.toLocaleString('nl-NL')}`}
+        aria-label={`Lead: ${lead.clientName}, ${lead.projectType} in ${lead.city}, €${(lead.quoteValue ?? lead.value).toLocaleString('nl-NL')}`}
         aria-grabbed={isDragging}
       >
         <Card 
@@ -211,7 +211,7 @@ export function LeadCard({ lead }: LeadCardProps) {
              
             <div className="flex justify-between items-center border-t border-border pt-2 mt-2">
               <span className="text-currency text-sm">
-                € {lead.value.toLocaleString('nl-NL')}
+                € {(lead.quoteValue ?? lead.value).toLocaleString('nl-NL')}
               </span>
               <div className="flex items-center gap-2">
                 {/* Age indicator - urgency styling only for Nieuw/Calculatie */}

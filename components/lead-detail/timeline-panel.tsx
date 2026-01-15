@@ -1,155 +1,216 @@
 "use client"
 
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Textarea } from "@/components/ui/textarea"
-import { Button } from "@/components/ui/button"
-import { Sparkles, Send, Paperclip, Mail, MessageSquare, FileText, BookOpen, ExternalLink } from "lucide-react"
-import { useEffect, useState } from "react"
-import { getKnowledgeBaseArticles } from "@/app/actions"
+import { useState, useEffect } from "react"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
+import { Skeleton } from "@/components/ui/skeleton"
+import { ScrollArea } from "@/components/ui/scroll-area"
+import {
+    ArrowRight,
+    UserPlus,
+    FileText,
+    CheckCircle,
+    XCircle,
+    Send,
+    Plus,
+    Clock,
+    Settings,
+    RefreshCw,
+} from "lucide-react"
+import { format } from "date-fns"
+import { nl } from "date-fns/locale"
+import { cn } from "@/lib/utils"
+import { getActivities } from "@/lib/db-actions"
 
-const events = [
-    {
-        id: 1,
-        type: "email_in",
-        author: "J. de Vries",
-        content: "Goedemiddag, ik heb een vraag over de vergunningsaanvraag. Moet ik die zelf regelen?",
-        time: "10:30",
-        date: "Vandaag"
-    },
-    {
-        id: 2,
-        type: "note",
-        author: "Angelo",
-        content: "Ik zie op de satellietfoto dat er al een uitbouw staat bij de buren, dus vergunning is waarschijnlijk makkelijk.",
-        time: "11:45",
-        date: "Gisteren"
-    },
-    {
-        id: 3,
-        type: "system",
-        content: "Lead status changed to Triage",
-        time: "09:00",
-        date: "Gisteren"
-    },
-     {
-        id: 4,
-        type: "email_out",
-        author: "Auto-Responder",
-        content: "Bedankt voor uw aanvraag. We komen er zo snel mogelijk op terug.",
-        time: "08:55",
-        date: "Gisteren"
-    }
-]
+// Activity entry from system events
+interface SystemActivity {
+    id: string
+    type: string
+    content: string
+    author: string | null
+    createdAt: string
+    metadata?: Record<string, unknown>
+}
 
-export function TimelinePanel() {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const [articles, setArticles] = useState<any[]>([])
+const activityIcons: Record<string, React.ReactNode> = {
+    'lead_created': <Plus className="w-3 h-3" />,
+    'status_change': <ArrowRight className="w-3 h-3" />,
+    'assignment': <UserPlus className="w-3 h-3" />,
+    'note_added': <FileText className="w-3 h-3" />,
+    'document_uploaded': <FileText className="w-3 h-3" />,
+    'quote_submitted': <Send className="w-3 h-3" />,
+    'quote_approved': <CheckCircle className="w-3 h-3" />,
+    'quote_rejected': <XCircle className="w-3 h-3" />,
+    'quote_sent': <Send className="w-3 h-3" />,
+    'email_sent': <Send className="w-3 h-3" />,
+    'specs_updated': <RefreshCw className="w-3 h-3" />,
+    'time_logged': <Clock className="w-3 h-3" />,
+}
+
+const activityColors: Record<string, string> = {
+    'lead_created': 'bg-blue-500',
+    'status_change': 'bg-purple-500',
+    'assignment': 'bg-amber-500',
+    'note_added': 'bg-slate-500',
+    'document_uploaded': 'bg-emerald-500',
+    'quote_submitted': 'bg-orange-500',
+    'quote_approved': 'bg-green-500',
+    'quote_rejected': 'bg-red-500',
+    'quote_sent': 'bg-indigo-500',
+    'email_sent': 'bg-violet-500',
+    'specs_updated': 'bg-cyan-500',
+    'time_logged': 'bg-teal-500',
+}
+
+interface TimelinePanelProps {
+    leadId: string
+}
+
+export function TimelinePanel({ leadId }: TimelinePanelProps) {
+    const [activities, setActivities] = useState<SystemActivity[]>([])
+    const [isLoading, setIsLoading] = useState(true)
 
     useEffect(() => {
-        getKnowledgeBaseArticles().then(setArticles)
-    }, [])
+        let isMounted = true
+
+        async function loadActivities() {
+            if (!leadId) return
+            setIsLoading(true)
+
+            try {
+                const result = await getActivities(leadId)
+                if (isMounted && result.success && result.data) {
+                    setActivities(result.data as SystemActivity[])
+                }
+            } catch (error) {
+                console.error('[TimelinePanel] Failed to load activities:', error)
+            } finally {
+                if (isMounted) {
+                    setIsLoading(false)
+                }
+            }
+        }
+
+        loadActivities()
+
+        return () => {
+            isMounted = false
+        }
+    }, [leadId])
+
+    const formatTimestamp = (timestamp: string) => {
+        const date = new Date(timestamp)
+        const now = new Date()
+        const diffHours = (now.getTime() - date.getTime()) / (1000 * 60 * 60)
+
+        if (diffHours < 1) return "Zojuist"
+        if (diffHours < 24) return format(date, "HH:mm", { locale: nl })
+        if (diffHours < 48) return `Gisteren, ${format(date, "HH:mm", { locale: nl })}`
+        return format(date, "d MMM yyyy, HH:mm", { locale: nl })
+    }
+
+    const getActivityLabel = (type: string): string => {
+        const labels: Record<string, string> = {
+            'lead_created': 'Aangemaakt',
+            'status_change': 'Status gewijzigd',
+            'assignment': 'Toegewezen',
+            'note_added': 'Notitie',
+            'document_uploaded': 'Document',
+            'quote_submitted': 'Offerte ingediend',
+            'quote_approved': 'Goedgekeurd',
+            'quote_rejected': 'Afgekeurd',
+            'quote_sent': 'Offerte verzonden',
+            'email_sent': 'E-mail verzonden',
+            'specs_updated': 'Specs bijgewerkt',
+            'time_logged': 'Uren gelogd',
+        }
+        return labels[type] || type
+    }
+
+    if (isLoading) {
+        return (
+            <Card className="h-full">
+                <CardHeader className="pb-3">
+                    <CardTitle className="text-lg flex items-center gap-2">
+                        <Clock className="w-5 h-5" />
+                        Tijdlijn
+                    </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                    {[1, 2, 3, 4].map(i => (
+                        <div key={i} className="flex gap-3">
+                            <Skeleton className="w-6 h-6 rounded-full shrink-0" />
+                            <div className="flex-1 space-y-2">
+                                <Skeleton className="h-4 w-32" />
+                                <Skeleton className="h-3 w-48" />
+                            </div>
+                        </div>
+                    ))}
+                </CardContent>
+            </Card>
+        )
+    }
 
     return (
-        <Tabs defaultValue="activity" className="flex flex-col h-full bg-background/50 rounded-lg border border-border overflow-hidden">
-            <div className="p-4 border-b border-border bg-background flex-shrink-0">
-                <TabsList className="grid w-full grid-cols-4">
-                    <TabsTrigger value="activity">Activity</TabsTrigger>
-                    <TabsTrigger value="emails">Emails</TabsTrigger>
-                    <TabsTrigger value="notes">Notes</TabsTrigger>
-                    <TabsTrigger value="knowledge">Knowledge</TabsTrigger>
-                </TabsList>
-            </div>
-
-            <div className="flex-1 overflow-hidden relative">
-                <TabsContent value="activity" className="h-full flex flex-col m-0 data-[state=inactive]:hidden">
-                    <div className="flex-1 overflow-y-auto p-4 space-y-6">
-                        {events.map((event) => (
-                            <div key={event.id} className="flex gap-3">
-                                <div className="flex-shrink-0 mt-1">
-                                    {event.type === 'email_in' && <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600"><Mail className="w-4 h-4" /></div>}
-                                    {event.type === 'email_out' && <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-600"><Send className="w-4 h-4" /></div>}
-                                    {event.type === 'note' && <div className="w-8 h-8 rounded-full bg-yellow-100 flex items-center justify-center text-yellow-600"><MessageSquare className="w-4 h-4" /></div>}
-                                    {event.type === 'system' && <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-400"><FileText className="w-4 h-4" /></div>}
-                                </div>
-                                <div className="flex-1 space-y-1">
-                                    <div className="flex items-center justify-between">
-                                        <span className="text-xs font-bold text-foreground">{event.author || 'System'}</span>
-                                        <span className="text-[10px] text-muted-foreground">{event.date}, {event.time}</span>
-                                    </div>
-                                    <div className="text-sm text-muted-foreground bg-white dark:bg-muted p-3 rounded-md border border-border shadow-sm">
-                                        {event.content}
-                                    </div>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                    
-                    {/* Input Area (only for activity/notes/emails) */}
-                    <div className="p-4 bg-background border-t border-border space-y-3 flex-shrink-0">
-                        <div className="flex gap-2 overflow-x-auto pb-2">
-                            <Button variant="outline" size="sm" className="h-7 text-xs gap-1 border-primary/20 bg-primary/5 hover:bg-primary/10 text-primary">
-                                <Sparkles className="w-3 h-3" />
-                                Suggest Reply
-                            </Button>
-                            <Button variant="outline" size="sm" className="h-7 text-xs gap-1 text-muted-foreground">
-                                Draft Rejection
-                            </Button>
-                            <Button variant="outline" size="sm" className="h-7 text-xs gap-1 text-muted-foreground">
-                                Summarize
-                            </Button>
+        <Card className="h-full flex flex-col">
+            <CardHeader className="pb-3 shrink-0">
+                <CardTitle className="text-lg flex items-center gap-2">
+                    <Clock className="w-5 h-5" />
+                    Tijdlijn
+                    <Badge variant="secondary" className="text-xs ml-auto">
+                        {activities.length} events
+                    </Badge>
+                </CardTitle>
+            </CardHeader>
+            <ScrollArea className="flex-1">
+                <CardContent className="pt-0">
+                    {activities.length === 0 ? (
+                        <div className="text-center py-8 text-muted-foreground">
+                            <Clock className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                            <p className="text-sm">Geen activiteiten</p>
                         </div>
+                    ) : (
                         <div className="relative">
-                            <Textarea 
-                                placeholder="Type a note or email..." 
-                                className="min-h-[100px] pr-12 resize-none"
-                            />
-                            <div className="absolute bottom-2 right-2 flex gap-2">
-                                <Button size="icon" variant="ghost" className="h-8 w-8 text-muted-foreground">
-                                    <Paperclip className="w-4 h-4" />
-                                </Button>
-                                <Button size="icon" className="h-8 w-8">
-                                    <Send className="w-4 h-4" />
-                                </Button>
-                            </div>
-                        </div>
-                    </div>
-                </TabsContent>
-
-                <TabsContent value="knowledge" className="h-full overflow-y-auto p-4 m-0 data-[state=inactive]:hidden">
-                     <div className="space-y-4">
-                        <div className="flex items-center justify-between">
-                             <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Internal Knowledge Base (Notion)</h3>
-                             <span className="text-[10px] bg-green-100 text-green-700 px-2 py-0.5 rounded-full">Connected</span>
-                        </div>
-                        
-                        {articles.length === 0 ? (
-                            <div className="flex items-center justify-center h-32 text-muted-foreground text-sm">
-                                <div className="animate-pulse">Fetching from Notion...</div>
-                            </div>
-                        ) : (
-                            articles.map(article => (
-                                <a key={article.id} href={article.url} target="_blank" rel="noopener noreferrer" className="group block p-4 bg-card border border-border rounded-md hover:border-primary/50 hover:shadow-sm transition-all">
-                                    <div className="flex items-center justify-between mb-1">
-                                        <div className="flex items-center gap-2">
-                                            <BookOpen className="w-4 h-4 text-primary" />
-                                            <span className="font-medium text-sm group-hover:text-primary transition-colors">{article.title}</span>
+                            {/* Timeline line */}
+                            <div className="absolute left-3 top-2 bottom-2 w-px bg-border" />
+                            
+                            <div className="space-y-4">
+                                {activities.map((activity, index) => (
+                                    <div key={activity.id} className="relative flex gap-4 pl-2">
+                                        {/* Icon bubble */}
+                                        <div className={cn(
+                                            "w-6 h-6 rounded-full flex items-center justify-center text-white shrink-0 z-10",
+                                            activityColors[activity.type] || 'bg-slate-500'
+                                        )}>
+                                            {activityIcons[activity.type] || <Settings className="w-3 h-3" />}
                                         </div>
-                                        <ExternalLink className="w-3 h-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+
+                                        {/* Content */}
+                                        <div className="flex-1 min-w-0 pb-2">
+                                            <div className="flex items-center gap-2 mb-0.5">
+                                                <Badge variant="outline" className="text-[10px] font-medium">
+                                                    {getActivityLabel(activity.type)}
+                                                </Badge>
+                                                <span className="text-[10px] text-muted-foreground">
+                                                    {formatTimestamp(activity.createdAt)}
+                                                </span>
+                                            </div>
+                                            <p className="text-sm text-foreground">
+                                                {activity.content}
+                                            </p>
+                                            {activity.author && (
+                                                <p className="text-[10px] text-muted-foreground mt-0.5">
+                                                    door {activity.author}
+                                                </p>
+                                            )}
+                                        </div>
                                     </div>
-                                    <span className="text-xs text-muted-foreground truncate block font-mono opacity-50">{article.url}</span>
-                                </a>
-                            ))
-                        )}
-                     </div>
-                </TabsContent>
-                
-                <TabsContent value="emails" className="h-full flex items-center justify-center m-0 data-[state=inactive]:hidden">
-                    <p className="text-muted-foreground">Email filter view placeholder</p>
-                </TabsContent>
-                 <TabsContent value="notes" className="h-full flex items-center justify-center m-0 data-[state=inactive]:hidden">
-                    <p className="text-muted-foreground">Notes filter view placeholder</p>
-                </TabsContent>
-            </div>
-        </Tabs>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                </CardContent>
+            </ScrollArea>
+        </Card>
     )
 }
