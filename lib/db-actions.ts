@@ -1133,7 +1133,8 @@ export async function approveQuote(
         projectType: true,
         city: true,
         address: true,
-        assignee: true
+        assignee: true,
+        assignedProjectleider: true
       }
     })
     
@@ -1186,6 +1187,18 @@ export async function approveQuote(
         const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://app.broersmabouwadvies.nl'
         const acceptanceUrl = `${baseUrl}/offerte/${acceptanceLinkResult.data.hash}`
         
+        // Get projectleider contact info if assigned
+        let contactPerson: { name: string; email: string } | undefined
+        if (currentLead.assignedProjectleider) {
+          const plUser = await prisma.user.findFirst({
+            where: { name: currentLead.assignedProjectleider, deletedAt: null },
+            select: { name: true, email: true }
+          })
+          if (plUser) {
+            contactPerson = { name: plUser.name, email: plUser.email }
+          }
+        }
+        
         const { sendQuoteEmail } = await import('./email')
         sendQuoteEmail({
           to: currentLead.clientEmail,
@@ -1195,7 +1208,8 @@ export async function approveQuote(
           quoteDescription: currentLead.quoteDescription || undefined,
           leadId: validId,
           sentBy: feedback?.authorName || 'System',
-          acceptanceUrl // Include the secure acceptance link
+          acceptanceUrl, // Include the secure acceptance link
+          contactPerson // Include projectleider as contact person
         }).then(result => {
           if (result.success) {
             console.log(`[Email] Quote email sent to ${currentLead.clientEmail} for lead ${validId} with acceptance link`)

@@ -231,6 +231,11 @@ export async function sendQuoteEmail(data: {
   leadId: string
   sentBy: string
   acceptanceUrl?: string // Secure link for digital acceptance
+  contactPerson?: {
+    name: string
+    email: string
+    phone?: string
+  }
 }): Promise<EmailResult> {
   const formattedValue = new Intl.NumberFormat('nl-NL', { 
     style: 'currency', 
@@ -240,6 +245,7 @@ export async function sendQuoteEmail(data: {
   const subject = `Offerte constructieve berekening - ${data.projectType}`
   
   // Use secure acceptance link if provided, otherwise fallback to mailto
+  const contactEmail = data.contactPerson?.email || 'info@broersma-bouwadvies.nl'
   const acceptanceSection = data.acceptanceUrl 
     ? `
       <p>U kunt deze offerte direct online accepteren via onderstaande beveiligde link:</p>
@@ -255,10 +261,27 @@ export async function sendQuoteEmail(data: {
     : `
       <p>U kunt akkoord geven door te antwoorden op deze e-mail of te bellen.</p>
       
-      <a href="mailto:info@broersma-bouwadvies.nl?subject=Akkoord%20offerte%20${encodeURIComponent(data.projectType)}" class="button">
+      <a href="mailto:${contactEmail}?subject=Akkoord%20offerte%20${encodeURIComponent(data.projectType)}" class="button">
         ✓ Akkoord geven
       </a>
     `
+  
+  // Contact person section - shows who is responsible for their project
+  const contactSection = data.contactPerson 
+    ? `
+      <div style="background-color: #f0f9ff; border-left: 4px solid #0ea5e9; padding: 16px; margin: 20px 0; border-radius: 0 8px 8px 0;">
+        <p style="margin: 0 0 8px 0; font-weight: 600; color: #0369a1;">Uw contactpersoon</p>
+        <p style="margin: 0; color: #334155;">
+          <strong>${data.contactPerson.name}</strong><br>
+          <a href="mailto:${data.contactPerson.email}" style="color: #0ea5e9;">${data.contactPerson.email}</a>
+          ${data.contactPerson.phone ? `<br>${data.contactPerson.phone}` : ''}
+        </p>
+        <p style="margin: 8px 0 0 0; font-size: 13px; color: #64748b;">
+          Voor al uw vragen over dit project kunt u rechtstreeks contact opnemen met ${data.contactPerson.name.split(' ')[0]}.
+        </p>
+      </div>
+    `
+    : ''
   
   const body = `
     <p>Beste ${data.clientName},</p>
@@ -280,10 +303,13 @@ export async function sendQuoteEmail(data: {
     
     ${acceptanceSection}
     
+    ${contactSection}
+    
     <p>De offerte is 30 dagen geldig. Heeft u vragen? Neem gerust contact op.</p>
     
     <p>Met vriendelijke groet,<br>
-    <strong>Team Broersma Bouwadvies</strong></p>
+    <strong>${data.contactPerson ? data.contactPerson.name : 'Team Broersma Bouwadvies'}</strong><br>
+    Broersma Bouwadvies</p>
   `
   
   return sendEmail({

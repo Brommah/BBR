@@ -10,6 +10,7 @@ import {
   sendEmail
 } from './email'
 import type { LeadStatus } from './types'
+import prisma from './db'
 
 /**
  * Email Trigger Service
@@ -26,6 +27,7 @@ interface Lead {
   address?: string | null
   status: LeadStatus
   assignee?: string | null
+  assignedProjectleider?: string | null
   quoteValue?: number | null
   quoteDescription?: string | null
 }
@@ -52,6 +54,18 @@ export async function triggerStatusChangeEmail(
     // → OfferteVerzonden: Quote was approved and sent
     if (newStatus === 'OfferteVerzonden' && oldStatus !== 'OfferteVerzonden') {
       if (lead.quoteValue) {
+        // Get projectleider contact info if assigned
+        let contactPerson: { name: string; email: string } | undefined
+        if (lead.assignedProjectleider) {
+          const plUser = await prisma.user.findFirst({
+            where: { name: lead.assignedProjectleider, deletedAt: null },
+            select: { name: true, email: true }
+          })
+          if (plUser) {
+            contactPerson = { name: plUser.name, email: plUser.email }
+          }
+        }
+        
         const result = await sendQuoteEmail({
           to: lead.clientEmail,
           clientName: lead.clientName,
@@ -59,7 +73,8 @@ export async function triggerStatusChangeEmail(
           quoteValue: lead.quoteValue,
           quoteDescription: lead.quoteDescription || undefined,
           leadId: lead.id,
-          sentBy: triggeredBy
+          sentBy: triggeredBy,
+          contactPerson
         })
         return { sent: result.success, emailType: 'quote', error: result.error }
       }

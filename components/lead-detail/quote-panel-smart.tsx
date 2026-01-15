@@ -37,7 +37,7 @@ import {
 import { DocumentPreview } from "@/components/templates/document-preview"
 import { downloadQuotePDF, generateQuoteNumber, generateQuotePDF } from "@/lib/pdf"
 import { sendQuoteEmail } from "@/lib/email"
-import { createQuoteVersion } from "@/lib/db-actions"
+import { createQuoteVersion, getUsers } from "@/lib/db-actions"
 import { uploadFile } from "@/lib/storage"
 import { cn } from "@/lib/utils"
 
@@ -205,6 +205,19 @@ export function QuotePanelSmart({ lead, onQuoteAccepted }: QuotePanelSmartProps)
         
         setIsSending(true)
         try {
+            // Get projectleider contact info if assigned
+            let contactPerson: { name: string; email: string } | undefined
+            if (lead.assignedProjectleider) {
+                const usersResult = await getUsers('projectleider')
+                if (usersResult.success && usersResult.data) {
+                    const users = usersResult.data as Array<{ name: string; email: string }>
+                    const pl = users.find(u => u.name === lead.assignedProjectleider)
+                    if (pl) {
+                        contactPerson = { name: pl.name, email: pl.email }
+                    }
+                }
+            }
+            
             const emailResult = await sendQuoteEmail({
                 to: lead.clientEmail,
                 clientName: lead.clientName,
@@ -212,7 +225,8 @@ export function QuotePanelSmart({ lead, onQuoteAccepted }: QuotePanelSmartProps)
                 quoteValue: lead.quoteValue || total,
                 quoteDescription: description || undefined,
                 leadId,
-                sentBy: currentUser?.name || 'System'
+                sentBy: currentUser?.name || 'System',
+                contactPerson
             })
             
             if (!emailResult.success) {
