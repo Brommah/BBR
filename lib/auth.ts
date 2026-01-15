@@ -96,14 +96,20 @@ export type Permission =
 /**
  * Permission matrix per role
  * 
- * Projectleider (admin) role:
- * - Full access to pipeline
+ * Admin role (Fred/Pim):
+ * - Full access to everything
+ * - Can approve/reject quotes
+ * - Can manage users and pricing
+ * - Sees all leads in all statuses
+ * 
+ * Projectleider role (Femke/Rohina):
+ * - Responsible for project delivery
  * - Can assign Rekenaar and Tekenaar to leads
  * - Can set "aan zet" status
- * - Can approve/reject quotes
- * - Only role that sees leads in offerte phase
+ * - Sees leads assigned to them in all statuses
+ * - Can see leads in offerte phase (for their projects)
  * 
- * Rekenaar/Tekenaar (engineer) role:
+ * Engineer role (Rekenaar/Tekenaar):
  * - Only sees leads when:
  *   1. Assigned to them (as rekenaar or tekenaar)
  *   2. Status is "Opdracht" (quote accepted)
@@ -123,15 +129,33 @@ const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     'leads:create',
     'leads:assign',
     'leads:view-all',
-    'leads:view-offerte',  // Can see leads in offerte phase
+    'leads:view-offerte',
     'leads:edit',
     'leads:delete',
-    'leads:set-aan-zet',   // Can change who is "aan zet"
+    'leads:set-aan-zet',
     'admin:access',
     'admin:manage-users',
     'admin:manage-pricing',
     'settings:view',
     'settings:edit',
+  ],
+  projectleider: [
+    // Projectleider can:
+    // - See leads assigned to them (all statuses including offerte)
+    // - Assign team members (Rekenaar/Tekenaar)
+    // - Set "aan zet" status
+    // - Create new leads
+    // - Edit leads
+    'quotes:submit',
+    'quotes:view',
+    'quotes:feedback',
+    'leads:create',
+    'leads:assign',
+    'leads:view-own',      // Only sees leads assigned to them
+    'leads:view-offerte',  // Can see offerte phase for their projects
+    'leads:edit',
+    'leads:set-aan-zet',
+    'settings:view',
   ],
   engineer: [
     // Engineers (Rekenaar/Tekenaar) can:
@@ -140,14 +164,9 @@ const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     // - Download documents
     // - View quote details (read-only)
     'leads:view-own',
-    'quotes:view',      // Can view quote details (read-only)
-    'settings:view',
-  ],
-  viewer: [
-    'leads:view-all',
     'quotes:view',
     'settings:view',
-  ]
+  ],
 }
 
 interface AuthState {
@@ -181,7 +200,7 @@ function convertSupabaseUser(supabaseUser: SupabaseUser): User {
     id: supabaseUser.id,
     name: metadata.name || supabaseUser.email?.split('@')[0] || 'User',
     email: supabaseUser.email || '',
-    role: (metadata.role as UserRole) || 'viewer',
+    role: (metadata.role as UserRole) || 'engineer',
     engineerType: (metadata.engineerType as EngineerType) || undefined,
     avatar: metadata.avatar_url
   }
@@ -238,14 +257,11 @@ export const useAuthStore = create<AuthState>()(
 
           if (data.user) {
             // Fetch user from database to get the correct role
-            console.log('[Auth] Fetching user from DB for email:', data.user.email)
             const dbResult = await getUserByEmail(data.user.email || '')
-            console.log('[Auth] DB result:', JSON.stringify(dbResult))
             
             if (dbResult.success && dbResult.data) {
               // Use database user with correct role
               const dbUser = dbResult.data as { id: string; name: string; email: string; role: string; engineerType?: string; avatar?: string }
-              console.log('[Auth] Using DB user:', dbUser.name, 'role:', dbUser.role)
               set({ 
                 currentUser: {
                   id: dbUser.id,
@@ -262,9 +278,8 @@ export const useAuthStore = create<AuthState>()(
               return true
             } else {
               // Fallback to Supabase user if not in database (shouldn't happen)
-              console.warn('[Auth] User not found in database, using Supabase metadata. DB error:', dbResult.error)
+              console.warn('[Auth] User not found in database, using Supabase metadata')
               const user = convertSupabaseUser(data.user as SupabaseUser)
-              console.log('[Auth] Fallback user:', user.name, 'role:', user.role)
               set({ 
                 currentUser: user, 
                 isAuthenticated: true, 
@@ -322,13 +337,10 @@ export const useAuthStore = create<AuthState>()(
 
           if (session?.user) {
             // Fetch user from database to get the correct role
-            console.log('[Auth] checkSession: Fetching user from DB for email:', session.user.email)
             const dbResult = await getUserByEmail(session.user.email || '')
-            console.log('[Auth] checkSession: DB result:', JSON.stringify(dbResult))
             
             if (dbResult.success && dbResult.data) {
               const dbUser = dbResult.data as { id: string; name: string; email: string; role: string; engineerType?: string; avatar?: string }
-              console.log('[Auth] checkSession: Using DB user:', dbUser.name, 'role:', dbUser.role)
               set({ 
                 currentUser: {
                   id: dbUser.id,
@@ -344,9 +356,8 @@ export const useAuthStore = create<AuthState>()(
               })
             } else {
               // Fallback to Supabase user if not in database
-              console.warn('[Auth] checkSession: User not found in database. DB error:', dbResult.error)
+              console.warn('[Auth] User not found in database')
               const user = convertSupabaseUser(session.user as SupabaseUser)
-              console.log('[Auth] checkSession: Fallback user:', user.name, 'role:', user.role)
               set({ 
                 currentUser: user, 
                 isAuthenticated: true, 
@@ -403,7 +414,7 @@ export const useAuthStore = create<AuthState>()(
       
       isProjectleider: () => {
         const { currentUser } = get()
-        return currentUser?.role === 'admin'
+        return currentUser?.role === 'projectleider'
       },
     }),
     {

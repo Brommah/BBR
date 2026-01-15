@@ -13,8 +13,8 @@ import { toast } from "sonner"
  * Get the default landing page based on user role
  * All users start on / - the home page shows role-appropriate content:
  * - Admin: sees admin console
- * - Engineer: sees their work queue
- * - Viewer: sees dashboard
+ * - Projectleider: sees assigned projects with team management
+ * - Engineer: sees their work queue when "aan zet"
  */
 function getDefaultRoute(_role: string | undefined): string {
     return '/'

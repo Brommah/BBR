@@ -327,15 +327,12 @@ export async function getEngineers(): Promise<ActionResult> {
 }
 
 export async function getUserByEmail(email: string): Promise<ActionResult> {
-  console.log('[DB] getUserByEmail called with:', email)
   const validEmail = validateString(email, 255)
   if (!validEmail) {
-    console.log('[DB] getUserByEmail: Invalid email')
     return { success: false, error: 'Invalid email' }
   }
 
   try {
-    console.log('[DB] getUserByEmail: Querying DB for:', validEmail.toLowerCase())
     const user = await prisma.user.findUnique({
       where: { email: validEmail.toLowerCase() },
       select: {
@@ -348,15 +345,13 @@ export async function getUserByEmail(email: string): Promise<ActionResult> {
       }
     })
     
-    console.log('[DB] getUserByEmail: Query result:', user ? `Found ${user.name} with role ${user.role}` : 'NOT FOUND')
-    
     if (!user) {
       return { success: false, error: 'User not found' }
     }
     
     return { success: true, data: user }
   } catch (error) {
-    console.error('[DB] getUserByEmail: Error:', error)
+    console.error('[DB] getUserByEmail error:', error)
     return { success: false, error: 'Failed to load user' }
   }
 }
@@ -812,14 +807,10 @@ export async function updateLeadTeamAssignments(
       }
     }
 
-    console.log('[DB] Updating team assignments with data:', updateData)
-    
     const lead = await prisma.lead.update({
       where: { id: validId },
       data: updateData
     })
-    
-    console.log('[DB] Team assignments updated successfully')
     
     // Log activity for each change
     for (const change of changes) {

@@ -4,7 +4,7 @@
  */
 
 import 'dotenv/config'
-import { PrismaClient } from '@prisma/client'
+import { PrismaClient, AanZet } from '@prisma/client'
 import { PrismaPg } from '@prisma/adapter-pg'
 import { Pool } from 'pg'
 
@@ -86,7 +86,7 @@ async function assignTeamToLeads() {
   let updatedCount = 0
   
   for (const lead of leadsWithoutTeam) {
-    const updates: { assignedRekenaar?: string; assignedTekenaar?: string; aanZet?: string } = {}
+    const updates: { assignedRekenaar?: string; assignedTekenaar?: string; aanZet?: AanZet } = {}
     
     // Assign rekenaar if missing
     if (!lead.assignedRekenaar && availableRekenaars.length > 0) {
@@ -102,7 +102,7 @@ async function assignTeamToLeads() {
     
     // Set "aan zet" to rekenaar by default for leads in "Opdracht" status
     if (lead.status === 'Opdracht' && updates.assignedRekenaar) {
-      updates.aanZet = 'rekenaar'
+      updates.aanZet = AanZet.rekenaar
     }
     
     if (Object.keys(updates).length > 0) {

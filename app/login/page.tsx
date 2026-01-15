@@ -8,7 +8,7 @@ import { LoginForm } from "@/components/auth/login-form"
 /**
  * Get the default landing page based on user role
  * - Admin: starts on /admin
- * - Engineer/Viewer: starts on / (werkvoorraad/werken)
+ * - Projectleider/Engineer: starts on / (werkvoorraad/werken)
  */
 function getDefaultRoute(role: string | undefined): string {
     return role === 'admin' ? '/admin' : '/'

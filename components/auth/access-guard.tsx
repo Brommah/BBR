@@ -10,7 +10,7 @@ interface AccessGuardProps {
     /** Required permission to access this content */
     permission?: Permission
     /** Required role(s) to access this content */
-    roles?: Array<'admin' | 'engineer' | 'viewer'>
+    roles?: Array<'admin' | 'projectleider' | 'engineer'>
     /** Fallback component when access denied */
     fallback?: ReactNode
     /** Redirect path when not authenticated */

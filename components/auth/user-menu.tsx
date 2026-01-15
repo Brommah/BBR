@@ -57,10 +57,10 @@ export function UserMenu() {
         .slice(0, 2)
 
     const roleLabel = currentUser.role === 'admin' 
-        ? 'Beheerder' 
-        : currentUser.role === 'engineer' 
-            ? 'Engineer' 
-            : 'Viewer'
+        ? 'Admin' 
+        : currentUser.role === 'projectleider' 
+            ? 'Projectleider' 
+            : 'Engineer'
 
     // Handle dropdown open/close and keep sidebar open while dropdown is open
     const handleOpenChange = (open: boolean) => {

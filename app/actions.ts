@@ -332,8 +332,8 @@ async function createSystemOverviewPage() {
                 
                 heading3("👥 User Roles & Permissions"),
                 bulletItem("Admin: Full access, approve/reject quotes, manage users"),
-                bulletItem("Engineer: Submit quotes, view/edit own leads"),
-                bulletItem("Viewer: Read-only access"),
+                bulletItem("Projectleider: Project delivery, team assignment, sets 'aan zet'"),
+                bulletItem("Engineer (Rekenaar/Tekenaar): Execute work when 'aan zet'"),
                 bulletItem("18 granular permissions across 4 categories"),
                 
                 heading3("📧 Email Automation (15+ Templates)"),
@@ -793,7 +793,7 @@ async function createDatabaseSchemaPage() {
                 
                 heading3("User"),
                 paragraph("Team members with role-based access."),
-                bulletItem("Roles: admin, engineer, viewer"),
+                bulletItem("Roles: admin, projectleider, engineer"),
                 bulletItem("Fields: name, email, role, avatar"),
                 
                 heading3("ProjectSpec"),
@@ -1084,8 +1084,8 @@ export async function syncSimpleBackofficeWiki() {
             
             heading3("Rollen & Permissies (RBAC)"),
             bulletItem("Admin: Volledige toegang, goedkeuringen, gebruikersbeheer"),
-            bulletItem("Engineer: Leads bewerken, offertes maken, notities toevoegen"),
-            bulletItem("Viewer: Alleen lezen"),
+            bulletItem("Projectleider: Projectlevering, team toewijzen, 'aan zet' bepalen"),
+            bulletItem("Engineer: Werk uitvoeren wanneer 'aan zet', uren registreren"),
             
             heading3("Compliance Features"),
             bulletItem("✅ Audit logging — Wie deed wat en wanneer"),

@@ -144,26 +144,31 @@ export interface EngineerUpdate {
  */
 export function useNotificationCount(userName: string | undefined) {
   const [count, setCount] = useState(0)
-  
-  const fetchCount = useCallback(async () => {
+
+  useEffect(() => {
     if (!userName) {
-      setCount(0)
+      // Use a microtask to avoid synchronous setState in effect
+      queueMicrotask(() => setCount(0))
       return
     }
     
-    const result = await getUnreadNotificationCount(userName)
-    if (result.success && typeof result.data === 'number') {
-      setCount(result.data)
+    // Fetch count and set up polling
+    let isMounted = true
+    const doFetch = async () => {
+      const result = await getUnreadNotificationCount(userName)
+      if (isMounted && result.success && typeof result.data === 'number') {
+        setCount(result.data)
+      }
+    }
+    
+    doFetch()
+    const interval = setInterval(doFetch, 30000)
+    
+    return () => {
+      isMounted = false
+      clearInterval(interval)
     }
   }, [userName])
-
-  useEffect(() => {
-    fetchCount()
-    
-    // Poll every 30 seconds
-    const interval = setInterval(fetchCount, 30000)
-    return () => clearInterval(interval)
-  }, [fetchCount])
 
   return count
 }

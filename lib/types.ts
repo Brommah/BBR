@@ -169,7 +169,7 @@ export type QuoteVersionStatus = 'draft' | 'submitted' | 'approved' | 'rejected'
 // User Types
 // ============================================================
 
-export type UserRole = 'admin' | 'engineer' | 'viewer'
+export type UserRole = 'admin' | 'projectleider' | 'engineer'
 
 export interface User {
   id: string

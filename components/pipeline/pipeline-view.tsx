@@ -105,8 +105,8 @@ function filterLeadsByRole(leads: Lead[], user: { role: string; name: string; en
         })
     }
     
-    // Viewers see all but read-only
-    return leads
+    // Unknown role - no leads
+    return []
 }
 
 export function PipelineView() {
@@ -175,7 +175,7 @@ export function PipelineView() {
 
             return true
         })
-    }, [leads, filters])
+    }, [roleFilteredLeads, filters])
 
     const hasActiveFilters = filters.search || filters.projectType !== "all" || filters.assignee !== "all" || filters.hideArchived
     const activeFilterCount = [

@@ -75,7 +75,7 @@ describe('Access Guard Components', () => {
           id: '1',
           name: 'Test',
           email: 'test@test.com',
-          role: 'viewer',
+          role: 'engineer',
         },
       })
 
@@ -97,7 +97,7 @@ describe('Access Guard Components', () => {
           id: '1',
           name: 'Test',
           email: 'test@test.com',
-          role: 'viewer',
+          role: 'engineer',
         },
       })
 
@@ -144,7 +144,7 @@ describe('Access Guard Components', () => {
           id: '1',
           name: 'Test',
           email: 'test@test.com',
-          role: 'viewer',
+          role: 'engineer',
         },
       })
 
@@ -188,7 +188,7 @@ describe('Access Guard Components', () => {
           id: '1',
           name: 'Test',
           email: 'test@test.com',
-          role: 'viewer',
+          role: 'engineer',
         },
       })
 
@@ -212,7 +212,7 @@ describe('Access Guard Components', () => {
           id: '1',
           name: 'Test',
           email: 'test@test.com',
-          role: 'viewer',
+          role: 'engineer',
         },
       })
 
@@ -255,7 +255,7 @@ describe('Access Guard Components', () => {
           id: '1',
           name: 'Test',
           email: 'test@test.com',
-          role: 'viewer',
+          role: 'engineer',
         },
       })
 

@@ -28,13 +28,13 @@ const menuItems = [
     title: "Home",
     url: "/",
     icon: Home,
-    roles: ['admin', 'engineer', 'viewer'] as const,
+    roles: ['admin', 'projectleider', 'engineer'] as const,
   },
   {
     title: "Nieuw Project",
     url: "/submit",
     icon: ClipboardPlus,
-    roles: ['admin'] as const,
+    roles: ['admin', 'projectleider'] as const,
   },
   {
     title: "Inbox",
@@ -47,13 +47,13 @@ const menuItems = [
     title: "Pipeline",
     url: "/pipeline",
     icon: Kanban,
-    roles: ['admin'] as const,
+    roles: ['admin', 'projectleider'] as const,
   },
   {
     title: "Meldingen",
     url: "/notifications",
     icon: AtSign,
-    roles: ['admin', 'engineer'] as const,
+    roles: ['admin', 'projectleider', 'engineer'] as const,
     notificationBadge: true, // @-mention notifications
   },
 ]
@@ -68,7 +68,7 @@ export function AppSidebar() {
 
   // Filter menu items based on user role
   const visibleItems = menuItems.filter(item => {
-    if (!currentUser) return (item.roles as readonly string[]).includes('viewer')
+    if (!currentUser) return false // No menu items for unauthenticated users
     return (item.roles as readonly string[]).includes(currentUser.role)
   })
 

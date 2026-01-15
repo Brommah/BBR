@@ -41,7 +41,7 @@ export function isSupabaseConfigured(): boolean {
  */
 export interface SupabaseUserMetadata {
   name?: string
-  role?: 'admin' | 'engineer' | 'viewer'
+  role?: 'admin' | 'projectleider' | 'engineer'
   avatar_url?: string
 }
 

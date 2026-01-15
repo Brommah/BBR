@@ -89,15 +89,17 @@ function NotificationsContent() {
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [isRefreshing, setIsRefreshing] = useState(false)
+  
+  const userName = currentUser?.name
 
   const loadNotifications = useCallback(async () => {
-    if (!currentUser?.name) return
+    if (!userName) return
     
-    const result = await getNotifications(currentUser.name)
+    const result = await getNotifications(userName)
     if (result.success && result.data) {
       setNotifications(result.data as Notification[])
     }
-  }, [currentUser?.name])
+  }, [userName])
 
   useEffect(() => {
     const load = async () => {

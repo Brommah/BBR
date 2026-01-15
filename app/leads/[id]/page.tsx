@@ -102,8 +102,8 @@ export default function LeadDetailPage() {
         }
         
         // Fetch the lead directly
-        setHasAttemptedFetch(true)
         startTransition(async () => {
+            setHasAttemptedFetch(true)
             const result = await getLead(params.id as string)
             if (result.success && result.data) {
                 setDirectLead(result.data as Lead)

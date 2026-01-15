@@ -12,8 +12,9 @@ import { useLeadStore } from "@/lib/store"
 /**
  * Home page - shows different dashboards based on user role:
  * - Admin: Full admin console with approvals, team overview, settings
+ * - Projectleider: Project oversight with team assignment capabilities
  * - Engineer: Personal work queue and project focus
- * - Viewer/Unauthenticated: Login prompt
+ * - Unauthenticated: Login prompt
  */
 export default function HomePage() {
   const router = useRouter()

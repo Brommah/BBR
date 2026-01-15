@@ -39,11 +39,11 @@ function getPermissionsFromRole(role: string) {
     switch (role.toLowerCase()) {
         case 'admin':
             return { canEditLeads: true, canViewFinancials: true, canManageUsers: true }
+        case 'projectleider':
+            return { canEditLeads: true, canViewFinancials: true, canManageUsers: false }
         case 'engineer':
-            return { canEditLeads: true, canViewFinancials: false, canManageUsers: false }
-        case 'viewer':
         default:
-            return { canEditLeads: false, canViewFinancials: false, canManageUsers: false }
+            return { canEditLeads: true, canViewFinancials: false, canManageUsers: false }
     }
 }
 
@@ -247,8 +247,8 @@ export function UserPermissionsTable() {
                                 </SelectTrigger>
                                 <SelectContent>
                                     <SelectItem value="admin">Admin</SelectItem>
+                                    <SelectItem value="projectleider">Projectleider</SelectItem>
                                     <SelectItem value="engineer">Engineer</SelectItem>
-                                    <SelectItem value="viewer">Viewer</SelectItem>
                                 </SelectContent>
                             </Select>
                         </div>

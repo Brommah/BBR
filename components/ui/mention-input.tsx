@@ -186,7 +186,8 @@ export function MentionInput({
                   <AvatarFallback className={cn(
                     "text-white text-sm font-bold",
                     user.role === 'admin' ? "bg-amber-500" : 
-                    user.role === 'engineer' ? "bg-blue-500" : "bg-slate-500"
+                    user.role === 'projectleider' ? "bg-purple-500" :
+                    "bg-blue-500"
                   )}>
                     {user.name[0]}
                   </AvatarFallback>
@@ -194,7 +195,7 @@ export function MentionInput({
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium truncate">{user.name}</p>
                   <p className="text-xs text-muted-foreground capitalize">
-                    {user.role === 'admin' ? 'Admin' : user.role === 'engineer' ? 'Engineer' : 'Viewer'}
+                    {user.role === 'admin' ? 'Admin' : user.role === 'projectleider' ? 'Projectleider' : 'Engineer'}
                   </p>
                 </div>
               </button>
