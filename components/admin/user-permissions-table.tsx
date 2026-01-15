@@ -10,7 +10,6 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
-import { Switch } from "@/components/ui/switch"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -58,8 +57,6 @@ import {
   Pencil,
   Trash2,
   Key,
-  Shield,
-  Mail,
 } from "lucide-react"
 import {
   getRoles,
@@ -96,10 +93,6 @@ export function UserPermissionsTable() {
   })
 
   // Load users and roles
-  useEffect(() => {
-    loadData()
-  }, [])
-
   async function loadData() {
     setIsLoading(true)
     const [usersResult, rolesResult] = await Promise.all([
@@ -115,6 +108,11 @@ export function UserPermissionsTable() {
     }
     setIsLoading(false)
   }
+
+  useEffect(() => {
+    void loadData()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const handleAddUser = async () => {
     if (!newUser.name || !newUser.email || !newUser.roleId) {
