@@ -4,7 +4,25 @@ import { sendIntakeConfirmation } from '@/lib/email'
 import { sendNewLeadNotification } from '@/lib/email-triggers'
 import { createActivity, checkRateLimit, createAuditLog, createDocument } from '@/lib/db-actions'
 import { PROJECT_TYPES, RATE_LIMITS } from '@/lib/config'
-import { supabase } from '@/lib/supabase'
+import { createClient, SupabaseClient } from '@supabase/supabase-js'
+
+// Create Supabase client with service role key for storage operations
+function getStorageClient(): SupabaseClient | null {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+  
+  if (!supabaseUrl || !serviceRoleKey) {
+    console.warn('[INTAKE] Supabase storage not configured - missing URL or service role key')
+    return null
+  }
+  
+  return createClient(supabaseUrl, serviceRoleKey, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+    }
+  })
+}
 
 // ============================================================
 // Constants
@@ -71,24 +89,26 @@ function getFileType(filename: string): string {
 // Storage Helper
 // ============================================================
 
-async function ensureBucket(): Promise<boolean> {
-  if (!supabase) {
-    console.log('[INTAKE] Supabase not configured, skipping bucket check')
-    return false
-  }
-  
+async function ensureBucket(supabase: SupabaseClient): Promise<boolean> {
   try {
-    const { data: buckets } = await supabase.storage.listBuckets()
+    const { data: buckets, error: listError } = await supabase.storage.listBuckets()
+    
+    if (listError) {
+      console.error('[INTAKE] Failed to list buckets:', listError)
+      return false
+    }
     
     if (!buckets?.find(b => b.name === BUCKET_NAME)) {
+      console.log('[INTAKE] Creating documents bucket...')
       const { error } = await supabase.storage.createBucket(BUCKET_NAME, {
-        public: false,
+        public: true,
         fileSizeLimit: 52428800 // 50MB
       })
       if (error) {
         console.error('[INTAKE] Failed to create bucket:', error)
         return false
       }
+      console.log('[INTAKE] Bucket created successfully')
     }
     return true
   } catch (error) {
@@ -291,67 +311,86 @@ export async function POST(request: NextRequest) {
     // Upload files if any
     const uploadedFiles: { name: string; url: string; success: boolean }[] = []
     
-    if (files.length > 0 && supabase) {
-      await ensureBucket()
+    if (files.length > 0) {
+      const storageClient = getStorageClient()
       
-      for (const file of files) {
-        try {
-          // Create unique filename
-          const timestamp = Date.now()
-          const safeName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_')
-          const path = `${lead.id}/${timestamp}-${safeName}`
-          
-          // Convert File to ArrayBuffer for upload
-          const arrayBuffer = await file.arrayBuffer()
-          const buffer = new Uint8Array(arrayBuffer)
-          
-          // Upload to Supabase Storage
-          const { error: uploadError } = await supabase.storage
-            .from(BUCKET_NAME)
-            .upload(path, buffer, {
-              contentType: file.type || 'application/octet-stream'
-            })
-          
-          if (uploadError) {
-            console.error('[INTAKE] Upload error:', uploadError)
-            uploadedFiles.push({ name: file.name, url: '', success: false })
-            continue
+      if (!storageClient) {
+        console.warn('[INTAKE] Storage not configured, skipping file uploads')
+        // Still mark files as failed so user knows
+        files.forEach(f => uploadedFiles.push({ name: f.name, url: '', success: false }))
+      } else {
+        const bucketReady = await ensureBucket(storageClient)
+        
+        if (!bucketReady) {
+          console.error('[INTAKE] Bucket not ready, skipping file uploads')
+          files.forEach(f => uploadedFiles.push({ name: f.name, url: '', success: false }))
+        } else {
+          for (const file of files) {
+            try {
+              // Create unique filename
+              const timestamp = Date.now()
+              const safeName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_')
+              const path = `${lead.id}/${timestamp}-${safeName}`
+              
+              // Convert File to ArrayBuffer for upload
+              const arrayBuffer = await file.arrayBuffer()
+              const buffer = new Uint8Array(arrayBuffer)
+              
+              console.log(`[INTAKE] Uploading ${file.name} to ${path}...`)
+              
+              // Upload to Supabase Storage
+              const { error: uploadError } = await storageClient.storage
+                .from(BUCKET_NAME)
+                .upload(path, buffer, {
+                  contentType: file.type || 'application/octet-stream',
+                  upsert: true
+                })
+              
+              if (uploadError) {
+                console.error('[INTAKE] Upload error:', uploadError)
+                uploadedFiles.push({ name: file.name, url: '', success: false })
+                continue
+              }
+              
+              // Get public URL
+              const { data: urlData } = storageClient.storage
+                .from(BUCKET_NAME)
+                .getPublicUrl(path)
+              
+              console.log(`[INTAKE] Upload successful, URL: ${urlData.publicUrl}`)
+              
+              // Save to database - categorize as 'tekening' for intake uploads
+              const dbResult = await createDocument({
+                leadId: lead.id,
+                name: file.name,
+                type: getFileType(file.name),
+                category: 'tekening', // Default category for intake uploads
+                size: file.size,
+                url: urlData.publicUrl,
+                uploadedBy: sanitizedData.clientName
+              })
+              
+              if (dbResult.success) {
+                uploadedFiles.push({ name: file.name, url: urlData.publicUrl, success: true })
+                
+                // Log document upload activity
+                await createActivity({
+                  leadId: lead.id,
+                  type: 'document_uploaded',
+                  content: `Document "${file.name}" geüpload door klant`,
+                  author: sanitizedData.clientName
+                })
+              } else {
+                console.error('[INTAKE] DB save failed:', dbResult.error)
+                // Cleanup uploaded file on DB error
+                await storageClient.storage.from(BUCKET_NAME).remove([path])
+                uploadedFiles.push({ name: file.name, url: '', success: false })
+              }
+            } catch (error) {
+              console.error('[INTAKE] File upload error:', error)
+              uploadedFiles.push({ name: file.name, url: '', success: false })
+            }
           }
-          
-          // Get public URL
-          const { data: urlData } = supabase.storage
-            .from(BUCKET_NAME)
-            .getPublicUrl(path)
-          
-          // Save to database - categorize as 'tekening' for intake uploads
-          const dbResult = await createDocument({
-            leadId: lead.id,
-            name: file.name,
-            type: getFileType(file.name),
-            category: 'tekening', // Default category for intake uploads
-            size: file.size,
-            url: urlData.publicUrl,
-            uploadedBy: sanitizedData.clientName
-          })
-          
-          if (dbResult.success) {
-            uploadedFiles.push({ name: file.name, url: urlData.publicUrl, success: true })
-            
-            // Log document upload activity
-            await createActivity({
-              leadId: lead.id,
-              type: 'document_uploaded',
-              content: `Document "${file.name}" geüpload door klant`,
-              author: sanitizedData.clientName
-            })
-          } else {
-            // Cleanup uploaded file on DB error
-            await supabase.storage.from(BUCKET_NAME).remove([path])
-            uploadedFiles.push({ name: file.name, url: '', success: false })
-          }
-        } catch (error) {
-          console.error('[INTAKE] File upload error:', error)
-          uploadedFiles.push({ name: file.name, url: '', success: false })
         }
       }
     }
