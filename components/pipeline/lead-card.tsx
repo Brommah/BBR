@@ -5,7 +5,7 @@ import { Lead } from "@/lib/store"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar"
-import { MapPin, Clock, AlertCircle, CheckCircle2, Calculator, PenTool } from "lucide-react"
+import { MapPin, Clock, AlertCircle, CheckCircle2, Calculator, PenTool, Briefcase } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useRouter } from "next/navigation"
 import { useState, useEffect, useRef } from "react"
@@ -112,6 +112,7 @@ export function LeadCard({ lead }: LeadCardProps) {
   const mouseDownPosRef = useRef<{ x: number; y: number } | null>(null)
   
   // Find team members from users list
+  const projectleiderUser = users.find(u => u.name === lead.assignedProjectleider)
   const rekenaarUser = users.find(u => u.name === lead.assignedRekenaar)
   const tekenaarUser = users.find(u => u.name === lead.assignedTekenaar)
   
@@ -146,7 +147,7 @@ export function LeadCard({ lead }: LeadCardProps) {
   const projectColors = getProjectTypeColor(lead.projectType)
   
   // Check if anyone is assigned
-  const hasTeam = lead.assignedRekenaar || lead.assignedTekenaar
+  const hasTeam = lead.assignedProjectleider || lead.assignedRekenaar || lead.assignedTekenaar
   
   // Use status-based styling for borders/indicators (age urgency only for Nieuw/Calculatie)
   const statusConfig = STATUS_CONFIG[lead.status] || STATUS_CONFIG["Nieuw"]
@@ -295,8 +296,47 @@ export function LeadCard({ lead }: LeadCardProps) {
                   )
                 )}
 
-                {/* Team avatars - Rekenaar and Tekenaar */}
+                {/* Team avatars - Projectleider, Rekenaar and Tekenaar */}
                 <div className="flex items-center -space-x-1.5">
+                  {/* Projectleider */}
+                  {lead.assignedProjectleider ? (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div className={cn(
+                          "relative",
+                          lead.aanZet === 'projectleider' && "ring-2 ring-amber-500 ring-offset-1 rounded-full"
+                        )}>
+                          <Avatar className="w-6 h-6 border-2 border-white dark:border-slate-800">
+                            {projectleiderUser?.avatar && (
+                              <AvatarImage src={projectleiderUser.avatar} alt={lead.assignedProjectleider} />
+                            )}
+                            <AvatarFallback className="text-[8px] font-bold bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300">
+                              {getInitials(lead.assignedProjectleider)}
+                            </AvatarFallback>
+                          </Avatar>
+                          <Briefcase className="absolute -bottom-0.5 -right-0.5 w-3 h-3 text-amber-600 bg-white dark:bg-slate-800 rounded-full p-0.5" />
+                        </div>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p className="font-medium">{lead.assignedProjectleider}</p>
+                        <p className="text-xs text-muted-foreground">Projectleider {lead.aanZet === 'projectleider' && '• Aan zet'}</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  ) : (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Avatar className="w-6 h-6 border-2 border-white dark:border-slate-800 opacity-40">
+                          <AvatarFallback className="bg-slate-100 dark:bg-slate-800">
+                            <Briefcase className="w-3 h-3 text-slate-400" />
+                          </AvatarFallback>
+                        </Avatar>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p className="text-muted-foreground">Geen projectleider toegewezen</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  )}
+
                   {/* Rekenaar */}
                   {lead.assignedRekenaar ? (
                     <Tooltip>

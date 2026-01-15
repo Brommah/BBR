@@ -758,6 +758,7 @@ export async function updateLeadAssignee(id: string, assignee: string, triggered
 export async function updateLeadTeamAssignments(
   id: string,
   data: {
+    assignedProjectleider?: string | null
     assignedRekenaar?: string | null
     assignedTekenaar?: string | null
   },
@@ -770,6 +771,7 @@ export async function updateLeadTeamAssignments(
     const currentLead = await prisma.lead.findUnique({
       where: { id: validId },
       select: { 
+        assignedProjectleider: true,
         assignedRekenaar: true,
         assignedTekenaar: true,
         clientName: true
@@ -782,6 +784,15 @@ export async function updateLeadTeamAssignments(
 
     const updateData: Record<string, unknown> = {}
     const changes: string[] = []
+    
+    if (data.assignedProjectleider !== undefined) {
+      updateData.assignedProjectleider = data.assignedProjectleider?.trim() || null
+      if (currentLead.assignedProjectleider !== data.assignedProjectleider) {
+        changes.push(data.assignedProjectleider 
+          ? `Projectleider toegewezen: ${data.assignedProjectleider}`
+          : 'Projectleider verwijderd')
+      }
+    }
     
     if (data.assignedRekenaar !== undefined) {
       updateData.assignedRekenaar = data.assignedRekenaar?.trim() || null

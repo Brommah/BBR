@@ -60,10 +60,11 @@ model Lead {
   priority            Priority            @default(normal) // Admin-set urgency level
   deadline            DateTime?           // Optional deadline for the project
   
-  // Team assignments (Projectleider assigns Rekenaar and/or Tekenaar)
-  assignedRekenaar    String?             // Name of assigned Rekenaar
-  assignedTekenaar    String?             // Name of assigned Tekenaar
-  aanZet              AanZet?             // Who is currently working on this project
+  // Team assignments
+  assignedProjectleider String?           // Name of assigned Projectleider (Femke/Rohina)
+  assignedRekenaar      String?           // Name of assigned Rekenaar
+  assignedTekenaar      String?           // Name of assigned Tekenaar
+  aanZet                AanZet?           // Who is currently working on this project
   
   // Quote data
   quoteApproval       QuoteApprovalStatus @default(none)
@@ -103,12 +104,14 @@ model Lead {
   @@index([assignee, status])        // "My leads" filtered by status
   @@index([quoteApproval, status])   // Approval queue queries
   @@index([status, createdAt])       // Pipeline sorting by date
-  // New indexes for team assignments
+  // Team assignment indexes
+  @@index([assignedProjectleider])
   @@index([assignedRekenaar])
   @@index([assignedTekenaar])
   @@index([aanZet])
   @@index([assignedRekenaar, aanZet]) // Rekenaar's active work
   @@index([assignedTekenaar, aanZet]) // Tekenaar's active work
+  @@index([assignedProjectleider, aanZet]) // Projectleider's active work
 }
 
 model ProjectSpec {
@@ -153,7 +156,7 @@ model User {
   id           String        @id @default(cuid())
   name         String
   email        String        @unique
-  role         String        @default("engineer") // 'admin' (Projectleider), 'engineer' (Rekenaar/Tekenaar), 'viewer'
+  role         String        @default("engineer") // 'admin' (Fred/Pim - can approve), 'projectleider' (Femke/Rohina - responsible for delivery), 'engineer' (Rekenaar/Tekenaar), 'viewer'
   engineerType EngineerType? // Only for engineers: 'rekenaar' or 'tekenaar'
   avatar       String?
   createdAt    DateTime      @default(now())

@@ -421,7 +421,7 @@ export function PipelineView() {
                 </div>
                 
                 <div 
-                    className="flex gap-4 flex-1 min-w-max overflow-x-auto overflow-y-hidden"
+                    className="flex gap-4 flex-1 overflow-x-auto overflow-y-hidden pb-4"
                     role="region"
                     aria-label={`Pipeline met ${filteredLeads.length} leads in ${visibleColumns.length} kolommen`}
                 >

@@ -99,7 +99,9 @@ export interface Lead {
   /** Admin feedback on quotes */
   quoteFeedback?: QuoteFeedbackItem[]
   
-  // Team assignments (new fields)
+  // Team assignments
+  /** Name of assigned Projectleider (responsible for delivery) */
+  assignedProjectleider?: string | null
   /** Name of assigned Rekenaar (calculator) */
   assignedRekenaar?: string | null
   /** Name of assigned Tekenaar (draftsman) */
@@ -141,9 +143,9 @@ interface LeadState {
   /** Update lead details (clientName, email, phone, address, etc.) */
   updateLead: (id: string, data: Partial<Pick<Lead, 'clientName' | 'clientEmail' | 'clientPhone' | 'address' | 'city' | 'projectType' | 'value'>>) => Promise<boolean>
   
-  // Team management (new)
-  /** Update team assignments (Rekenaar and/or Tekenaar) */
-  updateTeamAssignments: (id: string, data: { assignedRekenaar?: string | null; assignedTekenaar?: string | null }) => Promise<boolean>
+  // Team management
+  /** Update team assignments (Projectleider, Rekenaar and/or Tekenaar) */
+  updateTeamAssignments: (id: string, data: { assignedProjectleider?: string | null; assignedRekenaar?: string | null; assignedTekenaar?: string | null }) => Promise<boolean>
   /** Update "aan zet" status (who is currently working) */
   updateAanZet: (id: string, aanZet: AanZet) => Promise<boolean>
 }

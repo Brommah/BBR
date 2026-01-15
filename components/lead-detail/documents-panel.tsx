@@ -534,9 +534,31 @@ export function DocumentsPanel({ leadId, lead }: DocumentsPanelProps = {}) {
                                             size="icon" 
                                             className="h-8 w-8"
                                             onClick={() => {
-                                                // Navigate to quote tab
-                                                toast.info("Bekijk de offerte in het Offerte paneel rechts")
+                                                // Find the latest quote PDF document
+                                                const quoteDocs = documents.filter(d => 
+                                                    d.category === 'offerte' && 
+                                                    d.name.toLowerCase().includes('offerte') &&
+                                                    d.type === 'pdf'
+                                                ).sort((a, b) => 
+                                                    new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+                                                )
+                                                
+                                                if (quoteDocs.length > 0) {
+                                                    const latestQuote = quoteDocs[0]
+                                                    if (isPlaceholderUrl(latestQuote.url)) {
+                                                        toast.error("Offerte PDF niet beschikbaar", {
+                                                            description: "Het bestand moet opnieuw worden gegenereerd."
+                                                        })
+                                                    } else {
+                                                        window.open(latestQuote.url, '_blank')
+                                                    }
+                                                } else {
+                                                    toast.info("Geen offerte PDF gevonden", {
+                                                        description: "Genereer eerst een offerte via de Offerte tab."
+                                                    })
+                                                }
                                             }}
+                                            title="Offerte PDF openen"
                                         >
                                             <Eye className="w-4 h-4" />
                                         </Button>

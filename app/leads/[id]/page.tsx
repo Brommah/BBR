@@ -286,6 +286,7 @@ export default function LeadDetailPage() {
                             <div className="p-3 rounded-xl bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-800/50 dark:to-slate-800 border border-slate-200/50 dark:border-slate-700/50">
                                 <TeamAssignmentPanel 
                                     leadId={lead.id}
+                                    assignedProjectleider={lead.assignedProjectleider}
                                     assignedRekenaar={lead.assignedRekenaar}
                                     assignedTekenaar={lead.assignedTekenaar}
                                     aanZet={lead.aanZet}

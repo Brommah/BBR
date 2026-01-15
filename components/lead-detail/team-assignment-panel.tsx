@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useTransition } from "react"
-import { Check, ChevronsUpDown, Loader2, User, Calculator, Pencil, ArrowRight } from "lucide-react"
+import { Check, ChevronsUpDown, Loader2, User, Calculator, Pencil, ArrowRight, Briefcase } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar"
@@ -31,7 +31,7 @@ import { getUsers } from "@/lib/db-actions"
 import { useAuthStore, ENGINEER_TYPE_DISPLAY_NAMES } from "@/lib/auth"
 import { toast } from "sonner"
 
-interface Engineer {
+interface TeamMember {
   id: string
   name: string
   email: string
@@ -42,57 +42,81 @@ interface Engineer {
 
 interface TeamAssignmentPanelProps {
   leadId: string
+  assignedProjectleider?: string | null
   assignedRekenaar?: string | null
   assignedTekenaar?: string | null
   aanZet?: AanZet
 }
 
 /**
- * Panel for Projectleider to assign Rekenaar and Tekenaar to a project
+ * Panel for Admin to assign Projectleider, Rekenaar and Tekenaar to a project
  * and to set who is "aan zet" (currently working)
  */
 export function TeamAssignmentPanel({ 
   leadId, 
+  assignedProjectleider,
   assignedRekenaar, 
   assignedTekenaar,
   aanZet 
 }: TeamAssignmentPanelProps) {
-  const [engineers, setEngineers] = useState<Engineer[]>([])
+  const [projectleiders, setProjectleiders] = useState<TeamMember[]>([])
+  const [engineers, setEngineers] = useState<TeamMember[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [isPending, startTransition] = useTransition()
+  const [projectleiderOpen, setProjectleiderOpen] = useState(false)
   const [rekenaarOpen, setRekenaarOpen] = useState(false)
   const [tekenaarOpen, setTekenaarOpen] = useState(false)
   
   const { updateTeamAssignments, updateAanZet } = useLeadStore()
   const { isAdmin } = useAuthStore()
   
-  // Only Projectleider can assign
+  // Only Admin can assign
   const canAssign = isAdmin()
 
-  // Fetch all engineers from database
+  // Fetch all team members from database
   useEffect(() => {
-    async function loadEngineers() {
+    async function loadTeamMembers() {
       setIsLoading(true)
       try {
+        // Get projectleiders (role='projectleider')
+        const plResult = await getUsers('projectleider')
+        if (plResult.success && plResult.data) {
+          setProjectleiders(plResult.data as TeamMember[])
+        }
+        
         // Get all engineers (role='engineer')
-        const result = await getUsers('engineer')
-        if (result.success && result.data) {
-          const users = result.data as Engineer[]
-          setEngineers(users)
-        } else {
-          console.error('[TeamAssignment] Failed to load engineers:', result.error)
+        const engResult = await getUsers('engineer')
+        if (engResult.success && engResult.data) {
+          setEngineers(engResult.data as TeamMember[])
+        }
+        
+        if (!plResult.success && !engResult.success) {
+          console.error('[TeamAssignment] Failed to load team members')
           toast.error("Kon teamleden niet laden")
         }
       } catch (error) {
-        console.error('[TeamAssignment] Error loading engineers:', error)
+        console.error('[TeamAssignment] Error loading team members:', error)
         toast.error("Netwerkfout bij laden teamleden")
       } finally {
         setIsLoading(false)
       }
     }
     
-    loadEngineers()
+    loadTeamMembers()
   }, [])
+
+  const handleProjectleiderSelect = async (selectedName: string) => {
+    const newProjectleider = selectedName === assignedProjectleider ? null : selectedName
+    
+    startTransition(async () => {
+      const success = await updateTeamAssignments(leadId, { assignedProjectleider: newProjectleider })
+      if (success) {
+        toast.success(newProjectleider ? `Projectleider toegewezen: ${newProjectleider}` : "Projectleider verwijderd")
+      }
+    })
+    
+    setProjectleiderOpen(false)
+  }
 
   const handleRekenaarSelect = async (selectedName: string) => {
     const newRekenaar = selectedName === assignedRekenaar ? null : selectedName
@@ -134,6 +158,7 @@ export function TeamAssignmentPanel({
     })
   }
 
+  const currentProjectleider = projectleiders.find(p => p.name === assignedProjectleider)
   const currentRekenaar = engineers.find(e => e.name === assignedRekenaar)
   const currentTekenaar = engineers.find(e => e.name === assignedTekenaar)
 
@@ -145,6 +170,13 @@ export function TeamAssignmentPanel({
           Projectteam
         </h4>
         <div className="space-y-2">
+          <div className="flex items-center gap-2 p-2 rounded-lg bg-slate-50 dark:bg-slate-800/50">
+            <Briefcase className="w-4 h-4 text-amber-500" />
+            <span className="text-sm font-medium">Projectleider:</span>
+            <span className="text-sm text-muted-foreground">
+              {assignedProjectleider || 'Niet toegewezen'}
+            </span>
+          </div>
           <div className="flex items-center gap-2 p-2 rounded-lg bg-slate-50 dark:bg-slate-800/50">
             <Calculator className="w-4 h-4 text-blue-500" />
             <span className="text-sm font-medium">Rekenaar:</span>
@@ -177,6 +209,93 @@ export function TeamAssignmentPanel({
       <h4 className="text-[11px] uppercase tracking-wider text-muted-foreground font-semibold">
         Projectteam Toewijzen
       </h4>
+      
+      {/* Projectleider Selector */}
+      <div className="space-y-1.5">
+        <label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+          <Briefcase className="w-3.5 h-3.5 text-amber-500" />
+          Projectleider
+        </label>
+        <Popover open={projectleiderOpen} onOpenChange={setProjectleiderOpen}>
+          <PopoverTrigger asChild>
+            <Button
+              variant="outline"
+              role="combobox"
+              aria-expanded={projectleiderOpen}
+              className="w-full justify-between text-sm h-9"
+              disabled={isLoading || isPending}
+            >
+              {isLoading ? (
+                <span className="flex items-center gap-2 text-muted-foreground">
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                  Laden...
+                </span>
+              ) : isPending ? (
+                <span className="flex items-center gap-2 text-muted-foreground">
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                  Toewijzen...
+                </span>
+              ) : currentProjectleider ? (
+                <span className="flex items-center gap-2 truncate">
+                  <Avatar className="h-5 w-5">
+                    {currentProjectleider.avatar && (
+                      <AvatarImage src={currentProjectleider.avatar} alt={currentProjectleider.name} />
+                    )}
+                    <AvatarFallback className="text-[8px] bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300">
+                      {currentProjectleider.name[0]}
+                    </AvatarFallback>
+                  </Avatar>
+                  {currentProjectleider.name}
+                </span>
+              ) : assignedProjectleider ? (
+                <span className="truncate">{assignedProjectleider}</span>
+              ) : (
+                <span className="text-muted-foreground">Selecteer Projectleider...</span>
+              )}
+              <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-[250px] p-0">
+            <Command>
+              <CommandInput placeholder="Zoek projectleider..." />
+              <CommandList>
+                <CommandEmpty>
+                  {isLoading ? "Laden..." : "Geen projectleiders gevonden."}
+                </CommandEmpty>
+                <CommandGroup>
+                  {projectleiders.map((pl) => (
+                    <CommandItem
+                      key={pl.id}
+                      value={pl.name}
+                      onSelect={() => handleProjectleiderSelect(pl.name)}
+                      disabled={isPending}
+                    >
+                      <Check
+                        className={cn(
+                          "mr-2 h-4 w-4",
+                          assignedProjectleider === pl.name ? "opacity-100" : "opacity-0"
+                        )}
+                      />
+                      <Avatar className="h-6 w-6 mr-2">
+                        {pl.avatar && (
+                          <AvatarImage src={pl.avatar} alt={pl.name} />
+                        )}
+                        <AvatarFallback className="text-[10px] bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300">
+                          {pl.name[0]}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="flex flex-col">
+                        <span className="font-medium">{pl.name}</span>
+                        <span className="text-xs text-muted-foreground">{pl.email}</span>
+                      </div>
+                    </CommandItem>
+                  ))}
+                </CommandGroup>
+              </CommandList>
+            </Command>
+          </PopoverContent>
+        </Popover>
+      </div>
       
       {/* Rekenaar Selector */}
       <div className="space-y-1.5">
@@ -355,7 +474,7 @@ export function TeamAssignmentPanel({
       {/* Aan Zet Selector */}
       <div className="space-y-1.5">
         <label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
-          <ArrowRight className="w-3.5 h-3.5 text-amber-500" />
+          <ArrowRight className="w-3.5 h-3.5 text-green-500" />
           Aan Zet
         </label>
         <Select
@@ -370,6 +489,14 @@ export function TeamAssignmentPanel({
             <SelectItem value="none">
               <span className="text-muted-foreground">Niemand aan zet</span>
             </SelectItem>
+            {assignedProjectleider && (
+              <SelectItem value="projectleider">
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-amber-500" />
+                  Projectleider ({assignedProjectleider})
+                </div>
+              </SelectItem>
+            )}
             {assignedRekenaar && (
               <SelectItem value="rekenaar">
                 <div className="flex items-center gap-2">
@@ -386,12 +513,6 @@ export function TeamAssignmentPanel({
                 </div>
               </SelectItem>
             )}
-            <SelectItem value="projectleider">
-              <div className="flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full bg-amber-500" />
-                Projectleider
-              </div>
-            </SelectItem>
           </SelectContent>
         </Select>
         <p className="text-[10px] text-muted-foreground">
