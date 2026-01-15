@@ -812,10 +812,14 @@ export async function updateLeadTeamAssignments(
       }
     }
 
+    console.log('[DB] Updating team assignments with data:', updateData)
+    
     const lead = await prisma.lead.update({
       where: { id: validId },
       data: updateData
     })
+    
+    console.log('[DB] Team assignments updated successfully')
     
     // Log activity for each change
     for (const change of changes) {
@@ -832,7 +836,8 @@ export async function updateLeadTeamAssignments(
     return { success: true, data: lead }
   } catch (error) {
     console.error('[DB] Error updating team assignments:', error)
-    return { success: false, error: 'Failed to update team assignments' }
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+    return { success: false, error: `Failed to update team assignments: ${errorMessage}` }
   }
 }
 

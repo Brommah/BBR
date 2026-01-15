@@ -252,7 +252,7 @@ export default function LeadDetailPage() {
             {/* Main Content */}
             <div className="flex-1 flex overflow-hidden">
                 {/* Left Sidebar - Streamlined Project Info */}
-                <aside className="w-72 border-r border-border/50 bg-white dark:bg-slate-900 flex flex-col overflow-hidden shrink-0">
+                <aside className="w-80 border-r border-border/50 bg-white dark:bg-slate-900 flex flex-col overflow-hidden shrink-0">
                     <div className="flex-1 overflow-y-auto">
                         {/* Compact Location Card */}
                         <div className="p-3">

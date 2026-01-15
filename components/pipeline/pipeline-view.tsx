@@ -58,7 +58,8 @@ interface Filters {
 
 /**
  * Filter leads based on user role and engineer type
- * - Projectleider (admin): sees all leads in all statuses
+ * - Admin (Fred/Pim): sees all leads in all statuses
+ * - Projectleider (Femke/Rohina): sees leads assigned to them
  * - Rekenaar/Tekenaar: only sees leads where:
  *   1. Status is "Opdracht" (quote accepted)
  *   2. Assigned to them
@@ -67,9 +68,14 @@ interface Filters {
 function filterLeadsByRole(leads: Lead[], user: { role: string; name: string; engineerType?: string } | null): Lead[] {
     if (!user) return []
     
-    // Projectleider (admin) sees everything
+    // Admin sees everything
     if (user.role === 'admin') {
         return leads
+    }
+    
+    // Projectleider sees leads assigned to them (all statuses)
+    if (user.role === 'projectleider') {
+        return leads.filter(lead => lead.assignedProjectleider === user.name)
     }
     
     // Engineers only see specific leads
@@ -229,7 +235,7 @@ export function PipelineView() {
     // Loading state with skeleton
     if (isLoading) {
         return (
-            <div className="h-[calc(100vh-4rem)] p-6">
+            <div className="h-full p-6">
                 <PipelineSkeleton />
             </div>
         )
@@ -250,7 +256,7 @@ export function PipelineView() {
     // Show message when engineer has no leads "aan zet"
     if (isEngineer && filteredLeads.length === 0) {
         return (
-            <div className="h-[calc(100vh-4rem)] p-6 flex items-center justify-center">
+            <div className="h-full p-6 flex items-center justify-center">
                 <div className="text-center max-w-md">
                     <div className="w-16 h-16 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center mx-auto mb-4">
                         <AlertCircle className="w-8 h-8 text-amber-600 dark:text-amber-400" />
@@ -272,7 +278,7 @@ export function PipelineView() {
             onDragEnd={handleDragEnd}
         >
             <div 
-                className="h-[calc(100vh-4rem)] p-6 flex flex-col"
+                className="h-full p-6 flex flex-col overflow-hidden"
                 role="application"
                 aria-label="Lead pipeline - Sleep kaarten om status te wijzigen"
             >
