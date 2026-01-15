@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { motion } from "framer-motion"
+import { motion, type Variants } from "framer-motion"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Badge } from "@/components/ui/badge"
@@ -53,7 +53,7 @@ const formatCurrencyFull = (value: number) => {
 }
 
 // Animation variants
-const cardVariants = {
+const cardVariants: Variants = {
   hidden: { opacity: 0, y: 20 },
   visible: (i: number) => ({
     opacity: 1,
@@ -61,7 +61,7 @@ const cardVariants = {
     transition: {
       delay: i * 0.1,
       duration: 0.4,
-      ease: "easeOut" as const,
+      ease: [0.25, 0.1, 0.25, 1],
     },
   }),
 }

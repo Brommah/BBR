@@ -1,6 +1,7 @@
 "use client"
 
 import { useAuthStore } from "@/lib/auth"
+import { Suspense } from "react"
 import { AdminDashboard } from "@/components/dashboard/admin-dashboard"
 import { EngineerDashboard } from "@/components/dashboard/engineer-dashboard"
 import { DashboardSkeleton } from "@/components/ui/skeleton-loaders"
@@ -68,7 +69,11 @@ export default function HomePage() {
 
   // Admin users see the admin console as their home
   if (currentUser.role === 'admin') {
-    return <AdminDashboard />
+    return (
+      <Suspense fallback={<DashboardSkeleton />}>
+        <AdminDashboard />
+      </Suspense>
+    )
   }
 
   // Engineers and other roles see the engineer dashboard

@@ -1,6 +1,7 @@
 "use client"
 
 import { usePathname } from "next/navigation"
+import { Suspense } from "react"
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar"
 import { AppSidebar } from "@/components/app-sidebar"
 
@@ -30,7 +31,9 @@ export function AppLayoutWrapper({ children }: AppLayoutWrapperProps) {
   // Standard layout with sidebar - starts collapsed, expands on hover
   return (
     <SidebarProvider defaultOpen={false}>
-      <AppSidebar />
+      <Suspense fallback={<div className="w-16 h-screen bg-sidebar" />}>
+        <AppSidebar />
+      </Suspense>
       <main className="flex-1 min-h-screen relative flex flex-col overflow-hidden">
         <div className="absolute top-4 left-4 z-50 md:hidden">
           <SidebarTrigger />
