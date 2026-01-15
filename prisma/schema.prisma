@@ -30,6 +30,17 @@ enum Priority {
   urgent
 }
 
+enum EngineerType {
+  rekenaar
+  tekenaar
+}
+
+enum AanZet {
+  rekenaar
+  tekenaar
+  projectleider
+}
+
 model Lead {
   id                  String              @id @default(cuid())
   clientName          String
@@ -43,11 +54,16 @@ model Lead {
   createdAt           DateTime            @default(now())
   updatedAt           DateTime            @updatedAt
   deletedAt           DateTime?           // Soft delete
-  assignee            String?
+  assignee            String?             // DEPRECATED - use assignedRekenaar/Tekenaar instead
   addressValid        Boolean             @default(false)
   werknummer          String?             // Work number for the project
   priority            Priority            @default(normal) // Admin-set urgency level
   deadline            DateTime?           // Optional deadline for the project
+  
+  // Team assignments (Projectleider assigns Rekenaar and/or Tekenaar)
+  assignedRekenaar    String?             // Name of assigned Rekenaar
+  assignedTekenaar    String?             // Name of assigned Tekenaar
+  aanZet              AanZet?             // Who is currently working on this project
   
   // Quote data
   quoteApproval       QuoteApprovalStatus @default(none)
@@ -87,6 +103,12 @@ model Lead {
   @@index([assignee, status])        // "My leads" filtered by status
   @@index([quoteApproval, status])   // Approval queue queries
   @@index([status, createdAt])       // Pipeline sorting by date
+  // New indexes for team assignments
+  @@index([assignedRekenaar])
+  @@index([assignedTekenaar])
+  @@index([aanZet])
+  @@index([assignedRekenaar, aanZet]) // Rekenaar's active work
+  @@index([assignedTekenaar, aanZet]) // Tekenaar's active work
 }
 
 model ProjectSpec {
@@ -127,13 +149,14 @@ model Activity {
 }
 
 model User {
-  id        String    @id @default(cuid())
-  name      String
-  email     String    @unique
-  role      String    @default("engineer") // 'admin', 'engineer', 'viewer'
-  avatar    String?
-  createdAt DateTime  @default(now())
-  deletedAt DateTime? // Soft delete
+  id           String        @id @default(cuid())
+  name         String
+  email        String        @unique
+  role         String        @default("engineer") // 'admin' (Projectleider), 'engineer' (Rekenaar/Tekenaar), 'viewer'
+  engineerType EngineerType? // Only for engineers: 'rekenaar' or 'tekenaar'
+  avatar       String?
+  createdAt    DateTime      @default(now())
+  deletedAt    DateTime?     // Soft delete
 }
 
 model CostRate {
@@ -191,11 +214,24 @@ model QuoteVersion {
   value       Float
   lineItems   Json     // Array of {description: string, amount: number}
   description String?
-  status      String   // 'draft', 'submitted', 'approved', 'rejected', 'sent'
+  status      String   // 'draft', 'submitted', 'approved', 'rejected', 'sent', 'accepted'
   createdBy   String
   createdAt   DateTime @default(now())
+  
+  // Secure link for client acceptance
+  acceptanceHash    String?   @unique // Unique hash for secure acceptance URL
+  hashExpiresAt     DateTime? // When the acceptance link expires
+  
+  // Acceptance tracking (legally binding evidence)
+  acceptedAt        DateTime? // When client clicked "Accept"
+  acceptedByEmail   String?   // Email address of acceptor
+  acceptedFromIp    String?   // IP address for legal evidence
+  acceptedUserAgent String?   // Browser/device info
+  acceptanceNote    String?   // Any note client added during acceptance
+  termsAccepted     Boolean   @default(false) // Explicit terms acceptance checkbox
 
   @@index([leadId])
+  @@index([acceptanceHash])
   @@unique([leadId, version])
 }
 

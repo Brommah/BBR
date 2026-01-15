@@ -53,7 +53,8 @@ import Link from "next/link"
 import { useState, useEffect, useTransition, useRef } from "react"
 import { getLead } from "@/lib/db-actions"
 import { requiresGroundInvestigation } from "@/lib/project-utils"
-import { AssigneeSelector } from "@/components/lead-detail/assignee-selector"
+import { TeamAssignmentPanel } from "@/components/lead-detail/team-assignment-panel"
+import { useAuthStore } from "@/lib/auth"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 
@@ -69,11 +70,15 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }
 export default function LeadDetailPage() {
     const params = useParams()
     const { leads, isLoading: storeLoading, updateLeadStatus, loadLeads } = useLeadStore()
+    const { isAdmin } = useAuthStore()
     const [directLead, setDirectLead] = useState<Lead | null>(null)
     const [isPending, startTransition] = useTransition()
     const [hasAttemptedFetch, setHasAttemptedFetch] = useState(false)
     const [quotePanelOpen, setQuotePanelOpen] = useState(true)
     const [specsExpanded, setSpecsExpanded] = useState(false)
+    
+    // Only Projectleider (admin) can change status
+    const canChangeStatus = isAdmin()
     
     const storeLead = leads.find(l => l.id === params.id)
     
@@ -280,21 +285,14 @@ export default function LeadDetailPage() {
                                 </div>
                             </div>
 
-                            {/* Assigned Engineer */}
+                            {/* Team Assignment Panel */}
                             <div className="p-3 rounded-xl bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-800/50 dark:to-slate-800 border border-slate-200/50 dark:border-slate-700/50">
-                                <div className="flex items-start gap-3">
-                                    <div className="w-9 h-9 rounded-lg bg-blue-100 dark:bg-blue-900/50 flex items-center justify-center shrink-0">
-                                        <User className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-                                    </div>
-                                    <div className="min-w-0 flex-1">
-                                        <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">
-                                            Toegewezen
-                                        </span>
-                                        <div className="mt-1">
-                                            <AssigneeSelector leadId={lead.id} currentAssignee={lead.assignee} />
-                                        </div>
-                                    </div>
-                                </div>
+                                <TeamAssignmentPanel 
+                                    leadId={lead.id}
+                                    assignedRekenaar={lead.assignedRekenaar}
+                                    assignedTekenaar={lead.assignedTekenaar}
+                                    aanZet={lead.aanZet}
+                                />
                             </div>
 
                             {/* Pipeline Status */}
@@ -332,11 +330,18 @@ export default function LeadDetailPage() {
                                             <Select
                                                 value={lead.status}
                                                 onValueChange={async (value) => {
+                                                    if (!canChangeStatus) {
+                                                        toast.error("Geen toegang", {
+                                                            description: "Alleen de Projectleider kan de status wijzigen"
+                                                        })
+                                                        return
+                                                    }
                                                     const success = await updateLeadStatus(lead.id, value as typeof lead.status)
                                                     if (success) {
                                                         toast.success(`Status gewijzigd naar ${value}`)
                                                     }
                                                 }}
+                                                disabled={!canChangeStatus}
                                             >
                                                 <SelectTrigger className="h-8 text-sm border-0 bg-white/50 dark:bg-slate-800/50 shadow-sm">
                                                     <SelectValue />

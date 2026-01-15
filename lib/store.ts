@@ -21,6 +21,8 @@ import {
   submitQuoteForApproval as submitQuoteForApprovalAction,
   approveQuote as approveQuoteAction,
   rejectQuote as rejectQuoteAction,
+  updateLeadTeamAssignments as updateLeadTeamAssignmentsAction,
+  updateLeadAanZet as updateLeadAanZetAction,
   type QuoteLineItem,
   type QuoteFeedbackItem,
   type QuoteSubmission
@@ -46,6 +48,9 @@ export interface ProjectSpec {
   /** Optional unit (e.g., "m²", "stuks") */
   unit?: string
 }
+
+/** Who is currently "aan zet" (working on the project) */
+export type AanZet = 'rekenaar' | 'tekenaar' | 'projectleider' | null
 
 /**
  * Lead entity representing a potential project
@@ -73,7 +78,7 @@ export interface Lead {
   createdAt: string
   /** ISO timestamp of last update */
   updatedAt?: string
-  /** Name of assigned engineer */
+  /** Name of assigned engineer (DEPRECATED - use assignedRekenaar/Tekenaar) */
   assignee?: string
   /** Whether address has been validated */
   addressValid?: boolean
@@ -93,6 +98,14 @@ export interface Lead {
   specifications?: ProjectSpec[]
   /** Admin feedback on quotes */
   quoteFeedback?: QuoteFeedbackItem[]
+  
+  // Team assignments (new fields)
+  /** Name of assigned Rekenaar (calculator) */
+  assignedRekenaar?: string
+  /** Name of assigned Tekenaar (draftsman) */
+  assignedTekenaar?: string
+  /** Who is currently "aan zet" (working on the project) */
+  aanZet?: AanZet
 }
 
 /**
@@ -113,7 +126,7 @@ interface LeadState {
   // Mutations (all async with optimistic updates)
   /** Update a lead's pipeline status */
   updateLeadStatus: (id: string, status: LeadStatus) => Promise<boolean>
-  /** Assign a lead to an engineer */
+  /** Assign a lead to an engineer (DEPRECATED - use updateTeamAssignments) */
   assignLead: (id: string, assignee: string) => Promise<boolean>
   /** Create a new lead */
   addLead: (lead: Omit<Lead, 'id' | 'createdAt'>) => Promise<boolean>
@@ -127,6 +140,12 @@ interface LeadState {
   updateProjectSpecs: (id: string, specs: ProjectSpec[]) => Promise<boolean>
   /** Update lead details (clientName, email, phone, address, etc.) */
   updateLead: (id: string, data: Partial<Pick<Lead, 'clientName' | 'clientEmail' | 'clientPhone' | 'address' | 'city' | 'projectType' | 'value'>>) => Promise<boolean>
+  
+  // Team management (new)
+  /** Update team assignments (Rekenaar and/or Tekenaar) */
+  updateTeamAssignments: (id: string, data: { assignedRekenaar?: string | null; assignedTekenaar?: string | null }) => Promise<boolean>
+  /** Update "aan zet" status (who is currently working) */
+  updateAanZet: (id: string, aanZet: AanZet) => Promise<boolean>
 }
 
 export const useLeadStore = create<LeadState>((set, get) => ({
@@ -479,6 +498,74 @@ export const useLeadStore = create<LeadState>((set, get) => ({
         set({ leads: previousLeads })
         toast.error('Opslaan mislukt', {
           description: result.error || 'Kon gegevens niet opslaan'
+        })
+        return false
+      }
+      
+      return true
+    } catch (error) {
+      set({ leads: previousLeads })
+      toast.error('Netwerkfout', {
+        description: error instanceof Error ? error.message : 'Probeer opnieuw'
+      })
+      return false
+    }
+  },
+
+  /**
+   * Update team assignments (Rekenaar and/or Tekenaar)
+   */
+  updateTeamAssignments: async (id, data) => {
+    const previousLeads = get().leads
+    
+    // Optimistic update
+    set((state) => ({
+      leads: state.leads.map((lead) =>
+        lead.id === id ? { ...lead, ...data } : lead
+      )
+    }))
+
+    try {
+      const result = await updateLeadTeamAssignmentsAction(id, data)
+      
+      if (!result.success) {
+        set({ leads: previousLeads })
+        toast.error('Toewijzing mislukt', {
+          description: result.error || 'Kon teamleden niet toewijzen'
+        })
+        return false
+      }
+      
+      return true
+    } catch (error) {
+      set({ leads: previousLeads })
+      toast.error('Netwerkfout', {
+        description: error instanceof Error ? error.message : 'Probeer opnieuw'
+      })
+      return false
+    }
+  },
+
+  /**
+   * Update "aan zet" status (who is currently working)
+   */
+  updateAanZet: async (id, aanZet) => {
+    const previousLeads = get().leads
+    
+    // Optimistic update
+    set((state) => ({
+      leads: state.leads.map((lead) =>
+        lead.id === id ? { ...lead, aanZet } : lead
+      )
+    }))
+
+    try {
+      const result = await updateLeadAanZetAction(id, aanZet)
+      
+      if (!result.success) {
+        set({ leads: previousLeads })
+        toast.error('Update mislukt', {
+          description: result.error || 'Kon "aan zet" status niet wijzigen'
         })
         return false
       }

@@ -230,6 +230,7 @@ export async function sendQuoteEmail(data: {
   quoteDescription?: string
   leadId: string
   sentBy: string
+  acceptanceUrl?: string // Secure link for digital acceptance
 }): Promise<EmailResult> {
   const formattedValue = new Intl.NumberFormat('nl-NL', { 
     style: 'currency', 
@@ -237,6 +238,28 @@ export async function sendQuoteEmail(data: {
   }).format(data.quoteValue)
   
   const subject = `Offerte constructieve berekening - ${data.projectType}`
+  
+  // Use secure acceptance link if provided, otherwise fallback to mailto
+  const acceptanceSection = data.acceptanceUrl 
+    ? `
+      <p>U kunt deze offerte direct online accepteren via onderstaande beveiligde link:</p>
+      
+      <a href="${data.acceptanceUrl}" class="button" style="background-color: #10b981;">
+        ✓ Offerte bekijken & accepteren
+      </a>
+      
+      <p style="font-size: 12px; color: #6b7280;">
+        Deze link is 30 dagen geldig en uniek voor u. Door te accepteren gaat u akkoord met onze algemene voorwaarden.
+      </p>
+    `
+    : `
+      <p>U kunt akkoord geven door te antwoorden op deze e-mail of te bellen.</p>
+      
+      <a href="mailto:info@broersma-bouwadvies.nl?subject=Akkoord%20offerte%20${encodeURIComponent(data.projectType)}" class="button">
+        ✓ Akkoord geven
+      </a>
+    `
+  
   const body = `
     <p>Beste ${data.clientName},</p>
     
@@ -255,11 +278,7 @@ export async function sendQuoteEmail(data: {
       <li>Ondersteuning gedurende het gehele proces</li>
     </ul>
     
-    <p>U kunt akkoord geven door te antwoorden op deze e-mail of te bellen.</p>
-    
-    <a href="mailto:info@broersma-bouwadvies.nl?subject=Akkoord%20offerte%20${encodeURIComponent(data.projectType)}" class="button">
-      ✓ Akkoord geven
-    </a>
+    ${acceptanceSection}
     
     <p>De offerte is 30 dagen geldig. Heeft u vragen? Neem gerust contact op.</p>
     

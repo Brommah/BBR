@@ -9,11 +9,14 @@ interface AppLayoutWrapperProps {
 }
 
 // Routes that don't show the sidebar (public pages)
-const NO_SIDEBAR_ROUTES = ["/login", "/intake"]
+const NO_SIDEBAR_ROUTES = ["/login", "/intake", "/offerte", "/algemene-voorwaarden"]
 
 export function AppLayoutWrapper({ children }: AppLayoutWrapperProps) {
   const pathname = usePathname()
-  const showSidebar = !NO_SIDEBAR_ROUTES.includes(pathname)
+  // Check if pathname matches or starts with any no-sidebar route
+  const showSidebar = !NO_SIDEBAR_ROUTES.some(route => 
+    pathname === route || pathname.startsWith(`${route}/`)
+  )
 
   if (!showSidebar) {
     // Full-page layout without sidebar

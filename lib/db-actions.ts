@@ -176,25 +176,148 @@ function validateString(value: unknown, maxLength = 10000): string | null {
 }
 
 // ============================================================
+// Quote Acceptance Hash Generation
+// ============================================================
+
+/**
+ * Generate a cryptographically secure hash for quote acceptance links
+ * Uses Web Crypto API for secure random generation
+ */
+function generateSecureHash(): string {
+  const array = new Uint8Array(32)
+  crypto.getRandomValues(array)
+  return Array.from(array, byte => byte.toString(16).padStart(2, '0')).join('')
+}
+
+/**
+ * Create or update a quote version with a secure acceptance link
+ * Called when admin approves a quote to generate the client-facing acceptance URL
+ */
+export async function createQuoteAcceptanceLink(
+  leadId: string,
+  options?: {
+    expiresInDays?: number // Default: 30 days
+  }
+): Promise<ActionResult<{ hash: string; expiresAt: Date; quoteVersionId: string }>> {
+  const validId = validateId(leadId)
+  if (!validId) return { success: false, error: 'Invalid lead ID' }
+  
+  try {
+    // Get the lead and its current quote data
+    const lead = await prisma.lead.findUnique({
+      where: { id: validId },
+      select: {
+        id: true,
+        quoteValue: true,
+        quoteDescription: true,
+        quoteLineItems: true,
+        quoteApproval: true,
+        clientName: true,
+        quoteVersions: {
+          orderBy: { version: 'desc' },
+          take: 1
+        }
+      }
+    })
+    
+    if (!lead) {
+      return { success: false, error: 'Lead not found' }
+    }
+    
+    if (!lead.quoteValue) {
+      return { success: false, error: 'No quote value set' }
+    }
+    
+    // Calculate expiration date
+    const expiresInDays = options?.expiresInDays ?? 30
+    const expiresAt = new Date()
+    expiresAt.setDate(expiresAt.getDate() + expiresInDays)
+    
+    // Generate secure hash
+    const hash = generateSecureHash()
+    
+    // Get next version number
+    const currentVersion = lead.quoteVersions[0]?.version ?? 0
+    const nextVersion = currentVersion + 1
+    
+    // Create new quote version with acceptance hash
+    const quoteVersion = await prisma.quoteVersion.create({
+      data: {
+        leadId: validId,
+        version: nextVersion,
+        value: lead.quoteValue,
+        lineItems: lead.quoteLineItems || [],
+        description: lead.quoteDescription,
+        status: 'sent',
+        createdBy: 'system',
+        acceptanceHash: hash,
+        hashExpiresAt: expiresAt
+      }
+    })
+    
+    return {
+      success: true,
+      data: {
+        hash,
+        expiresAt,
+        quoteVersionId: quoteVersion.id
+      }
+    }
+  } catch (error) {
+    console.error('[DB] Error creating quote acceptance link:', error)
+    return { success: false, error: 'Failed to create acceptance link' }
+  }
+}
+
+// ============================================================
 // User Operations
 // ============================================================
 
 export async function getUsers(role?: string): Promise<ActionResult> {
   try {
     const users = await prisma.user.findMany({
-      where: role ? { role } : undefined,
+      where: role ? { role, deletedAt: null } : { deletedAt: null },
       orderBy: { name: 'asc' },
       select: {
         id: true,
         name: true,
         email: true,
         role: true,
+        engineerType: true,
         avatar: true
       }
     })
     return { success: true, data: users }
   } catch (error) {
     console.error('[DB] Error fetching users:', error)
+    return { success: false, error: 'Failed to load users' }
+  }
+}
+
+/**
+ * Get users by engineer type (rekenaar or tekenaar)
+ */
+export async function getUsersByEngineerType(engineerType: 'rekenaar' | 'tekenaar'): Promise<ActionResult> {
+  try {
+    const users = await prisma.user.findMany({
+      where: {
+        role: 'engineer',
+        engineerType,
+        deletedAt: null
+      },
+      orderBy: { name: 'asc' },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        engineerType: true,
+        avatar: true
+      }
+    })
+    return { success: true, data: users }
+  } catch (error) {
+    console.error('[DB] Error fetching users by engineer type:', error)
     return { success: false, error: 'Failed to load users' }
   }
 }
@@ -217,6 +340,7 @@ export async function getUserByEmail(email: string): Promise<ActionResult> {
         name: true,
         email: true,
         role: true,
+        engineerType: true,
         avatar: true
       }
     })
@@ -622,6 +746,186 @@ export async function updateLeadAssignee(id: string, assignee: string, triggered
   }
 }
 
+/**
+ * Update team assignments for a lead (Rekenaar and/or Tekenaar)
+ * Only Projectleider (admin) can do this
+ */
+export async function updateLeadTeamAssignments(
+  id: string,
+  data: {
+    assignedRekenaar?: string | null
+    assignedTekenaar?: string | null
+  },
+  triggeredBy?: string
+): Promise<ActionResult> {
+  const validId = validateId(id)
+  if (!validId) return { success: false, error: 'Invalid lead ID' }
+
+  try {
+    const currentLead = await prisma.lead.findUnique({
+      where: { id: validId },
+      select: { 
+        assignedRekenaar: true,
+        assignedTekenaar: true,
+        clientName: true
+      }
+    })
+    
+    if (!currentLead) {
+      return { success: false, error: 'Lead not found' }
+    }
+
+    const updateData: Record<string, unknown> = {}
+    const changes: string[] = []
+    
+    if (data.assignedRekenaar !== undefined) {
+      updateData.assignedRekenaar = data.assignedRekenaar?.trim() || null
+      if (currentLead.assignedRekenaar !== data.assignedRekenaar) {
+        changes.push(data.assignedRekenaar 
+          ? `Rekenaar toegewezen: ${data.assignedRekenaar}`
+          : 'Rekenaar verwijderd')
+      }
+    }
+    
+    if (data.assignedTekenaar !== undefined) {
+      updateData.assignedTekenaar = data.assignedTekenaar?.trim() || null
+      if (currentLead.assignedTekenaar !== data.assignedTekenaar) {
+        changes.push(data.assignedTekenaar 
+          ? `Tekenaar toegewezen: ${data.assignedTekenaar}`
+          : 'Tekenaar verwijderd')
+      }
+    }
+
+    const lead = await prisma.lead.update({
+      where: { id: validId },
+      data: updateData
+    })
+    
+    // Log activity for each change
+    for (const change of changes) {
+      await prisma.activity.create({
+        data: {
+          leadId: validId,
+          type: 'assignment',
+          content: change,
+          author: triggeredBy
+        }
+      })
+    }
+    
+    return { success: true, data: lead }
+  } catch (error) {
+    console.error('[DB] Error updating team assignments:', error)
+    return { success: false, error: 'Failed to update team assignments' }
+  }
+}
+
+/**
+ * Update "aan zet" status for a lead
+ * Determines which team member is currently working on the project
+ * Only Projectleider (admin) can change this
+ */
+export async function updateLeadAanZet(
+  id: string,
+  aanZet: 'rekenaar' | 'tekenaar' | 'projectleider' | null,
+  triggeredBy?: string
+): Promise<ActionResult> {
+  const validId = validateId(id)
+  if (!validId) return { success: false, error: 'Invalid lead ID' }
+
+  const aanZetLabels: Record<string, string> = {
+    rekenaar: 'Rekenaar',
+    tekenaar: 'Tekenaar',
+    projectleider: 'Projectleider'
+  }
+
+  try {
+    const currentLead = await prisma.lead.findUnique({
+      where: { id: validId },
+      select: { aanZet: true, clientName: true }
+    })
+    
+    if (!currentLead) {
+      return { success: false, error: 'Lead not found' }
+    }
+
+    const lead = await prisma.lead.update({
+      where: { id: validId },
+      data: { aanZet }
+    })
+    
+    // Log activity
+    await prisma.activity.create({
+      data: {
+        leadId: validId,
+        type: 'aan_zet_change',
+        content: aanZet 
+          ? `Aan zet: ${aanZetLabels[aanZet]}`
+          : 'Aan zet status verwijderd',
+        author: triggeredBy
+      }
+    })
+    
+    return { success: true, data: lead }
+  } catch (error) {
+    console.error('[DB] Error updating aan zet:', error)
+    return { success: false, error: 'Failed to update aan zet status' }
+  }
+}
+
+/**
+ * Get leads visible to a specific engineer based on their type and "aan zet" status
+ * Engineers only see leads where:
+ * 1. They are assigned (as rekenaar or tekenaar)
+ * 2. Status is "Opdracht" (quote accepted)
+ * 3. They are "aan zet" (their turn to work)
+ */
+export async function getLeadsForEngineer(
+  engineerName: string,
+  engineerType: 'rekenaar' | 'tekenaar'
+): Promise<ActionResult> {
+  const name = validateString(engineerName, 100)
+  if (!name) return { success: false, error: 'Invalid engineer name' }
+
+  try {
+    const leads = await prisma.lead.findMany({
+      where: {
+        deletedAt: null,
+        status: 'Opdracht', // Only show leads where quote is accepted
+        aanZet: engineerType, // Only show when it's their turn
+        OR: [
+          { assignedRekenaar: engineerType === 'rekenaar' ? name : undefined },
+          { assignedTekenaar: engineerType === 'tekenaar' ? name : undefined }
+        ].filter(Boolean)
+      },
+      include: {
+        specifications: true
+      },
+      orderBy: { updatedAt: 'desc' }
+    })
+    
+    const formattedLeads = leads.map(lead => ({
+      ...lead,
+      status: statusDbToFrontend[lead.status] || lead.status,
+      createdAt: lead.createdAt.toISOString(),
+      updatedAt: lead.updatedAt.toISOString(),
+      deletedAt: lead.deletedAt?.toISOString() || null,
+      quoteLineItems: lead.quoteLineItems as QuoteLineItem[] | null,
+      quoteFeedback: lead.quoteFeedback as QuoteFeedbackItem[] | null,
+      specifications: lead.specifications.map(spec => ({
+        key: spec.key,
+        value: spec.value,
+        unit: spec.unit || undefined
+      }))
+    }))
+
+    return { success: true, data: formattedLeads }
+  } catch (error) {
+    console.error('[DB] Error fetching leads for engineer:', error)
+    return { success: false, error: 'Failed to load leads' }
+  }
+}
+
 export async function updateLeadSpecs(
   id: string, 
   specs: { key: string; value: string; unit?: string }[]
@@ -861,26 +1165,37 @@ export async function approveQuote(
       }
     })
     
-    // Trigger quote email to client (status change will handle this)
+    // Generate acceptance link and send quote email to client
     if (currentLead.clientEmail && finalValue) {
-      const { sendQuoteEmail } = await import('./email')
-      sendQuoteEmail({
-        to: currentLead.clientEmail,
-        clientName: currentLead.clientName,
-        projectType: currentLead.projectType,
-        quoteValue: finalValue,
-        quoteDescription: currentLead.quoteDescription || undefined,
-        leadId: validId,
-        sentBy: feedback?.authorName || 'System'
-      }).then(result => {
-        if (result.success) {
-          console.log(`[Email] Quote email sent to ${currentLead.clientEmail} for lead ${validId}`)
-        } else {
-          console.error(`[Email] Failed to send quote email: ${result.error}`)
-        }
-      }).catch(err => {
-        console.error('[Email] Quote email error:', err)
-      })
+      // Create secure acceptance link
+      const acceptanceLinkResult = await createQuoteAcceptanceLink(validId)
+      
+      if (acceptanceLinkResult.success && acceptanceLinkResult.data) {
+        const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://app.broersmabouwadvies.nl'
+        const acceptanceUrl = `${baseUrl}/offerte/${acceptanceLinkResult.data.hash}`
+        
+        const { sendQuoteEmail } = await import('./email')
+        sendQuoteEmail({
+          to: currentLead.clientEmail,
+          clientName: currentLead.clientName,
+          projectType: currentLead.projectType,
+          quoteValue: finalValue,
+          quoteDescription: currentLead.quoteDescription || undefined,
+          leadId: validId,
+          sentBy: feedback?.authorName || 'System',
+          acceptanceUrl // Include the secure acceptance link
+        }).then(result => {
+          if (result.success) {
+            console.log(`[Email] Quote email sent to ${currentLead.clientEmail} for lead ${validId} with acceptance link`)
+          } else {
+            console.error(`[Email] Failed to send quote email: ${result.error}`)
+          }
+        }).catch(err => {
+          console.error('[Email] Quote email error:', err)
+        })
+      } else {
+        console.error('[Email] Failed to create acceptance link:', acceptanceLinkResult.error)
+      }
     }
     
     return { success: true, data: lead }

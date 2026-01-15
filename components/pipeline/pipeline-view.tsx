@@ -10,7 +10,8 @@ import {
     KeyboardSensor,
     DragStartEvent
 } from "@dnd-kit/core"
-import { useLeadStore, LeadStatus } from "@/lib/store"
+import { useLeadStore, LeadStatus, Lead } from "@/lib/store"
+import { useAuthStore } from "@/lib/auth"
 import { KanbanColumn } from "./kanban-column"
 import { LeadCard } from "./lead-card"
 import { PipelineLegend, PROJECT_TYPE_COLORS, ASSIGNEE_COLORS } from "./pipeline-legend"
@@ -28,7 +29,7 @@ import {
     SelectTrigger, 
     SelectValue 
 } from "@/components/ui/select"
-import { Search, X, SlidersHorizontal } from "lucide-react"
+import { Search, X, SlidersHorizontal, AlertCircle } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 const COLUMNS: { id: LeadStatus, label: string }[] = [
@@ -55,8 +56,56 @@ interface Filters {
     hideArchived: boolean
 }
 
+/**
+ * Filter leads based on user role and engineer type
+ * - Projectleider (admin): sees all leads in all statuses
+ * - Rekenaar/Tekenaar: only sees leads where:
+ *   1. Status is "Opdracht" (quote accepted)
+ *   2. Assigned to them
+ *   3. They are "aan zet" (their turn to work)
+ */
+function filterLeadsByRole(leads: Lead[], user: { role: string; name: string; engineerType?: string } | null): Lead[] {
+    if (!user) return []
+    
+    // Projectleider (admin) sees everything
+    if (user.role === 'admin') {
+        return leads
+    }
+    
+    // Engineers only see specific leads
+    if (user.role === 'engineer') {
+        return leads.filter(lead => {
+            // Must be in "Opdracht" status (quote accepted)
+            if (lead.status !== 'Opdracht') {
+                return false
+            }
+            
+            // Must be assigned to them based on their engineer type
+            if (user.engineerType === 'rekenaar') {
+                if (lead.assignedRekenaar !== user.name) return false
+            } else if (user.engineerType === 'tekenaar') {
+                if (lead.assignedTekenaar !== user.name) return false
+            } else {
+                // Fallback to old assignee field if engineerType not set
+                if (lead.assignee !== user.name) return false
+            }
+            
+            // Must be "aan zet" for their role
+            if (lead.aanZet !== user.engineerType) {
+                return false
+            }
+            
+            return true
+        })
+    }
+    
+    // Viewers see all but read-only
+    return leads
+}
+
 export function PipelineView() {
     const { leads, updateLeadStatus, isLoading } = useLeadStore()
+    const { currentUser, isAdmin } = useAuthStore()
     const [activeId, setActiveId] = useState<string | null>(null)
     const [showFilters, setShowFilters] = useState(false)
     const [filters, setFilters] = useState<Filters>({
@@ -66,26 +115,31 @@ export function PipelineView() {
         hideArchived: false
     })
     const isMounted = useIsMounted()
+    
+    // Filter leads by role first
+    const roleFilteredLeads = useMemo(() => {
+        return filterLeadsByRole(leads, currentUser)
+    }, [leads, currentUser])
 
     const sensors = useSensors(
         useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
         useSensor(KeyboardSensor)
     )
 
-    // Get unique project types and assignees from leads
+    // Get unique project types and assignees from role-filtered leads
     const projectTypes = useMemo(() => {
-        const types = new Set(leads.map(l => l.projectType))
+        const types = new Set(roleFilteredLeads.map(l => l.projectType))
         return Array.from(types).sort()
-    }, [leads])
+    }, [roleFilteredLeads])
 
     const assignees = useMemo(() => {
-        const names = new Set(leads.filter(l => l.assignee).map(l => l.assignee!))
+        const names = new Set(roleFilteredLeads.filter(l => l.assignee).map(l => l.assignee!))
         return Array.from(names).sort()
-    }, [leads])
+    }, [roleFilteredLeads])
 
-    // Apply filters
+    // Apply user filters on top of role-based filtering
     const filteredLeads = useMemo(() => {
-        return leads.filter(lead => {
+        return roleFilteredLeads.filter(lead => {
             // Search filter (client name, city, project type)
             if (filters.search) {
                 const searchLower = filters.search.toLowerCase()
@@ -133,8 +187,17 @@ export function PipelineView() {
             hideArchived: false
         })
     }
+    
+    // Check if user can drag (only admins can change status)
+    const canDrag = isAdmin()
 
     function handleDragStart(event: DragStartEvent) {
+        if (!canDrag) {
+            toast.error("Geen toegang", {
+                description: "Alleen de Projectleider kan de status wijzigen"
+            })
+            return
+        }
         setActiveId(event.active.id as string)
     }
 
@@ -142,10 +205,10 @@ export function PipelineView() {
         const { active, over } = event
         setActiveId(null)
 
-        if (!over) return
+        if (!over || !canDrag) return
 
         const newStatus = over.id as LeadStatus
-        const lead = leads.find(l => l.id === active.id)
+        const lead = roleFilteredLeads.find(l => l.id === active.id)
         
         if (lead && lead.status !== newStatus && COLUMNS.some(c => c.id === newStatus)) {
             const success = await updateLeadStatus(active.id as string, newStatus)
@@ -158,7 +221,10 @@ export function PipelineView() {
         }
     }
 
-    const activeLead = activeId ? leads.find(l => l.id === activeId) : null
+    const activeLead = activeId ? roleFilteredLeads.find(l => l.id === activeId) : null
+    
+    // Check if user is an engineer (not admin)
+    const isEngineer = currentUser?.role === 'engineer'
 
     // Loading state with skeleton
     if (isLoading) {
@@ -171,10 +237,33 @@ export function PipelineView() {
 
     if (!isMounted) return null
 
-    // Determine which columns to show
-    const visibleColumns = filters.hideArchived 
-        ? COLUMNS.filter(c => c.id !== "Archief")
-        : COLUMNS
+    // Determine which columns to show based on role
+    // Engineers only see "Opdracht" column
+    // Admins see all columns (optionally hide Archief)
+    let visibleColumns = COLUMNS
+    if (isEngineer) {
+        visibleColumns = COLUMNS.filter(c => c.id === "Opdracht")
+    } else if (filters.hideArchived) {
+        visibleColumns = COLUMNS.filter(c => c.id !== "Archief")
+    }
+    
+    // Show message when engineer has no leads "aan zet"
+    if (isEngineer && filteredLeads.length === 0) {
+        return (
+            <div className="h-[calc(100vh-4rem)] p-6 flex items-center justify-center">
+                <div className="text-center max-w-md">
+                    <div className="w-16 h-16 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center mx-auto mb-4">
+                        <AlertCircle className="w-8 h-8 text-amber-600 dark:text-amber-400" />
+                    </div>
+                    <h2 className="text-xl font-semibold mb-2">Geen projecten aan zet</h2>
+                    <p className="text-muted-foreground">
+                        Op dit moment heb je geen projecten waarbij jij aan zet bent. 
+                        De Projectleider wijst projecten toe en bepaalt wie aan de beurt is.
+                    </p>
+                </div>
+            </div>
+        )
+    }
 
     return (
         <DndContext 
@@ -239,8 +328,13 @@ export function PipelineView() {
                         )}
 
                         {/* Result count */}
-                        <div className="text-sm text-muted-foreground ml-auto">
-                            {filteredLeads.length} van {leads.length} leads
+                        <div className="text-sm text-muted-foreground ml-auto flex items-center gap-2">
+                            {isEngineer && (
+                                <Badge variant="outline" className="font-normal text-amber-600 border-amber-300 dark:text-amber-400 dark:border-amber-700">
+                                    Jouw werken
+                                </Badge>
+                            )}
+                            {filteredLeads.length} van {roleFilteredLeads.length} leads
                         </div>
                     </div>
 

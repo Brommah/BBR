@@ -19,18 +19,54 @@ interface SupabaseUser {
 
 /**
  * User roles in the system:
- * - admin: Full access, can approve quotes, manage users, view all data
- * - engineer: Can work on assigned leads, submit quotes for approval
+ * - admin: Projectleider - Full access, can approve quotes, manage users, assign team members
+ * - engineer: Rekenaar or Tekenaar - Can work on assigned leads when "aan zet"
  * - viewer: Read-only access (for stakeholders)
  */
 export type UserRole = 'admin' | 'engineer' | 'viewer'
+
+/**
+ * Engineer specialization types:
+ * - rekenaar: Calculator/Structural engineer - does calculations
+ * - tekenaar: Draftsman - creates technical drawings
+ * Only applicable when role === 'engineer'
+ */
+export type EngineerType = 'rekenaar' | 'tekenaar'
+
+/**
+ * Display names for roles (Dutch)
+ */
+export const ROLE_DISPLAY_NAMES: Record<UserRole, string> = {
+  admin: 'Projectleider',
+  engineer: 'Engineer',
+  viewer: 'Viewer'
+}
+
+/**
+ * Display names for engineer types (Dutch)
+ */
+export const ENGINEER_TYPE_DISPLAY_NAMES: Record<EngineerType, string> = {
+  rekenaar: 'Rekenaar',
+  tekenaar: 'Tekenaar'
+}
 
 export interface User {
   id: string
   name: string
   email: string
   role: UserRole
+  engineerType?: EngineerType // Only for engineers: 'rekenaar' or 'tekenaar'
   avatar?: string
+}
+
+/**
+ * Get display name for a user (includes engineer type if applicable)
+ */
+export function getUserDisplayRole(user: User): string {
+  if (user.role === 'engineer' && user.engineerType) {
+    return ENGINEER_TYPE_DISPLAY_NAMES[user.engineerType]
+  }
+  return ROLE_DISPLAY_NAMES[user.role]
 }
 
 /**
@@ -43,11 +79,13 @@ export type Permission =
   | 'quotes:view'
   | 'quotes:feedback'
   | 'leads:create'
-  | 'leads:assign'
-  | 'leads:view-all'
-  | 'leads:view-own'
+  | 'leads:assign'           // Can assign Rekenaar/Tekenaar to leads (Projectleider only)
+  | 'leads:view-all'         // Can see all leads in all statuses
+  | 'leads:view-own'         // Can only see leads assigned to them and "aan zet"
+  | 'leads:view-offerte'     // Can see leads in offerte phase (Projectleider only)
   | 'leads:edit'
   | 'leads:delete'
+  | 'leads:set-aan-zet'      // Can change who is "aan zet" (Projectleider only)
   | 'admin:access'
   | 'admin:manage-users'
   | 'admin:manage-pricing'
@@ -57,14 +95,22 @@ export type Permission =
 /**
  * Permission matrix per role
  * 
- * Engineer role:
- * - Views assigned work (werkvoorraad)
- * - Can view project basics: werknummer, address, phone, documents
- * - Can register hours
- * - Can create and SUBMIT quotes (for admin approval)
- * - Cannot approve quotes or edit other project data
+ * Projectleider (admin) role:
+ * - Full access to pipeline
+ * - Can assign Rekenaar and Tekenaar to leads
+ * - Can set "aan zet" status
+ * - Can approve/reject quotes
+ * - Only role that sees leads in offerte phase
  * 
- * Workflow: Engineer submits quote → Admin approves → Quote sent to client
+ * Rekenaar/Tekenaar (engineer) role:
+ * - Only sees leads when:
+ *   1. Assigned to them (as rekenaar or tekenaar)
+ *   2. Status is "Opdracht" (quote accepted)
+ *   3. They are "aan zet" (their turn to work)
+ * - Can register hours
+ * - Can submit calculations/drawings
+ * 
+ * Workflow: Lead → Offerte accepted → Projectleider assigns team → Sets "aan zet"
  */
 const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
   admin: [
@@ -76,8 +122,10 @@ const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     'leads:create',
     'leads:assign',
     'leads:view-all',
+    'leads:view-offerte',  // Can see leads in offerte phase
     'leads:edit',
     'leads:delete',
+    'leads:set-aan-zet',   // Can change who is "aan zet"
     'admin:access',
     'admin:manage-users',
     'admin:manage-pricing',
@@ -85,15 +133,13 @@ const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     'settings:edit',
   ],
   engineer: [
-    // Engineers can:
-    // - View their own assigned leads (werkvoorraad)
-    // - View basic project info
+    // Engineers (Rekenaar/Tekenaar) can:
+    // - View only leads assigned to them AND "aan zet" AND status = Opdracht
     // - Register hours
     // - Download documents
-    // - Create and submit quotes FOR APPROVAL
+    // - View quote details (read-only)
     'leads:view-own',
-    'quotes:submit',    // Can submit quotes for admin approval
-    'quotes:view',      // Can view quote details
+    'quotes:view',      // Can view quote details (read-only)
     'settings:view',
   ],
   viewer: [
@@ -120,6 +166,9 @@ interface AuthState {
   hasPermission: (permission: Permission) => boolean
   isAdmin: () => boolean
   isEngineer: () => boolean
+  isRekenaar: () => boolean
+  isTekenaar: () => boolean
+  isProjectleider: () => boolean  // Alias for isAdmin
 }
 
 /**
@@ -132,6 +181,7 @@ function convertSupabaseUser(supabaseUser: SupabaseUser): User {
     name: metadata.name || supabaseUser.email?.split('@')[0] || 'User',
     email: supabaseUser.email || '',
     role: (metadata.role as UserRole) || 'viewer',
+    engineerType: (metadata.engineerType as EngineerType) || undefined,
     avatar: metadata.avatar_url
   }
 }
@@ -191,13 +241,14 @@ export const useAuthStore = create<AuthState>()(
             
             if (dbResult.success && dbResult.data) {
               // Use database user with correct role
-              const dbUser = dbResult.data as { id: string; name: string; email: string; role: string; avatar?: string }
+              const dbUser = dbResult.data as { id: string; name: string; email: string; role: string; engineerType?: string; avatar?: string }
               set({ 
                 currentUser: {
                   id: dbUser.id,
                   name: dbUser.name,
                   email: dbUser.email,
                   role: dbUser.role as UserRole,
+                  engineerType: dbUser.engineerType as EngineerType | undefined,
                   avatar: dbUser.avatar
                 }, 
                 isAuthenticated: true, 
@@ -269,13 +320,14 @@ export const useAuthStore = create<AuthState>()(
             const dbResult = await getUserByEmail(session.user.email || '')
             
             if (dbResult.success && dbResult.data) {
-              const dbUser = dbResult.data as { id: string; name: string; email: string; role: string; avatar?: string }
+              const dbUser = dbResult.data as { id: string; name: string; email: string; role: string; engineerType?: string; avatar?: string }
               set({ 
                 currentUser: {
                   id: dbUser.id,
                   name: dbUser.name,
                   email: dbUser.email,
                   role: dbUser.role as UserRole,
+                  engineerType: dbUser.engineerType as EngineerType | undefined,
                   avatar: dbUser.avatar
                 }, 
                 isAuthenticated: true, 
@@ -328,6 +380,21 @@ export const useAuthStore = create<AuthState>()(
       isEngineer: () => {
         const { currentUser } = get()
         return currentUser?.role === 'engineer'
+      },
+      
+      isRekenaar: () => {
+        const { currentUser } = get()
+        return currentUser?.role === 'engineer' && currentUser?.engineerType === 'rekenaar'
+      },
+      
+      isTekenaar: () => {
+        const { currentUser } = get()
+        return currentUser?.role === 'engineer' && currentUser?.engineerType === 'tekenaar'
+      },
+      
+      isProjectleider: () => {
+        const { currentUser } = get()
+        return currentUser?.role === 'admin'
       },
     }),
     {
