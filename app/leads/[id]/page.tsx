@@ -10,7 +10,6 @@ import { GroundInvestigationPanel } from "@/components/lead-detail/ground-invest
 // NotesPanel merged into CommunicationPanel
 import { LocationCard } from "@/components/lead-detail/location-card"
 import { KadasterPanel } from "@/components/lead-detail/kadaster-panel"
-import { ChecklistValidatorPanel } from "@/components/lead-detail/checklist-validator-panel"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -69,32 +68,55 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }
 
 export default function LeadDetailPage() {
     const params = useParams()
-    const { leads, isLoading: storeLoading, updateLeadStatus } = useLeadStore()
+    const { leads, isLoading: storeLoading, updateLeadStatus, loadLeads } = useLeadStore()
     const [directLead, setDirectLead] = useState<Lead | null>(null)
     const [isPending, startTransition] = useTransition()
-    const hasFetchedRef = useRef(false)
+    const [hasAttemptedFetch, setHasAttemptedFetch] = useState(false)
     const [quotePanelOpen, setQuotePanelOpen] = useState(true)
     const [specsExpanded, setSpecsExpanded] = useState(false)
     
     const storeLead = leads.find(l => l.id === params.id)
     
+    // Fetch lead directly if not in store (handles HMR/store resets)
     useEffect(() => {
-        if (storeLead || storeLoading || !params.id || hasFetchedRef.current) {
+        // If we have the lead from store, we're good
+        if (storeLead) {
             return
         }
         
-        hasFetchedRef.current = true
+        // If store is loading, wait for it
+        if (storeLoading) {
+            return
+        }
         
+        // If we already have a direct lead, keep it
+        if (directLead) {
+            return
+        }
+        
+        // If no params, nothing to fetch
+        if (!params.id) {
+            return
+        }
+        
+        // Fetch the lead directly
+        setHasAttemptedFetch(true)
         startTransition(async () => {
             const result = await getLead(params.id as string)
             if (result.success && result.data) {
                 setDirectLead(result.data as Lead)
             }
+            
+            // Also trigger store reload if it's empty (helps with HMR)
+            if (leads.length === 0) {
+                loadLeads()
+            }
         })
-    }, [storeLead, storeLoading, params.id])
+    }, [storeLead, storeLoading, params.id, directLead, leads.length, loadLeads])
     
     const lead = storeLead || directLead
-    const isLoading = storeLoading || isPending
+    // Show loading if store is loading OR we're fetching OR we haven't tried fetching yet
+    const isLoading = storeLoading || isPending || (!lead && !hasAttemptedFetch)
     const showGroundTab = lead ? requiresGroundInvestigation(lead.projectType) : false
     
     // Auto-hide quote panel when order is accepted (status = Opdracht)
@@ -544,14 +566,7 @@ export default function LeadDetailPage() {
                             />
                         </TabsContent>
                                 <TabsContent value="documents" className="h-full m-0 p-4 overflow-auto">
-                                    <div className="space-y-4">
-                                        <DocumentsPanel leadId={lead.id} />
-                                        <ChecklistValidatorPanel 
-                                            leadId={lead.id}
-                                            projectType={lead.projectType}
-                                            clientEmail={lead.clientEmail}
-                                        />
-                                    </div>
+                                    <DocumentsPanel leadId={lead.id} />
                                 </TabsContent>
                                 {showGroundTab && (
                                     <TabsContent value="ground" className="h-full m-0 p-4 overflow-auto">
@@ -584,10 +599,10 @@ export default function LeadDetailPage() {
                 {!isOrderAccepted && (
                     <aside className={cn(
                         "border-l border-border/50 bg-white dark:bg-slate-900 overflow-hidden shrink-0 transition-all duration-300",
-                        quotePanelOpen ? "w-80" : "w-0 border-l-0"
+                        quotePanelOpen ? "w-[420px]" : "w-0 border-l-0"
                     )}>
                         <div className={cn(
-                            "w-80 h-full overflow-y-auto transition-opacity duration-200",
+                            "w-[420px] h-full overflow-y-auto transition-opacity duration-200",
                             quotePanelOpen ? "opacity-100" : "opacity-0"
                         )}>
                             <div className="p-4">

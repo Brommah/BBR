@@ -134,7 +134,13 @@ export function LeadCard({ lead }: LeadCardProps) {
   const borderClass = statusConfig.border
   const indicatorClass = statusConfig.indicator
 
-  const handleCardClick = () => {
+  const handleCardClick = (e: React.MouseEvent) => {
+    // Don't navigate if we're dragging
+    if (isDragging) {
+      e.preventDefault()
+      e.stopPropagation()
+      return
+    }
     router.push(`/leads/${lead.id}`)
   }
 
@@ -170,7 +176,9 @@ export function LeadCard({ lead }: LeadCardProps) {
           onKeyDown={(e) => {
             if (e.key === 'Enter' || e.key === ' ') {
               e.preventDefault()
-              handleCardClick()
+              if (!isDragging) {
+                router.push(`/leads/${lead.id}`)
+              }
             }
           }}
         >

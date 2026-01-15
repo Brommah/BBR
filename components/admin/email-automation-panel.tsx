@@ -8,6 +8,17 @@ import { Switch } from "@/components/ui/switch"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
+import { Label } from "@/components/ui/label"
+import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+    DialogFooter,
+    DialogClose,
+} from "@/components/ui/dialog"
 import { toast } from "sonner"
 import { 
     Mail, 
@@ -35,7 +46,9 @@ import {
     ExternalLink,
     Code,
     Loader2,
-    AlertTriangle
+    AlertTriangle,
+    Pencil,
+    Save
 } from "lucide-react"
 import {
     getEmailAutomationStats,
@@ -693,6 +706,32 @@ export function EmailAutomationPanel() {
     const [isLoading, setIsLoading] = useState(true)
     const [isInitializing, setIsInitializing] = useState(false)
     
+    // Edit template state
+    const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
+    const [editingAutomation, setEditingAutomation] = useState<EmailAutomation | null>(null)
+    const [editForm, setEditForm] = useState({
+        subject: "",
+        subjectAlt: "",
+        preheader: "",
+        bodyPreview: "",
+    })
+    const [isSaving, setIsSaving] = useState(false)
+    
+    // Template overrides (stored locally until we have a backend)
+    const [templateOverrides, setTemplateOverrides] = useState<Record<string, {
+        subject?: string
+        subjectAlt?: string
+        preheader?: string
+        bodyPreview?: string
+    }>>(() => {
+        // Load from localStorage on mount
+        if (typeof window !== 'undefined') {
+            const saved = localStorage.getItem('email-template-overrides')
+            return saved ? JSON.parse(saved) : {}
+        }
+        return {}
+    })
+    
     // Real data from database
     const [stats, setStats] = useState<EmailAutomationStats[]>([])
     const [configs, setConfigs] = useState<EmailAutomationConfig[]>([])
@@ -706,13 +745,19 @@ export function EmailAutomationPanel() {
         totalFlows: 15,
     })
 
-    // Merge static definitions with real data
+    // Merge static definitions with real data and overrides
     const automations: EmailAutomation[] = automationDefinitions.map(def => {
         const stat = stats.find(s => s.flowId === def.id)
         const config = configs.find(c => c.flowId === def.id)
+        const override = templateOverrides[def.id]
         
         return {
             ...def,
+            // Apply template overrides
+            subject: override?.subject || def.subject,
+            subjectAlt: override?.subjectAlt || def.subjectAlt,
+            preheader: override?.preheader || def.preheader,
+            bodyPreview: override?.bodyPreview || def.bodyPreview,
             status: (config?.status || (def.id === '13' || def.id === '14' ? 'draft' : 'active')) as 'active' | 'paused' | 'draft',
             metrics: {
                 sent: stat?.sent || 0,
@@ -721,6 +766,44 @@ export function EmailAutomationPanel() {
             }
         }
     })
+    
+    // Open edit dialog for a template
+    const openEditDialog = (automation: EmailAutomation) => {
+        setEditingAutomation(automation)
+        setEditForm({
+            subject: automation.subject,
+            subjectAlt: automation.subjectAlt || "",
+            preheader: automation.preheader || "",
+            bodyPreview: automation.bodyPreview,
+        })
+        setIsEditDialogOpen(true)
+    }
+    
+    // Save template changes
+    const handleSaveTemplate = async () => {
+        if (!editingAutomation) return
+        
+        setIsSaving(true)
+        
+        // Save to localStorage (and could be extended to save to database)
+        const newOverrides = {
+            ...templateOverrides,
+            [editingAutomation.id]: {
+                subject: editForm.subject,
+                subjectAlt: editForm.subjectAlt || undefined,
+                preheader: editForm.preheader || undefined,
+                bodyPreview: editForm.bodyPreview,
+            }
+        }
+        
+        setTemplateOverrides(newOverrides)
+        localStorage.setItem('email-template-overrides', JSON.stringify(newOverrides))
+        
+        setIsSaving(false)
+        setIsEditDialogOpen(false)
+        setEditingAutomation(null)
+        toast.success("Template opgeslagen")
+    }
 
     const fetchData = useCallback(async () => {
         try {
@@ -1202,6 +1285,17 @@ export function EmailAutomationPanel() {
 
                                                 {/* Actions */}
                                                 <div className="flex gap-2 pt-2">
+                                                    <Button 
+                                                        size="sm" 
+                                                        className="gap-1 bg-amber-500 hover:bg-amber-600 text-white"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation()
+                                                            openEditDialog(automation)
+                                                        }}
+                                                    >
+                                                        <Pencil className="w-3 h-3" />
+                                                        Bewerken
+                                                    </Button>
                                                     <Button size="sm" variant="outline" className="gap-1">
                                                         <Eye className="w-3 h-3" />
                                                         Full Preview
@@ -1229,6 +1323,113 @@ export function EmailAutomationPanel() {
                     </TabsContent>
                 ))}
             </Tabs>
+
+            {/* Edit Template Dialog */}
+            <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+                <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2">
+                            <Pencil className="w-5 h-5 text-amber-500" />
+                            Template Bewerken: {editingAutomation?.name}
+                        </DialogTitle>
+                    </DialogHeader>
+                    
+                    <div className="space-y-4 py-4">
+                        {/* Subject */}
+                        <div className="space-y-2">
+                            <Label htmlFor="subject">Onderwerp</Label>
+                            <Input
+                                id="subject"
+                                value={editForm.subject}
+                                onChange={(e) => setEditForm({ ...editForm, subject: e.target.value })}
+                                placeholder="Email onderwerp..."
+                                className="font-mono text-sm"
+                            />
+                            <p className="text-xs text-muted-foreground">
+                                Gebruik {`{{variabele}}`} voor dynamische content
+                            </p>
+                        </div>
+
+                        {/* Subject Alt (A/B variant) */}
+                        <div className="space-y-2">
+                            <Label htmlFor="subjectAlt">A/B Variant Onderwerp (optioneel)</Label>
+                            <Input
+                                id="subjectAlt"
+                                value={editForm.subjectAlt}
+                                onChange={(e) => setEditForm({ ...editForm, subjectAlt: e.target.value })}
+                                placeholder="Alternatief onderwerp voor A/B test..."
+                                className="font-mono text-sm"
+                            />
+                        </div>
+
+                        {/* Preheader */}
+                        <div className="space-y-2">
+                            <Label htmlFor="preheader">Preheader (optioneel)</Label>
+                            <Input
+                                id="preheader"
+                                value={editForm.preheader}
+                                onChange={(e) => setEditForm({ ...editForm, preheader: e.target.value })}
+                                placeholder="Preview text in inbox..."
+                                className="font-mono text-sm"
+                            />
+                            <p className="text-xs text-muted-foreground">
+                                Dit is de tekst die naast het onderwerp in de inbox wordt getoond
+                            </p>
+                        </div>
+
+                        {/* Body */}
+                        <div className="space-y-2">
+                            <Label htmlFor="body">Email Content (Markdown)</Label>
+                            <Textarea
+                                id="body"
+                                value={editForm.bodyPreview}
+                                onChange={(e) => setEditForm({ ...editForm, bodyPreview: e.target.value })}
+                                placeholder="Email content in Markdown format..."
+                                className="font-mono text-sm min-h-[300px]"
+                            />
+                            <p className="text-xs text-muted-foreground">
+                                Gebruik Markdown voor opmaak: **vet**, *cursief*, ### headers, - lijsten
+                            </p>
+                        </div>
+
+                        {/* Variables Reference */}
+                        {editingAutomation && (
+                            <div className="space-y-2">
+                                <Label>Beschikbare Variabelen</Label>
+                                <div className="flex flex-wrap gap-2 p-3 bg-muted/50 rounded-lg">
+                                    {editingAutomation.variables.map((v, i) => (
+                                        <Badge 
+                                            key={i}
+                                            variant="secondary"
+                                            className="font-mono text-xs cursor-pointer hover:bg-primary hover:text-primary-foreground"
+                                            onClick={() => {
+                                                navigator.clipboard.writeText(`{{${v.name}}}`)
+                                                toast.success(`{{${v.name}}} gekopieerd`)
+                                            }}
+                                        >
+                                            {`{{${v.name}}}`}
+                                        </Badge>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
+                    <DialogFooter>
+                        <DialogClose asChild>
+                            <Button variant="outline" disabled={isSaving}>Annuleren</Button>
+                        </DialogClose>
+                        <Button onClick={handleSaveTemplate} disabled={isSaving} className="gap-2">
+                            {isSaving ? (
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                                <Save className="w-4 h-4" />
+                            )}
+                            Opslaan
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     )
 }

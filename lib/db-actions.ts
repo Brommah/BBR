@@ -753,7 +753,9 @@ export async function submitQuoteForApproval(
         quoteValue,
         quoteDescription: submission.quoteDescription?.trim() || null,
         quoteLineItems: submission.quoteLineItems ? JSON.parse(JSON.stringify(submission.quoteLineItems)) : undefined,
-        quoteEstimatedHours: submission.quoteEstimatedHours || null
+        quoteEstimatedHours: submission.quoteEstimatedHours || null,
+        // Update pipeline status when quote is submitted for approval
+        status: 'Calculatie' as LeadStatus
       }
     })
     
@@ -2225,6 +2227,53 @@ export async function getTimeEntriesByUser(userId: string, dateFrom?: string, da
   } catch (error) {
     console.error('[DB] Error fetching time entries by user:', error)
     return { success: false, error: 'Failed to load time entries' }
+  }
+}
+
+/**
+ * Update a time entry
+ */
+export async function updateTimeEntry(
+  id: string,
+  data: {
+    date?: string
+    startTime?: string
+    endTime?: string
+    duration?: number
+    description?: string
+    category?: TimeCategory
+  }
+): Promise<ActionResult> {
+  const validId = validateId(id)
+  if (!validId) return { success: false, error: 'Invalid time entry ID' }
+
+  try {
+    const updateData: Record<string, unknown> = {}
+    
+    if (data.date) updateData.date = new Date(data.date)
+    if (data.startTime) updateData.startTime = data.startTime
+    if (data.endTime) updateData.endTime = data.endTime
+    if (data.duration !== undefined) updateData.duration = data.duration
+    if (data.description) updateData.description = validateString(data.description, 1000)
+    if (data.category) updateData.category = data.category
+
+    const entry = await prisma.timeEntry.update({
+      where: { id: validId },
+      data: updateData,
+    })
+
+    return { 
+      success: true, 
+      data: {
+        ...entry,
+        date: entry.date.toISOString().split('T')[0],
+        createdAt: entry.createdAt.toISOString(),
+        updatedAt: entry.updatedAt.toISOString(),
+      }
+    }
+  } catch (error) {
+    console.error('[DB] Error updating time entry:', error)
+    return { success: false, error: 'Failed to update time entry' }
   }
 }
 
