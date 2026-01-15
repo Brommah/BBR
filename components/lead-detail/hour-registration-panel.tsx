@@ -26,15 +26,12 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import {
-  Play,
-  Pause,
   Clock,
   Plus,
   Calendar,
   ChevronLeft,
   ChevronRight,
   Euro,
-  Timer,
   FileText,
   Trash2,
   Loader2,
@@ -75,11 +72,6 @@ export function HourRegistrationPanel({
   hourlyRate = 85,
 }: HourRegistrationPanelProps) {
   const { currentUser } = useAuthStore()
-  
-  // Timer state
-  const [isTracking, setIsTracking] = useState(false)
-  const [currentSessionStart, setCurrentSessionStart] = useState<Date | null>(null)
-  const [elapsedSeconds, setElapsedSeconds] = useState(0)
 
   // Calendar state
   const [currentMonth, setCurrentMonth] = useState(new Date())
@@ -132,25 +124,6 @@ export function HourRegistrationPanel({
     loadEntries()
   }, [leadId])
 
-  // Timer effect
-  useEffect(() => {
-    let interval: NodeJS.Timeout | null = null
-
-    if (isTracking && currentSessionStart) {
-      interval = setInterval(() => {
-        const now = new Date()
-        const diff = Math.floor(
-          (now.getTime() - currentSessionStart.getTime()) / 1000
-        )
-        setElapsedSeconds(diff)
-      }, 1000)
-    }
-
-    return () => {
-      if (interval) clearInterval(interval)
-    }
-  }, [isTracking, currentSessionStart])
-
   // Formatters
   const formatDuration = useCallback((minutes: number) => {
     const hours = Math.floor(minutes / 60)
@@ -160,68 +133,6 @@ export function HourRegistrationPanel({
     }
     return `${mins}m`
   }, [])
-
-  const formatTimerDisplay = useCallback((seconds: number) => {
-    const hours = Math.floor(seconds / 3600)
-    const minutes = Math.floor((seconds % 3600) / 60)
-    const secs = seconds % 60
-    return `${hours.toString().padStart(2, "0")}:${minutes
-      .toString()
-      .padStart(2, "0")}:${secs.toString().padStart(2, "0")}`
-  }, [])
-
-  // Timer controls
-  const startTracking = () => {
-    setIsTracking(true)
-    setCurrentSessionStart(new Date())
-    setElapsedSeconds(0)
-    toast.success("Timer gestart")
-  }
-
-  const stopTracking = async () => {
-    if (!currentSessionStart || !currentUser) return
-
-    const now = new Date()
-    const durationMinutes = Math.round(
-      (now.getTime() - currentSessionStart.getTime()) / 60000
-    )
-
-    if (durationMinutes < 1) {
-      toast.error("Sessie te kort om op te slaan")
-      setIsTracking(false)
-      setCurrentSessionStart(null)
-      setElapsedSeconds(0)
-      return
-    }
-
-    const startTimeStr = currentSessionStart.toTimeString().slice(0, 5)
-    const endTimeStr = now.toTimeString().slice(0, 5)
-
-    setIsSaving(true)
-    const result = await createTimeEntry({
-      leadId,
-      userId: currentUser.id,
-      userName: currentUser.name,
-      date: getLocalDateString(currentSessionStart),
-      startTime: startTimeStr,
-      endTime: endTimeStr,
-      duration: durationMinutes,
-      description: "Timer sessie",
-      category: "calculatie",
-    })
-
-    if (result.success && result.data) {
-      setTimeEntries([result.data as TimeEntry, ...timeEntries])
-      toast.success(`${formatDuration(durationMinutes)} opgeslagen`)
-    } else {
-      toast.error("Kon tijd niet opslaan")
-    }
-
-    setIsTracking(false)
-    setCurrentSessionStart(null)
-    setElapsedSeconds(0)
-    setIsSaving(false)
-  }
 
   // Manual entry
   const handleAddEntry = async () => {
@@ -396,7 +307,7 @@ export function HourRegistrationPanel({
   }, [currentMonth, timeEntries])
 
   // Stats
-  const totalMinutes = timeEntries.reduce((sum, e) => sum + e.duration, 0) + (isTracking ? Math.floor(elapsedSeconds / 60) : 0)
+  const totalMinutes = timeEntries.reduce((sum, e) => sum + e.duration, 0)
   const totalHours = totalMinutes / 60
   const estimatedCost = totalHours * hourlyRate
 
@@ -463,61 +374,8 @@ export function HourRegistrationPanel({
 
   return (
     <div className="h-full flex flex-col gap-4">
-      {/* Quick Timer */}
-      <Card className="shrink-0">
-        <CardContent className="py-4">
-          <div className="flex items-center justify-between gap-4">
-            <div className="flex items-center gap-4">
-              <div
-                className={cn(
-                  "w-12 h-12 rounded-xl flex items-center justify-center transition-colors",
-                  isTracking
-                    ? "bg-emerald-100 dark:bg-emerald-900/30"
-                    : "bg-muted"
-                )}
-              >
-                <Timer
-                  className={cn(
-                    "w-6 h-6",
-                    isTracking
-                      ? "text-emerald-600 animate-pulse"
-                      : "text-muted-foreground"
-                  )}
-                />
-              </div>
-              <div>
-                <p className="text-2xl font-mono font-bold tracking-tight">
-                  {formatTimerDisplay(elapsedSeconds)}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  {isTracking ? "Timer actief" : "Klaar om te starten"}
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              {isTracking ? (
-                <Button
-                  variant="destructive"
-                  size="lg"
-                  onClick={stopTracking}
-                  className="gap-2"
-                  disabled={isSaving}
-                >
-                  {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Pause className="w-4 h-4" />}
-                  Stop
-                </Button>
-              ) : (
-                <Button
-                  size="lg"
-                  onClick={startTracking}
-                  className="gap-2 bg-emerald-600 hover:bg-emerald-700"
-                  disabled={!currentUser}
-                >
-                  <Play className="w-4 h-4" />
-                  Start
-                </Button>
-              )}
-              <Dialog open={isAddModalOpen} onOpenChange={setIsAddModalOpen}>
+      {/* Add Entry Modal */}
+      <Dialog open={isAddModalOpen} onOpenChange={setIsAddModalOpen}>
                 <DialogTrigger asChild>
                   <Button variant="outline" size="lg" className="gap-2">
                     <Plus className="w-4 h-4" />
@@ -624,118 +482,130 @@ export function HourRegistrationPanel({
                     </Button>
                   </DialogFooter>
                 </DialogContent>
-              </Dialog>
+      </Dialog>
 
-              {/* Edit Modal */}
-              <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>Uren aanpassen</DialogTitle>
-                  </DialogHeader>
-                  <div className="space-y-4 py-4">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label>Datum</Label>
-                        <Input
-                          type="date"
-                          value={editEntry.date}
-                          onChange={(e) =>
-                            setEditEntry({ ...editEntry, date: e.target.value })
-                          }
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Categorie</Label>
-                        <Select
-                          value={editEntry.category}
-                          onValueChange={(v) =>
-                            setEditEntry({
-                              ...editEntry,
-                              category: v as TimeCategory,
-                            })
-                          }
-                        >
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {Object.entries(CATEGORY_CONFIG).map(
-                              ([key, config]) => (
-                                <SelectItem key={key} value={key}>
-                                  <div className="flex items-center gap-2">
-                                    <div
-                                      className={cn(
-                                        "w-2 h-2 rounded-full",
-                                        config.color
-                                      )}
-                                    />
-                                    {config.label}
-                                  </div>
-                                </SelectItem>
-                              )
-                            )}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label>Starttijd</Label>
-                        <Input
-                          type="time"
-                          value={editEntry.startTime}
-                          onChange={(e) =>
-                            setEditEntry({
-                              ...editEntry,
-                              startTime: e.target.value,
-                            })
-                          }
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Eindtijd</Label>
-                        <Input
-                          type="time"
-                          value={editEntry.endTime}
-                          onChange={(e) =>
-                            setEditEntry({ ...editEntry, endTime: e.target.value })
-                          }
-                        />
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Omschrijving</Label>
-                      <Textarea
-                        placeholder="Wat heb je gedaan?"
-                        value={editEntry.description}
-                        onChange={(e) =>
-                          setEditEntry({
-                            ...editEntry,
-                            description: e.target.value,
-                          })
-                        }
-                        rows={3}
-                      />
-                    </div>
-                  </div>
-                  <DialogFooter>
-                    <DialogClose asChild>
-                      <Button variant="outline" disabled={isSaving}>Annuleren</Button>
-                    </DialogClose>
-                    <Button onClick={handleEditEntry} disabled={isSaving}>
-                      {isSaving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                      Bijwerken
-                    </Button>
-                  </DialogFooter>
-                </DialogContent>
-              </Dialog>
+      {/* Edit Entry Modal */}
+      <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Uren aanpassen</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Datum</Label>
+                <Input
+                  type="date"
+                  value={editEntry.date}
+                  onChange={(e) =>
+                    setEditEntry({ ...editEntry, date: e.target.value })
+                  }
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Categorie</Label>
+                <Select
+                  value={editEntry.category}
+                  onValueChange={(v) =>
+                    setEditEntry({
+                      ...editEntry,
+                      category: v as TimeCategory,
+                    })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(CATEGORY_CONFIG).map(
+                      ([key, config]) => (
+                        <SelectItem key={key} value={key}>
+                          <div className="flex items-center gap-2">
+                            <div
+                              className={cn(
+                                "w-2 h-2 rounded-full",
+                                config.color
+                              )}
+                            />
+                            {config.label}
+                          </div>
+                        </SelectItem>
+                      )
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Starttijd</Label>
+                <Input
+                  type="time"
+                  value={editEntry.startTime}
+                  onChange={(e) =>
+                    setEditEntry({
+                      ...editEntry,
+                      startTime: e.target.value,
+                    })
+                  }
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Eindtijd</Label>
+                <Input
+                  type="time"
+                  value={editEntry.endTime}
+                  onChange={(e) =>
+                    setEditEntry({ ...editEntry, endTime: e.target.value })
+                  }
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Omschrijving</Label>
+              <Textarea
+                placeholder="Wat heb je gedaan?"
+                value={editEntry.description}
+                onChange={(e) =>
+                  setEditEntry({
+                    ...editEntry,
+                    description: e.target.value,
+                  })
+                }
+                rows={3}
+              />
             </div>
           </div>
-        </CardContent>
-      </Card>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button variant="outline" disabled={isSaving}>Annuleren</Button>
+            </DialogClose>
+            <Button onClick={handleEditEntry} disabled={isSaving}>
+              {isSaving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              Bijwerken
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Stats Row */}
-      <div className="grid grid-cols-3 gap-3 shrink-0">
+      <div className="grid grid-cols-4 gap-3 shrink-0">
+        <Card 
+          className="cursor-pointer hover:bg-muted/50 transition-colors border-dashed"
+          onClick={() => setIsAddModalOpen(true)}
+        >
+          <CardContent className="py-3">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center">
+                <Plus className="w-4 h-4 text-emerald-600" />
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Nieuw</p>
+                <p className="text-sm font-semibold text-emerald-600">Uren toevoegen</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
         <Card>
           <CardContent className="py-3">
             <div className="flex items-center gap-3">
