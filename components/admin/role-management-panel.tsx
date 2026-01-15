@@ -1,13 +1,7 @@
 "use client"
 
 import { useState, useEffect, useTransition } from "react"
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-} from "@/components/ui/card"
+import { motion, AnimatePresence } from "framer-motion"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -60,6 +54,7 @@ import {
   type RoleWithPermissions,
   type PermissionWithCategories,
 } from "@/lib/rbac-actions"
+import { cn } from "@/lib/utils"
 
 // Category display names
 const CATEGORY_NAMES: Record<string, string> = {
@@ -141,7 +136,6 @@ export function RoleManagementPanel() {
         setIsCreateOpen(false)
         setNewRole({ name: "", displayName: "", description: "", color: "#6b7280" })
         setSelectedPermissions(new Set())
-        // Reload roles
         const rolesResult = await getRoles()
         if (rolesResult.success && rolesResult.data) {
           setRoles(rolesResult.data)
@@ -162,21 +156,18 @@ export function RoleManagementPanel() {
     if (!editingRole) return
     
     startTransition(async () => {
-      // Update role info
       await updateRole(editingRole.id, {
         displayName: editingRole.displayName,
         description: editingRole.description || undefined,
         color: editingRole.color,
       })
       
-      // Update permissions
       const result = await updateRolePermissions(editingRole.id, Array.from(selectedPermissions))
       
       if (result.success) {
         toast.success("Rol bijgewerkt")
         setIsEditOpen(false)
         setEditingRole(null)
-        // Reload roles
         const rolesResult = await getRoles()
         if (rolesResult.success && rolesResult.data) {
           setRoles(rolesResult.data)
@@ -201,7 +192,6 @@ export function RoleManagementPanel() {
         setIsDeleteOpen(false)
         setDeletingRole(null)
         setReassignRoleId("")
-        // Reload roles
         const rolesResult = await getRoles()
         if (rolesResult.success && rolesResult.data) {
           setRoles(rolesResult.data)
@@ -239,81 +229,90 @@ export function RoleManagementPanel() {
 
   if (isLoading) {
     return (
-      <Card>
-        <CardHeader>
-          <Skeleton className="h-6 w-48" />
-          <Skeleton className="h-4 w-64" />
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-3">
-            {[1, 2, 3].map(i => (
-              <Skeleton key={i} className="h-20 w-full" />
-            ))}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Skeleton className="w-10 h-10 rounded-xl" />
+            <div>
+              <Skeleton className="h-5 w-32 mb-1" />
+              <Skeleton className="h-4 w-48" />
+            </div>
           </div>
-        </CardContent>
-      </Card>
+          <Skeleton className="h-10 w-32" />
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {[1, 2, 3, 4].map(i => (
+            <Skeleton key={i} className="h-24 rounded-xl" />
+          ))}
+        </div>
+      </div>
     )
   }
 
   return (
     <>
-      <Card>
-        <CardHeader>
-          <div className="flex justify-between items-start">
-            <div>
-              <CardTitle className="flex items-center gap-2">
-                <Shield className="w-5 h-5" />
-                Rollen & Rechten
-                <Badge variant="outline" className="ml-2">{roles.length} rollen</Badge>
-              </CardTitle>
-              <CardDescription>Beheer rollen en hun rechten in het systeem.</CardDescription>
+      <div className="space-y-6">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-100 to-emerald-200 dark:from-emerald-900/30 dark:to-emerald-800/30 flex items-center justify-center">
+              <Shield className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
             </div>
-            <Button onClick={() => setIsCreateOpen(true)} className="gap-2">
-              <Plus className="w-4 h-4" />
-              Nieuwe Rol
-            </Button>
+            <div>
+              <h3 className="font-semibold">Rollen & Rechten</h3>
+              <p className="text-sm text-muted-foreground">{roles.length} rollen geconfigureerd</p>
+            </div>
           </div>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            {roles.map(role => (
-              <div
+          <Button 
+            onClick={() => setIsCreateOpen(true)} 
+            className="gap-2 bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 shadow-lg shadow-emerald-500/25"
+          >
+            <Plus className="w-4 h-4" />
+            Nieuwe Rol
+          </Button>
+        </div>
+
+        {/* Roles Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <AnimatePresence>
+            {roles.map((role, index) => (
+              <motion.div
                 key={role.id}
-                className="flex items-center justify-between p-4 rounded-lg border bg-card hover:bg-accent/50 transition-colors"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                transition={{ delay: index * 0.05 }}
+                className="card-tactile rounded-xl p-5 group"
               >
-                <div className="flex items-center gap-4">
-                  <div
-                    className="w-10 h-10 rounded-lg flex items-center justify-center"
-                    style={{ backgroundColor: `${role.color}20` }}
-                  >
-                    <Shield className="w-5 h-5" style={{ color: role.color }} />
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium">{role.displayName}</span>
-                      {role.isSystem && (
-                        <Badge variant="secondary" className="text-xs gap-1">
-                          <Lock className="w-3 h-3" />
-                          Systeem
-                        </Badge>
-                      )}
+                <div className="flex items-start justify-between">
+                  <div className="flex items-center gap-3">
+                    <div
+                      className="w-12 h-12 rounded-xl flex items-center justify-center"
+                      style={{ backgroundColor: `${role.color}15` }}
+                    >
+                      <Shield className="w-6 h-6" style={{ color: role.color }} />
                     </div>
-                    <p className="text-sm text-muted-foreground">
-                      {role.description || `${role.permissions.length} rechten`}
-                    </p>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold">{role.displayName}</span>
+                        {role.isSystem && (
+                          <span className="pill-glass-slate px-1.5 py-0.5 rounded text-[10px] font-medium flex items-center gap-1">
+                            <Lock className="w-2.5 h-2.5" />
+                            Systeem
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-sm text-muted-foreground line-clamp-1 mt-0.5">
+                        {role.description || `${role.permissions.length} rechten`}
+                      </p>
+                    </div>
                   </div>
-                </div>
-                
-                <div className="flex items-center gap-4">
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Users className="w-4 h-4" />
-                    <span>{role._count.users} gebruikers</span>
-                  </div>
-                  <Badge variant="outline">{role.permissions.length} rechten</Badge>
-                  <div className="flex gap-1">
+                  
+                  <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                     <Button
                       variant="ghost"
                       size="icon"
+                      className="h-8 w-8"
                       onClick={() => handleEditRole(role)}
                     >
                       <Pencil className="w-4 h-4" />
@@ -322,7 +321,7 @@ export function RoleManagementPanel() {
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="text-destructive hover:text-destructive"
+                        className="h-8 w-8 text-destructive hover:text-destructive"
                         onClick={() => {
                           setDeletingRole(role)
                           setIsDeleteOpen(true)
@@ -333,39 +332,61 @@ export function RoleManagementPanel() {
                     )}
                   </div>
                 </div>
-              </div>
+                
+                <div className="flex items-center gap-3 mt-4 pt-4 border-t border-border/50">
+                  <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                    <Users className="w-4 h-4" />
+                    <span>{role._count.users}</span>
+                  </div>
+                  <span 
+                    className="px-2 py-0.5 rounded-full text-xs font-medium"
+                    style={{ 
+                      backgroundColor: `${role.color}15`,
+                      color: role.color 
+                    }}
+                  >
+                    {role.permissions.length} rechten
+                  </span>
+                </div>
+              </motion.div>
             ))}
-          </div>
-        </CardContent>
-      </Card>
+          </AnimatePresence>
+        </div>
+      </div>
 
       {/* Create Role Dialog */}
       <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
         <DialogContent className="max-w-2xl max-h-[90vh]">
           <DialogHeader>
-            <DialogTitle>Nieuwe Rol Aanmaken</DialogTitle>
+            <DialogTitle className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-100 to-emerald-200 dark:from-emerald-900/30 dark:to-emerald-800/30 flex items-center justify-center">
+                <Plus className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+              </div>
+              Nieuwe Rol Aanmaken
+            </DialogTitle>
             <DialogDescription>
-              Maak een nieuwe rol aan en wijs rechten toe.
+              Definieer een nieuwe rol met specifieke rechten.
             </DialogDescription>
           </DialogHeader>
           
           <div className="space-y-4 py-4">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Naam</Label>
+                <Label className="text-sm font-medium">Naam *</Label>
                 <Input
                   placeholder="bijv. Stagiair"
                   value={newRole.displayName}
                   onChange={(e) => setNewRole({ ...newRole, displayName: e.target.value })}
+                  className="h-11 rounded-xl"
                 />
               </div>
               <div className="space-y-2">
-                <Label>Kleur</Label>
+                <Label className="text-sm font-medium">Kleur</Label>
                 <Select
                   value={newRole.color}
                   onValueChange={(v) => setNewRole({ ...newRole, color: v })}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger className="h-11 rounded-xl">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -386,19 +407,20 @@ export function RoleManagementPanel() {
             </div>
             
             <div className="space-y-2">
-              <Label>Beschrijving</Label>
+              <Label className="text-sm font-medium">Beschrijving</Label>
               <Textarea
                 placeholder="Korte beschrijving van deze rol..."
                 value={newRole.description}
                 onChange={(e) => setNewRole({ ...newRole, description: e.target.value })}
+                className="rounded-xl resize-none"
               />
             </div>
             
             <Separator />
             
             <div className="space-y-2">
-              <Label>Rechten</Label>
-              <ScrollArea className="h-[300px] rounded-md border p-4">
+              <Label className="text-sm font-medium">Rechten selecteren</Label>
+              <ScrollArea className="h-[280px] rounded-xl border p-4 bg-muted/30">
                 <PermissionSelector
                   permissions={permissions}
                   selectedPermissions={selectedPermissions}
@@ -410,10 +432,14 @@ export function RoleManagementPanel() {
           </div>
           
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsCreateOpen(false)}>
+            <Button variant="outline" onClick={() => setIsCreateOpen(false)} className="rounded-xl">
               Annuleren
             </Button>
-            <Button onClick={handleCreateRole} disabled={isPending}>
+            <Button 
+              onClick={handleCreateRole} 
+              disabled={isPending}
+              className="rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700"
+            >
               {isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
               Aanmaken
             </Button>
@@ -427,17 +453,17 @@ export function RoleManagementPanel() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <div
-                className="w-6 h-6 rounded flex items-center justify-center"
-                style={{ backgroundColor: `${editingRole?.color}20` }}
+                className="w-8 h-8 rounded-lg flex items-center justify-center"
+                style={{ backgroundColor: `${editingRole?.color}15` }}
               >
                 <Shield className="w-4 h-4" style={{ color: editingRole?.color }} />
               </div>
               {editingRole?.displayName} bewerken
               {editingRole?.isSystem && (
-                <Badge variant="secondary" className="text-xs gap-1">
+                <span className="pill-glass-slate px-2 py-0.5 rounded text-xs font-medium flex items-center gap-1">
                   <Lock className="w-3 h-3" />
                   Systeem
-                </Badge>
+                </span>
               )}
             </DialogTitle>
           </DialogHeader>
@@ -446,19 +472,20 @@ export function RoleManagementPanel() {
             <div className="space-y-4 py-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label>Weergavenaam</Label>
+                  <Label className="text-sm font-medium">Weergavenaam</Label>
                   <Input
                     value={editingRole.displayName}
                     onChange={(e) => setEditingRole({ ...editingRole, displayName: e.target.value })}
+                    className="h-11 rounded-xl"
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label>Kleur</Label>
+                  <Label className="text-sm font-medium">Kleur</Label>
                   <Select
                     value={editingRole.color}
                     onValueChange={(v) => setEditingRole({ ...editingRole, color: v })}
                   >
-                    <SelectTrigger>
+                    <SelectTrigger className="h-11 rounded-xl">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -479,18 +506,24 @@ export function RoleManagementPanel() {
               </div>
               
               <div className="space-y-2">
-                <Label>Beschrijving</Label>
+                <Label className="text-sm font-medium">Beschrijving</Label>
                 <Textarea
                   value={editingRole.description || ""}
                   onChange={(e) => setEditingRole({ ...editingRole, description: e.target.value })}
+                  className="rounded-xl resize-none"
                 />
               </div>
               
               <Separator />
               
               <div className="space-y-2">
-                <Label>Rechten ({selectedPermissions.size} geselecteerd)</Label>
-                <ScrollArea className="h-[300px] rounded-md border p-4">
+                <Label className="text-sm font-medium flex items-center justify-between">
+                  <span>Rechten</span>
+                  <span className="pill-glass-emerald px-2 py-0.5 rounded-full text-xs">
+                    {selectedPermissions.size} geselecteerd
+                  </span>
+                </Label>
+                <ScrollArea className="h-[280px] rounded-xl border p-4 bg-muted/30">
                   <PermissionSelector
                     permissions={permissions}
                     selectedPermissions={selectedPermissions}
@@ -503,10 +536,14 @@ export function RoleManagementPanel() {
           )}
           
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsEditOpen(false)}>
+            <Button variant="outline" onClick={() => setIsEditOpen(false)} className="rounded-xl">
               Annuleren
             </Button>
-            <Button onClick={handleSavePermissions} disabled={isPending}>
+            <Button 
+              onClick={handleSavePermissions} 
+              disabled={isPending}
+              className="rounded-xl"
+            >
               {isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
               Opslaan
             </Button>
@@ -516,25 +553,27 @@ export function RoleManagementPanel() {
 
       {/* Delete Role Dialog */}
       <Dialog open={isDeleteOpen} onOpenChange={setIsDeleteOpen}>
-        <DialogContent>
+        <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle className="text-destructive">Rol Verwijderen</DialogTitle>
+            <DialogTitle className="text-destructive flex items-center gap-2">
+              <Trash2 className="w-5 h-5" />
+              Rol Verwijderen
+            </DialogTitle>
             <DialogDescription>
-              Weet je zeker dat je de rol &quot;{deletingRole?.displayName}&quot; wilt verwijderen?
+              Weet je zeker dat je &quot;{deletingRole?.displayName}&quot; wilt verwijderen?
             </DialogDescription>
           </DialogHeader>
           
           {deletingRole && deletingRole._count.users > 0 && (
             <div className="py-4 space-y-4">
-              <div className="text-sm bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-300 p-3 rounded-lg border border-amber-200 dark:border-amber-800">
-                <strong>Let op:</strong> Er zijn {deletingRole._count.users} gebruiker(s) met deze rol.
-                Selecteer een rol om ze naar toe te verplaatsen.
+              <div className="text-sm bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-300 p-4 rounded-xl border border-amber-200 dark:border-amber-800">
+                <strong>Let op:</strong> {deletingRole._count.users} gebruiker(s) hebben deze rol.
               </div>
               
               <div className="space-y-2">
-                <Label>Verplaats gebruikers naar</Label>
+                <Label className="text-sm font-medium">Verplaats naar</Label>
                 <Select value={reassignRoleId} onValueChange={setReassignRoleId}>
-                  <SelectTrigger>
+                  <SelectTrigger className="h-11 rounded-xl">
                     <SelectValue placeholder="Selecteer rol..." />
                   </SelectTrigger>
                   <SelectContent>
@@ -542,7 +581,13 @@ export function RoleManagementPanel() {
                       .filter(r => r.id !== deletingRole.id)
                       .map(r => (
                         <SelectItem key={r.id} value={r.id}>
-                          {r.displayName}
+                          <div className="flex items-center gap-2">
+                            <div
+                              className="w-3 h-3 rounded-full"
+                              style={{ backgroundColor: r.color }}
+                            />
+                            {r.displayName}
+                          </div>
                         </SelectItem>
                       ))
                     }
@@ -553,13 +598,13 @@ export function RoleManagementPanel() {
           )}
           
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsDeleteOpen(false)}>
+            <Button variant="outline" onClick={() => setIsDeleteOpen(false)} className="rounded-xl">
               Annuleren
             </Button>
             <Button
-              variant="destructive"
               onClick={handleDeleteRole}
               disabled={isPending || (deletingRole?._count.users ?? 0) > 0 && !reassignRoleId}
+              className="rounded-xl bg-gradient-to-r from-rose-500 to-rose-600 hover:from-rose-600 hover:to-rose-700"
             >
               {isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
               Verwijderen
@@ -571,7 +616,7 @@ export function RoleManagementPanel() {
   )
 }
 
-// Permission selector component
+// Permission selector component with cards
 function PermissionSelector({
   permissions,
   selectedPermissions,
@@ -584,34 +629,49 @@ function PermissionSelector({
   onToggleCategory: (category: string, allSelected: boolean) => void
 }) {
   return (
-    <Accordion type="multiple" defaultValue={Object.keys(permissions)} className="w-full">
+    <Accordion type="multiple" defaultValue={Object.keys(permissions)} className="w-full space-y-2">
       {Object.entries(permissions).map(([category, perms]) => {
         const selectedCount = perms.filter(p => selectedPermissions.has(p.id)).length
         const allSelected = selectedCount === perms.length
         const someSelected = selectedCount > 0 && selectedCount < perms.length
         
         return (
-          <AccordionItem key={category} value={category}>
-            <AccordionTrigger className="hover:no-underline">
+          <AccordionItem 
+            key={category} 
+            value={category}
+            className="border rounded-lg px-3 data-[state=open]:bg-muted/30"
+          >
+            <AccordionTrigger className="hover:no-underline py-3">
               <div className="flex items-center gap-3">
                 <Checkbox
                   checked={allSelected}
-                  className={someSelected ? "data-[state=checked]:bg-primary/50" : ""}
+                  className={cn(someSelected && "data-[state=checked]:bg-primary/50")}
                   onCheckedChange={() => onToggleCategory(category, allSelected)}
                   onClick={(e) => e.stopPropagation()}
                 />
                 <span className="font-medium">{CATEGORY_NAMES[category] || category}</span>
-                <Badge variant="secondary" className="text-xs">
+                <span className={cn(
+                  "px-2 py-0.5 rounded-full text-[10px] font-medium",
+                  allSelected ? "pill-glass-emerald" : "pill-glass-slate"
+                )}>
                   {selectedCount}/{perms.length}
-                </Badge>
+                </span>
               </div>
             </AccordionTrigger>
             <AccordionContent>
-              <div className="space-y-2 pl-8">
+              <div className="grid grid-cols-1 gap-2 pb-3 pl-8">
                 {perms.map(perm => (
-                  <div
+                  <motion.div
                     key={perm.id}
-                    className="flex items-center gap-3 py-1"
+                    whileHover={{ scale: 1.01 }}
+                    whileTap={{ scale: 0.99 }}
+                    onClick={() => onToggle(perm.id)}
+                    className={cn(
+                      "flex items-center gap-3 p-2 rounded-lg cursor-pointer transition-colors",
+                      selectedPermissions.has(perm.id) 
+                        ? "bg-emerald-50 dark:bg-emerald-950/30" 
+                        : "hover:bg-muted/50"
+                    )}
                   >
                     <Checkbox
                       id={perm.id}
@@ -624,17 +684,17 @@ function PermissionSelector({
                     >
                       <span className="font-medium">{perm.name}</span>
                       {perm.description && (
-                        <span className="text-muted-foreground ml-2">
-                          - {perm.description}
+                        <span className="text-muted-foreground ml-1.5 text-xs">
+                          {perm.description}
                         </span>
                       )}
                     </label>
                     {selectedPermissions.has(perm.id) ? (
-                      <Check className="w-4 h-4 text-green-500" />
+                      <Check className="w-4 h-4 text-emerald-500" />
                     ) : (
-                      <X className="w-4 h-4 text-muted-foreground/30" />
+                      <X className="w-4 h-4 text-muted-foreground/20" />
                     )}
-                  </div>
+                  </motion.div>
                 ))}
               </div>
             </AccordionContent>

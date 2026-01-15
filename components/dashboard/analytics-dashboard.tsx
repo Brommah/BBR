@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { motion } from "framer-motion"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Badge } from "@/components/ui/badge"
@@ -20,30 +21,25 @@ import {
   TrendingDown,
   Clock,
   Euro,
-  Users,
   Briefcase,
-  ArrowRight,
-  CheckCircle2,
-  Timer,
   Target,
   Zap,
+  Timer,
 } from "lucide-react"
-import { getDashboardAnalytics, type DashboardAnalytics, type EmployeeHoursData } from "@/lib/analytics-actions"
+import { getDashboardAnalytics, type DashboardAnalytics } from "@/lib/analytics-actions"
 import { cn } from "@/lib/utils"
 
-// Status config with colors and labels
+// Status config with colors
 const STATUS_CONFIG = {
-  Nieuw: { color: "#3b82f6", label: "Nieuw", bg: "bg-blue-500" },
-  Calculatie: { color: "#f59e0b", label: "Calculatie", bg: "bg-amber-500" },
-  OfferteVerzonden: { color: "#8b5cf6", label: "Offerte", bg: "bg-violet-500" },
-  Opdracht: { color: "#10b981", label: "Opdracht", bg: "bg-emerald-500" },
+  Nieuw: { color: "#3b82f6", label: "Nieuw" },
+  Calculatie: { color: "#f59e0b", label: "Calculatie" },
+  OfferteVerzonden: { color: "#8b5cf6", label: "Offerte" },
+  Opdracht: { color: "#10b981", label: "Opdracht" },
 }
 
-// Format currency compactly
+// Format currency
 const formatCurrency = (value: number) => {
-  if (value >= 1000) {
-    return `€${(value / 1000).toFixed(1)}k`
-  }
+  if (value >= 1000) return `€${(value / 1000).toFixed(1)}k`
   return `€${value}`
 }
 
@@ -54,6 +50,20 @@ const formatCurrencyFull = (value: number) => {
     minimumFractionDigits: 0,
     maximumFractionDigits: 0,
   }).format(value)
+}
+
+// Animation variants
+const cardVariants = {
+  hidden: { opacity: 0, y: 20 },
+  visible: (i: number) => ({
+    opacity: 1,
+    y: 0,
+    transition: {
+      delay: i * 0.1,
+      duration: 0.4,
+      ease: "easeOut" as const,
+    },
+  }),
 }
 
 export function AnalyticsDashboard() {
@@ -77,20 +87,23 @@ export function AnalyticsDashboard() {
   if (isLoading) {
     return (
       <div className="space-y-6">
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Row 1: 4 KPIs */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-5">
           {[1, 2, 3, 4].map(i => (
-            <Card key={i} className="bg-gradient-to-br from-muted/50 to-muted/30">
-              <CardContent className="p-5">
-                <Skeleton className="h-4 w-20 mb-3" />
-                <Skeleton className="h-8 w-28 mb-2" />
-                <Skeleton className="h-3 w-24" />
-              </CardContent>
-            </Card>
+            <div key={i} className="card-tactile rounded-xl p-5">
+              <Skeleton className="h-4 w-24 mb-3" />
+              <Skeleton className="h-10 w-32 mb-2" />
+              <Skeleton className="h-3 w-20" />
+            </div>
           ))}
         </div>
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <Card className="lg:col-span-2"><CardContent className="p-6"><Skeleton className="h-[280px]" /></CardContent></Card>
-          <Card><CardContent className="p-6"><Skeleton className="h-[280px]" /></CardContent></Card>
+        {/* Row 2: 3 Charts */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+          {[1, 2, 3].map(i => (
+            <div key={i} className="card-tactile rounded-xl p-6">
+              <Skeleton className="h-[200px]" />
+            </div>
+          ))}
         </div>
       </div>
     )
@@ -104,9 +117,8 @@ export function AnalyticsDashboard() {
     )
   }
 
-  const { pipelineData, pipelineDistribution, conversionTime, revenueData, employeeHours, totals } = analytics
+  const { pipelineData, pipelineDistribution, conversionTime, revenueData, totals } = analytics
   
-  // Use pipeline distribution from server (current state of all leads)
   const currentPipelineDistribution = [
     { name: "Nieuw", value: pipelineDistribution.Nieuw, color: STATUS_CONFIG.Nieuw.color },
     { name: "Calculatie", value: pipelineDistribution.Calculatie, color: STATUS_CONFIG.Calculatie.color },
@@ -114,353 +126,291 @@ export function AnalyticsDashboard() {
     { name: "Opdracht", value: pipelineDistribution.Opdracht, color: STATUS_CONFIG.Opdracht.color },
   ].filter(d => d.value > 0)
   
-  // Revenue trend (compare last 2 weeks)
   const lastWeekRevenue = revenueData[revenueData.length - 1]?.revenue || 0
   const prevWeekRevenue = revenueData[revenueData.length - 2]?.revenue || 0
   const revenueTrend = prevWeekRevenue > 0 ? ((lastWeekRevenue - prevWeekRevenue) / prevWeekRevenue) * 100 : 0
-  
-  // Total recent revenue
   const recentTotalRevenue = revenueData.reduce((sum, w) => sum + w.revenue, 0)
 
   return (
     <div className="space-y-6">
-      {/* Hero KPIs - Large, impactful numbers */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Active Projects */}
-        <Card className="relative overflow-hidden bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800 border-slate-200 dark:border-slate-700">
-          <CardContent className="p-5">
-            <div className="flex items-start justify-between">
+      {/* Row 1: 4 KPIs */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-5">
+        {/* Revenue */}
+        <motion.div custom={0} initial="hidden" animate="visible" variants={cardVariants}>
+          <div className="card-tactile rounded-xl p-5 h-full relative overflow-hidden group">
+            <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/5 via-transparent to-violet-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+            <div className="relative flex items-start justify-between">
               <div>
-                <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Actieve Projecten</p>
-                <p className="text-4xl font-bold text-slate-900 dark:text-slate-100 mt-1">{totals.totalLeads}</p>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">in pipeline</p>
-              </div>
-              <div className="w-12 h-12 rounded-2xl bg-slate-200 dark:bg-slate-700 flex items-center justify-center">
-                <Briefcase className="w-6 h-6 text-slate-600 dark:text-slate-300" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Recent Revenue */}
-        <Card className="relative overflow-hidden bg-gradient-to-br from-emerald-50 to-emerald-100 dark:from-emerald-950 dark:to-emerald-900 border-emerald-200 dark:border-emerald-800">
-          <CardContent className="p-5">
-            <div className="flex items-start justify-between">
-              <div>
-                <p className="text-sm font-medium text-emerald-600 dark:text-emerald-400">Omzet (4 wkn)</p>
-                <p className="text-4xl font-bold text-emerald-700 dark:text-emerald-300 mt-1">
+                <p className="text-micro mb-1">Omzet 3 weken</p>
+                <p className="text-3xl font-bold tracking-tight text-foreground">
                   {formatCurrencyFull(recentTotalRevenue)}
                 </p>
-                <div className="flex items-center gap-1 mt-1">
-                  {revenueTrend > 0 ? (
-                    <TrendingUp className="w-3 h-3 text-emerald-600" />
-                  ) : revenueTrend < 0 ? (
-                    <TrendingDown className="w-3 h-3 text-red-500" />
-                  ) : null}
-                  <span className={cn(
-                    "text-xs",
-                    revenueTrend > 0 ? "text-emerald-600" : revenueTrend < 0 ? "text-red-500" : "text-emerald-500"
-                  )}>
-                    {revenueTrend !== 0 ? `${revenueTrend > 0 ? '+' : ''}${revenueTrend.toFixed(0)}% vs vorige week` : 'stabiel'}
-                  </span>
-                </div>
-              </div>
-              <div className="w-12 h-12 rounded-2xl bg-emerald-200 dark:bg-emerald-800 flex items-center justify-center">
-                <Euro className="w-6 h-6 text-emerald-600 dark:text-emerald-300" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Conversion Rate */}
-        <Card className="relative overflow-hidden bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-950 dark:to-blue-900 border-blue-200 dark:border-blue-800">
-          <CardContent className="p-5">
-            <div className="flex items-start justify-between">
-              <div>
-                <p className="text-sm font-medium text-blue-600 dark:text-blue-400">Conversie</p>
-                <p className="text-4xl font-bold text-blue-700 dark:text-blue-300 mt-1">{totals.conversionRate}%</p>
-                <p className="text-xs text-blue-500 dark:text-blue-400 mt-1">lead → opdracht</p>
-              </div>
-              <div className="w-12 h-12 rounded-2xl bg-blue-200 dark:bg-blue-800 flex items-center justify-center">
-                <Target className="w-6 h-6 text-blue-600 dark:text-blue-300" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Average Lead Time */}
-        <Card className="relative overflow-hidden bg-gradient-to-br from-amber-50 to-amber-100 dark:from-amber-950 dark:to-amber-900 border-amber-200 dark:border-amber-800">
-          <CardContent className="p-5">
-            <div className="flex items-start justify-between">
-              <div>
-                <p className="text-sm font-medium text-amber-600 dark:text-amber-400">Doorlooptijd</p>
-                <p className="text-4xl font-bold text-amber-700 dark:text-amber-300 mt-1">
-                  {conversionTime.current}<span className="text-xl font-medium ml-1">d</span>
-                </p>
-                <div className="flex items-center gap-1 mt-1">
-                  {conversionTime.trend < 0 ? (
-                    <>
-                      <Zap className="w-3 h-3 text-emerald-500" />
-                      <span className="text-xs text-emerald-600">{Math.abs(conversionTime.trend).toFixed(0)}% sneller</span>
-                    </>
-                  ) : conversionTime.trend > 0 ? (
-                    <>
-                      <Timer className="w-3 h-3 text-red-500" />
-                      <span className="text-xs text-red-500">{conversionTime.trend.toFixed(0)}% trager</span>
-                    </>
-                  ) : (
-                    <span className="text-xs text-amber-500">gemiddeld</span>
+                <div className="flex items-center gap-2 mt-2">
+                  {revenueTrend !== 0 && (
+                    <span className={cn(
+                      "pill-glass-emerald px-2 py-0.5 rounded-full text-xs font-medium flex items-center gap-1",
+                      revenueTrend < 0 && "pill-glass-rose"
+                    )}>
+                      {revenueTrend > 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
+                      {revenueTrend > 0 ? '+' : ''}{revenueTrend.toFixed(0)}%
+                    </span>
                   )}
                 </div>
               </div>
-              <div className="w-12 h-12 rounded-2xl bg-amber-200 dark:bg-amber-800 flex items-center justify-center">
-                <Clock className="w-6 h-6 text-amber-600 dark:text-amber-300" />
+              <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center shadow-lg shadow-indigo-500/25">
+                <Euro className="w-5 h-5 text-white" />
               </div>
             </div>
-          </CardContent>
-        </Card>
-      </div>
+          </div>
+        </motion.div>
 
-      {/* Main Content Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Pipeline Distribution - Donut Chart */}
-        <Card className="lg:col-span-1">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base font-semibold">Pipeline Verdeling</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {currentPipelineDistribution.length === 0 ? (
-              <div className="h-[200px] flex items-center justify-center text-muted-foreground">
-                <div className="text-center">
-                  <Briefcase className="w-10 h-10 mx-auto mb-2 opacity-20" />
-                  <p className="text-sm">Geen projecten</p>
+        {/* Active Projects */}
+        <motion.div custom={1} initial="hidden" animate="visible" variants={cardVariants}>
+          <div className="card-tactile rounded-xl p-5 h-full">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-micro mb-1">Actieve Projecten</p>
+                <p className="text-3xl font-bold tracking-tight">{totals.totalLeads}</p>
+                <p className="text-xs text-muted-foreground mt-2">in pipeline</p>
+              </div>
+              <div className="w-11 h-11 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center">
+                <Briefcase className="w-5 h-5 text-slate-600 dark:text-slate-400" />
+              </div>
+            </div>
+          </div>
+        </motion.div>
+
+        {/* Conversion Rate */}
+        <motion.div custom={2} initial="hidden" animate="visible" variants={cardVariants}>
+          <div className="card-tactile rounded-xl p-5 h-full">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-micro mb-1">Conversie</p>
+                <p className="text-3xl font-bold tracking-tight">{totals.conversionRate}%</p>
+                <p className="text-xs text-muted-foreground mt-2">lead → opdracht</p>
+              </div>
+              <div className="w-11 h-11 rounded-xl bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center">
+                <Target className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+              </div>
+            </div>
+          </div>
+        </motion.div>
+
+        {/* Doorlooptijd */}
+        <motion.div custom={3} initial="hidden" animate="visible" variants={cardVariants}>
+          <div className="card-tactile rounded-xl p-5 h-full">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-micro mb-1">Doorlooptijd</p>
+                <p className="text-3xl font-bold tracking-tight">
+                  {conversionTime.current}<span className="text-lg font-medium ml-0.5">d</span>
+                </p>
+                <div className="flex items-center gap-1 mt-2">
+                  {conversionTime.trend < 0 ? (
+                    <span className="text-xs text-emerald-600 flex items-center gap-0.5">
+                      <Zap className="w-3 h-3" />{Math.abs(conversionTime.trend).toFixed(0)}% sneller
+                    </span>
+                  ) : conversionTime.trend > 0 ? (
+                    <span className="text-xs text-amber-600 flex items-center gap-0.5">
+                      <Timer className="w-3 h-3" />{conversionTime.trend.toFixed(0)}% trager
+                    </span>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">gemiddeld</span>
+                  )}
                 </div>
               </div>
-            ) : (
-              <div className="space-y-4">
-                {/* Stacked horizontal bar */}
-                <div className="h-8 rounded-lg overflow-hidden flex">
-                  {currentPipelineDistribution.map((entry) => {
-                    const total = currentPipelineDistribution.reduce((sum, e) => sum + e.value, 0)
-                    const percentage = total > 0 ? (entry.value / total) * 100 : 0
-                    return (
-                      <div
-                        key={entry.name}
-                        className="h-full transition-all duration-500 first:rounded-l-lg last:rounded-r-lg"
-                        style={{ 
-                          width: `${percentage}%`, 
-                          backgroundColor: entry.color,
-                          minWidth: percentage > 0 ? '8px' : '0'
-                        }}
-                        title={`${entry.name}: ${entry.value} (${percentage.toFixed(0)}%)`}
-                      />
-                    )
-                  })}
+              <div className="w-11 h-11 rounded-xl bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
+                <Clock className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+              </div>
+            </div>
+          </div>
+        </motion.div>
+      </div>
+
+      {/* Row 2: 3 Charts */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+        {/* Revenue Trend - Area Chart */}
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.3, duration: 0.4 }}
+        >
+          <div className="card-tactile rounded-xl overflow-hidden h-full">
+            <CardHeader className="pb-2 pt-5 px-5">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-sm font-semibold">Omzet Trend</CardTitle>
+                <Badge variant="outline" className="text-[10px] font-normal px-2 py-0.5">3 weken</Badge>
+              </div>
+            </CardHeader>
+            <CardContent className="px-5 pb-5">
+              <div className="h-[180px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={revenueData}>
+                    <defs>
+                      <linearGradient id="meshGradient" x1="0" y1="0" x2="1" y2="1">
+                        <stop offset="0%" stopColor="#6366f1" stopOpacity={0.4} />
+                        <stop offset="50%" stopColor="#8b5cf6" stopOpacity={0.2} />
+                        <stop offset="100%" stopColor="#a855f7" stopOpacity={0.05} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
+                    <XAxis 
+                      dataKey="weekLabel" 
+                      tick={{ fontSize: 10, fill: '#64748b' }}
+                      tickLine={false}
+                      axisLine={false}
+                    />
+                    <YAxis 
+                      tick={{ fontSize: 10, fill: '#64748b' }}
+                      tickLine={false}
+                      axisLine={false}
+                      tickFormatter={formatCurrency}
+                      width={45}
+                    />
+                    <Tooltip 
+                      formatter={(value) => [formatCurrencyFull(Number(value)), 'Omzet']}
+                      labelStyle={{ color: '#64748b', fontSize: '12px' }}
+                      contentStyle={{ 
+                        backgroundColor: 'rgba(255,255,255,0.95)', 
+                        backdropFilter: 'blur(8px)',
+                        border: '1px solid #e2e8f0',
+                        borderRadius: '10px',
+                        boxShadow: '0 10px 40px -10px rgba(0,0,0,0.15)',
+                        fontSize: '12px',
+                      }}
+                    />
+                    <Area 
+                      type="monotone" 
+                      dataKey="revenue" 
+                      stroke="#6366f1" 
+                      strokeWidth={2.5}
+                      fill="url(#meshGradient)"
+                      isAnimationActive={true}
+                      animationDuration={1000}
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            </CardContent>
+          </div>
+        </motion.div>
+
+        {/* Pipeline Activity */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.4, duration: 0.4 }}
+        >
+          <div className="card-tactile rounded-xl h-full">
+            <CardHeader className="pb-2 pt-5 px-5">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-sm font-semibold">Pipeline Activiteit</CardTitle>
+                <Badge variant="outline" className="text-[10px] font-normal px-2 py-0.5">3 weken</Badge>
+              </div>
+            </CardHeader>
+            <CardContent className="px-5 pb-5">
+              <div className="h-[180px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={pipelineData} barCategoryGap="20%">
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
+                    <XAxis 
+                      dataKey="weekLabel" 
+                      tick={{ fontSize: 10, fill: '#64748b' }}
+                      tickLine={false}
+                      axisLine={false}
+                    />
+                    <YAxis 
+                      tick={{ fontSize: 10, fill: '#64748b' }}
+                      tickLine={false}
+                      axisLine={false}
+                      allowDecimals={false}
+                      width={20}
+                    />
+                    <Tooltip 
+                      contentStyle={{ 
+                        backgroundColor: 'rgba(255,255,255,0.95)',
+                        backdropFilter: 'blur(8px)',
+                        border: '1px solid #e2e8f0',
+                        borderRadius: '10px',
+                        boxShadow: '0 10px 40px -10px rgba(0,0,0,0.15)',
+                        fontSize: '12px',
+                      }}
+                    />
+                    <Bar dataKey="Nieuw" stackId="a" fill={STATUS_CONFIG.Nieuw.color} isAnimationActive={true} />
+                    <Bar dataKey="Calculatie" stackId="a" fill={STATUS_CONFIG.Calculatie.color} isAnimationActive={true} />
+                    <Bar dataKey="OfferteVerzonden" stackId="a" fill={STATUS_CONFIG.OfferteVerzonden.color} isAnimationActive={true} />
+                    <Bar dataKey="Opdracht" stackId="a" fill={STATUS_CONFIG.Opdracht.color} radius={[4, 4, 0, 0]} isAnimationActive={true} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </CardContent>
+          </div>
+        </motion.div>
+
+        {/* Pipeline Distribution */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.5, duration: 0.4 }}
+        >
+          <div className="card-tactile rounded-xl h-full">
+            <CardHeader className="pb-2 pt-5 px-5">
+              <CardTitle className="text-sm font-semibold">Pipeline Verdeling</CardTitle>
+            </CardHeader>
+            <CardContent className="px-5 pb-5">
+              {currentPipelineDistribution.length === 0 ? (
+                <div className="h-[180px] flex items-center justify-center text-muted-foreground">
+                  <div className="text-center">
+                    <Briefcase className="w-10 h-10 mx-auto mb-2 opacity-20" />
+                    <p className="text-sm">Geen projecten</p>
+                  </div>
                 </div>
-                
-                {/* Detailed breakdown */}
-                <div className="space-y-3">
-                  {currentPipelineDistribution.map((entry) => {
-                    const total = currentPipelineDistribution.reduce((sum, e) => sum + e.value, 0)
-                    const percentage = total > 0 ? (entry.value / total) * 100 : 0
-                    return (
-                      <div key={entry.name} className="flex items-center gap-3">
-                        <div 
-                          className="w-3 h-3 rounded-full shrink-0" 
-                          style={{ backgroundColor: entry.color }} 
+              ) : (
+                <div className="space-y-4">
+                  {/* Stacked bar */}
+                  <div className="h-3 rounded-full overflow-hidden flex bg-slate-100 dark:bg-slate-800">
+                    {currentPipelineDistribution.map((entry, i) => {
+                      const total = currentPipelineDistribution.reduce((sum, e) => sum + e.value, 0)
+                      const percentage = total > 0 ? (entry.value / total) * 100 : 0
+                      return (
+                        <motion.div
+                          key={entry.name}
+                          initial={{ width: 0 }}
+                          animate={{ width: `${percentage}%` }}
+                          transition={{ delay: 0.5 + i * 0.1, duration: 0.5 }}
+                          className="h-full first:rounded-l-full last:rounded-r-full"
+                          style={{ backgroundColor: entry.color, minWidth: percentage > 0 ? '4px' : '0' }}
                         />
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-baseline justify-between gap-2">
-                            <span className="text-sm font-medium truncate">{entry.name}</span>
-                            <span className="text-sm tabular-nums text-muted-foreground shrink-0">
-                              {entry.value} <span className="text-xs">({percentage.toFixed(0)}%)</span>
+                      )
+                    })}
+                  </div>
+                  
+                  {/* Legend */}
+                  <div className="space-y-2.5">
+                    {currentPipelineDistribution.map((entry) => {
+                      const total = currentPipelineDistribution.reduce((sum, e) => sum + e.value, 0)
+                      const percentage = total > 0 ? (entry.value / total) * 100 : 0
+                      return (
+                        <div key={entry.name} className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: entry.color }} />
+                            <span className="text-sm text-muted-foreground">{entry.name}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-semibold tabular-nums">{entry.value}</span>
+                            <span className="text-xs text-muted-foreground/60 tabular-nums w-10 text-right">
+                              {percentage.toFixed(0)}%
                             </span>
                           </div>
                         </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Revenue Trend - Area Chart */}
-        <Card className="lg:col-span-2">
-          <CardHeader className="pb-2">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-base font-semibold">Omzet Trend</CardTitle>
-              <Badge variant="outline" className="text-xs font-normal">Laatste 4 weken</Badge>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="h-[220px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={revenueData}>
-                  <defs>
-                    <linearGradient id="revenueGradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
-                      <stop offset="95%" stopColor="#10b981" stopOpacity={0.02} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted/50" vertical={false} />
-                  <XAxis 
-                    dataKey="weekLabel" 
-                    tick={{ fontSize: 11 }}
-                    tickLine={false}
-                    axisLine={false}
-                  />
-                  <YAxis 
-                    tick={{ fontSize: 11 }}
-                    tickLine={false}
-                    axisLine={false}
-                    tickFormatter={(value) => formatCurrency(value)}
-                    width={50}
-                  />
-                  <Tooltip 
-                    formatter={(value) => [formatCurrencyFull(Number(value)), 'Omzet']}
-                    labelStyle={{ color: '#64748b', fontSize: '12px' }}
-                    contentStyle={{ 
-                      backgroundColor: 'white', 
-                      border: '1px solid #e2e8f0',
-                      borderRadius: '8px',
-                      boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
-                      fontSize: '12px',
-                    }}
-                  />
-                  <Area 
-                    type="monotone" 
-                    dataKey="revenue" 
-                    stroke="#10b981" 
-                    strokeWidth={2.5}
-                    fill="url(#revenueGradient)" 
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Bottom Row */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Pipeline Activity - Bar Chart */}
-        <Card>
-          <CardHeader className="pb-2">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-base font-semibold">Pipeline Activiteit</CardTitle>
-              <div className="flex items-center gap-2">
-                {Object.entries(STATUS_CONFIG).map(([key, config]) => (
-                  <div key={key} className="flex items-center gap-1">
-                    <div className="w-2 h-2 rounded-sm" style={{ backgroundColor: config.color }} />
-                    <span className="text-[10px] text-muted-foreground">{config.label}</span>
+                      )
+                    })}
                   </div>
-                ))}
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="h-[180px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={pipelineData} barCategoryGap="25%">
-                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted/50" vertical={false} />
-                  <XAxis 
-                    dataKey="weekLabel" 
-                    tick={{ fontSize: 11 }}
-                    tickLine={false}
-                    axisLine={false}
-                  />
-                  <YAxis 
-                    tick={{ fontSize: 11 }}
-                    tickLine={false}
-                    axisLine={false}
-                    allowDecimals={false}
-                    width={25}
-                  />
-                  <Tooltip 
-                    contentStyle={{ 
-                      backgroundColor: 'white', 
-                      border: '1px solid #e2e8f0',
-                      borderRadius: '8px',
-                      boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
-                      fontSize: '12px',
-                    }}
-                  />
-                  <Bar dataKey="Nieuw" stackId="a" fill={STATUS_CONFIG.Nieuw.color} />
-                  <Bar dataKey="Calculatie" stackId="a" fill={STATUS_CONFIG.Calculatie.color} />
-                  <Bar dataKey="OfferteVerzonden" stackId="a" fill={STATUS_CONFIG.OfferteVerzonden.color} />
-                  <Bar dataKey="Opdracht" stackId="a" fill={STATUS_CONFIG.Opdracht.color} radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Team Performance */}
-        <Card>
-          <CardHeader className="pb-2">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-base font-semibold">Team Uren</CardTitle>
-              <Badge variant="outline" className="text-xs font-normal">
-                {totals.totalHours} uur totaal
-              </Badge>
-            </div>
-          </CardHeader>
-          <CardContent>
-            {employeeHours.length === 0 ? (
-              <div className="h-[180px] flex items-center justify-center text-muted-foreground">
-                <div className="text-center">
-                  <Users className="w-10 h-10 mx-auto mb-2 opacity-20" />
-                  <p className="text-sm">Nog geen uurregistraties</p>
                 </div>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {employeeHours.slice(0, 5).map((employee, index) => {
-                  const maxHours = Math.max(...employeeHours.map(e => e.hours))
-                  const percentage = maxHours > 0 ? (employee.hours / maxHours) * 100 : 0
-                  
-                  return (
-                    <div key={index} className="space-y-1.5">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <div 
-                            className="w-2 h-2 rounded-full" 
-                            style={{ backgroundColor: employee.color }} 
-                          />
-                          <span className="text-sm font-medium truncate max-w-[150px]">
-                            {employee.name}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm tabular-nums font-semibold">{employee.hours}u</span>
-                          <span className="text-xs text-muted-foreground">
-                            ({employee.projects} {employee.projects === 1 ? 'project' : 'projecten'})
-                          </span>
-                        </div>
-                      </div>
-                      <div className="h-2 bg-muted rounded-full overflow-hidden">
-                        <div 
-                          className="h-full rounded-full transition-all duration-500" 
-                          style={{ 
-                            width: `${percentage}%`,
-                            backgroundColor: employee.color 
-                          }} 
-                        />
-                      </div>
-                    </div>
-                  )
-                })}
-                {employeeHours.length > 5 && (
-                  <p className="text-xs text-muted-foreground text-center pt-1">
-                    +{employeeHours.length - 5} meer teamleden
-                  </p>
-                )}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+              )}
+            </CardContent>
+          </div>
+        </motion.div>
       </div>
     </div>
   )

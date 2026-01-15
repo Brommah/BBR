@@ -1,9 +1,9 @@
 "use client"
 
 import { useDraggable } from "@dnd-kit/core"
+import { motion } from "framer-motion"
 import { Lead } from "@/lib/store"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar"
 import { MapPin, Clock, AlertCircle, CheckCircle2, Calculator, PenTool, Briefcase } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -27,75 +27,56 @@ function getAgeStatus(hours: number): AgeStatus {
 }
 
 const AGE_CONFIG: Record<AgeStatus, { 
-  border: string
-  indicator: string
-  label: string
   tooltip: string
-  icon?: typeof AlertCircle
 }> = {
-  fresh: {
-    border: "border-border",
-    indicator: "bg-emerald-500",
-    label: "Nieuw",
-    tooltip: "Lead is < 24 uur oud"
-  },
-  day: {
-    border: "border-amber-400 dark:border-amber-500",
-    indicator: "bg-amber-500",
-    label: "24-48u",
-    tooltip: "Lead wacht 24-48 uur - plan actie"
-  },
-  stale: {
-    border: "border-orange-400 dark:border-orange-500",
-    indicator: "bg-orange-500",
-    label: "48-72u",
-    tooltip: "Lead wacht 48-72 uur - neem contact op"
-  },
-  critical: {
-    border: "border-red-500 dark:border-red-500",
-    indicator: "bg-red-500",
-    label: "> 72u",
-    tooltip: "Lead wacht > 72 uur - urgente actie vereist!",
-    icon: AlertCircle
-  }
+  fresh: { tooltip: "Lead is < 24 uur oud" },
+  day: { tooltip: "Lead wacht 24-48 uur - plan actie" },
+  stale: { tooltip: "Lead wacht 48-72 uur - neem contact op" },
+  critical: { tooltip: "Lead wacht > 72 uur - urgente actie vereist!" }
 }
 
-// Status-based styling - colors match the state, not age-based urgency
+// Status-based styling with glow colors
 const STATUS_CONFIG: Record<string, {
-  border: string
   indicator: string
+  glow: string
+  pillClass: string
   showAge: boolean
-  ageUrgency: boolean // Whether age triggers urgency colors
+  ageUrgency: boolean
 }> = {
   "Nieuw": {
-    border: "border-blue-400 dark:border-blue-500",
     indicator: "bg-blue-500",
+    glow: "shadow-[inset_4px_0_8px_-4px_rgba(59,130,246,0.4)]",
+    pillClass: "pill-glass-blue",
     showAge: true,
-    ageUrgency: true // New leads need quick attention
+    ageUrgency: true
   },
   "Calculatie": {
-    border: "border-amber-400 dark:border-amber-500",
     indicator: "bg-amber-500",
+    glow: "shadow-[inset_4px_0_8px_-4px_rgba(245,158,11,0.4)]",
+    pillClass: "pill-glass-amber",
     showAge: true,
-    ageUrgency: true // In progress - track how long engineer is working
+    ageUrgency: true
   },
   "Offerte Verzonden": {
-    border: "border-purple-400 dark:border-purple-500",
-    indicator: "bg-purple-500",
+    indicator: "bg-violet-500",
+    glow: "shadow-[inset_4px_0_8px_-4px_rgba(139,92,246,0.4)]",
+    pillClass: "pill-glass-violet",
     showAge: true,
-    ageUrgency: false // Waiting on client - can't rush them
+    ageUrgency: false
   },
   "Opdracht": {
-    border: "border-emerald-500 dark:border-emerald-400",
     indicator: "bg-emerald-500",
+    glow: "shadow-[inset_4px_0_8px_-4px_rgba(16,185,129,0.4)]",
+    pillClass: "pill-glass-emerald",
     showAge: true,
-    ageUrgency: false // Won - success state
+    ageUrgency: false
   },
   "Archief": {
-    border: "border-slate-300 dark:border-slate-600",
     indicator: "bg-slate-400",
+    glow: "shadow-[inset_4px_0_8px_-4px_rgba(148,163,184,0.3)]",
+    pillClass: "pill-glass-slate",
     showAge: true,
-    ageUrgency: false // Completed - no urgency
+    ageUrgency: false
   }
 }
 
@@ -107,16 +88,14 @@ export function LeadCard({ lead }: LeadCardProps) {
   })
   
   const [hoursSince, setHoursSince] = useState(0)
-  // Track if a drag actually happened (mouse moved after mousedown)
   const hasDraggedRef = useRef(false)
   const mouseDownPosRef = useRef<{ x: number; y: number } | null>(null)
   
-  // Find team members from users list
+  // Find team members
   const projectleiderUser = users.find(u => u.name === lead.assignedProjectleider)
   const rekenaarUser = users.find(u => u.name === lead.assignedRekenaar)
   const tekenaarUser = users.find(u => u.name === lead.assignedTekenaar)
   
-  // Helper to get user initials
   const getInitials = (name: string) => {
     const parts = name.split(' ')
     if (parts.length > 1) {
@@ -127,11 +106,9 @@ export function LeadCard({ lead }: LeadCardProps) {
 
   useEffect(() => {
     const hours = (Date.now() - new Date(lead.createdAt).getTime()) / (1000 * 60 * 60)
-    const t = setTimeout(() => setHoursSince(hours), 0)
-    return () => clearTimeout(t)
+    setHoursSince(hours)
   }, [lead.createdAt])
 
-  // Reset drag tracking when drag state changes
   useEffect(() => {
     if (isDragging) {
       hasDraggedRef.current = true
@@ -145,16 +122,9 @@ export function LeadCard({ lead }: LeadCardProps) {
   const ageStatus = getAgeStatus(hoursSince)
   const ageConfig = AGE_CONFIG[ageStatus]
   const projectColors = getProjectTypeColor(lead.projectType)
-  
-  // Check if anyone is assigned
-  const hasTeam = lead.assignedProjectleider || lead.assignedRekenaar || lead.assignedTekenaar
-  
-  // Use status-based styling for borders/indicators (age urgency only for Nieuw/Calculatie)
   const statusConfig = STATUS_CONFIG[lead.status] || STATUS_CONFIG["Nieuw"]
   const showAgeIndicator = statusConfig.showAge
   const showAgeUrgency = statusConfig.ageUrgency
-  const borderClass = statusConfig.border
-  const indicatorClass = statusConfig.indicator
 
   const handleMouseDown = (e: React.MouseEvent) => {
     mouseDownPosRef.current = { x: e.clientX, y: e.clientY }
@@ -162,7 +132,6 @@ export function LeadCard({ lead }: LeadCardProps) {
   }
 
   const handleMouseUp = (e: React.MouseEvent) => {
-    // Check if mouse moved significantly (indicating a drag)
     if (mouseDownPosRef.current) {
       const dx = Math.abs(e.clientX - mouseDownPosRef.current.x)
       const dy = Math.abs(e.clientY - mouseDownPosRef.current.y)
@@ -171,7 +140,6 @@ export function LeadCard({ lead }: LeadCardProps) {
       }
     }
     
-    // Only navigate if we didn't drag
     if (!hasDraggedRef.current && !isDragging) {
       router.push(`/leads/${lead.id}`)
     }
@@ -185,26 +153,42 @@ export function LeadCard({ lead }: LeadCardProps) {
     return `${Math.floor(hours / 24)}d`
   }
 
+  // Format last activity
+  const formatLastActivity = () => {
+    const date = new Date(lead.updatedAt || lead.createdAt)
+    const now = new Date()
+    const diff = now.getTime() - date.getTime()
+    const hours = diff / (1000 * 60 * 60)
+    
+    if (hours < 1) return "zojuist"
+    if (hours < 24) return `${Math.floor(hours)}u geleden`
+    if (hours < 48) return "gisteren"
+    return `${Math.floor(hours / 24)}d geleden`
+  }
+
   return (
     <TooltipProvider>
-      <div 
+      <motion.div 
         ref={setNodeRef} 
         style={style} 
         {...listeners} 
         {...attributes} 
         className="mb-3"
         role="listitem"
-        aria-label={`Lead: ${lead.clientName}, ${lead.projectType} in ${lead.city}, €${(lead.quoteValue ?? lead.value).toLocaleString('nl-NL')}`}
+        aria-label={`Lead: ${lead.clientName}, ${lead.projectType} in ${lead.city}`}
         aria-grabbed={isDragging}
         onMouseDown={handleMouseDown}
         onMouseUp={handleMouseUp}
+        whileHover={{ scale: 1.02, y: -2 }}
+        whileTap={{ scale: 0.98 }}
+        transition={{ type: "spring", stiffness: 400, damping: 25 }}
       >
         <Card 
           className={cn(
-            "cursor-pointer card-hover-effect transition-all relative overflow-hidden group bg-card",
-            "border",
-            borderClass,
-            isDragging ? "opacity-50 ring-2 ring-ring z-50 rotate-1 shadow-xl" : ""
+            "cursor-pointer transition-all relative overflow-hidden group",
+            "card-tactile rounded-xl border-0",
+            statusConfig.glow,
+            isDragging && "opacity-50 ring-2 ring-ring z-50 rotate-1 shadow-xl"
           )}
           role="button"
           tabIndex={0}
@@ -216,26 +200,23 @@ export function LeadCard({ lead }: LeadCardProps) {
             }
           }}
         >
-          {/* Status indicator line - Left side */}
+          {/* Status indicator - Glowing left edge */}
           <div className={cn(
-            "absolute left-0 top-0 bottom-0 w-1.5 transition-colors",
-            indicatorClass
+            "absolute left-0 top-0 bottom-0 w-1 transition-colors",
+            statusConfig.indicator
           )} />
 
           <CardHeader className="p-3 pb-0 pl-4 space-y-2">
             <div className="flex justify-between items-start gap-2">
-              {/* Project Type Badge with color coding */}
-              <Badge 
-                variant="outline" 
-                className={cn(
-                  "text-[10px] uppercase tracking-wider font-semibold border",
-                  projectColors.bg,
-                  projectColors.text,
-                  projectColors.border
-                )}
-              >
+              {/* Project Type - Glass pill */}
+              <span className={cn(
+                "text-[10px] uppercase tracking-wider font-semibold px-2 py-0.5 rounded-full",
+                statusConfig.pillClass
+              )}>
                 {lead.projectType}
-              </Badge>
+              </span>
+              {/* Last activity micro-text */}
+              <span className="text-micro">{formatLastActivity()}</span>
             </div>
             <CardTitle className="text-sm font-semibold leading-tight flex items-center justify-between text-foreground">
               <span className="truncate">{lead.clientName}</span>
@@ -258,21 +239,21 @@ export function LeadCard({ lead }: LeadCardProps) {
               <span className="truncate">{lead.city}</span>
             </div>
              
-            <div className="flex justify-between items-center border-t border-border pt-2 mt-2">
+            <div className="flex justify-between items-center border-t border-border/50 pt-2 mt-2">
               <span className="text-currency text-sm">
                 € {(lead.quoteValue ?? lead.value).toLocaleString('nl-NL')}
               </span>
               <div className="flex items-center gap-2">
-                {/* Age indicator - urgency styling only for Nieuw/Calculatie */}
+                {/* Age indicator */}
                 {showAgeIndicator && (
                   showAgeUrgency ? (
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <div className={cn(
-                          "flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium transition-colors",
-                          ageStatus === "critical" && "bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300",
-                          ageStatus === "stale" && "bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-300",
-                          ageStatus === "day" && "bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300",
+                          "flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium transition-colors",
+                          ageStatus === "critical" && "pill-glass-rose",
+                          ageStatus === "stale" && "bg-orange-500/10 text-orange-600 border border-orange-500/20",
+                          ageStatus === "day" && "pill-glass-amber",
                           ageStatus === "fresh" && "text-muted-foreground"
                         )}>
                           {ageStatus === "critical" ? (
@@ -288,15 +269,14 @@ export function LeadCard({ lead }: LeadCardProps) {
                       </TooltipContent>
                     </Tooltip>
                   ) : (
-                    // For Offerte Verzonden/Opdracht/Archief: neutral time indicator
-                    <div className="flex items-center gap-1 text-[10px] text-muted-foreground" aria-label={`Leeftijd: ${formatHours(hoursSince)}`}>
+                    <div className="flex items-center gap-1 text-[10px] text-muted-foreground/60">
                       <Clock className="w-3 h-3" aria-hidden="true" />
                       <span>{formatHours(hoursSince)}</span>
                     </div>
                   )
                 )}
 
-                {/* Team avatars - Projectleider, Rekenaar and Tekenaar */}
+                {/* Team avatars */}
                 <div className="flex items-center -space-x-1.5">
                   {/* Projectleider */}
                   {lead.assignedProjectleider ? (
@@ -304,17 +284,17 @@ export function LeadCard({ lead }: LeadCardProps) {
                       <TooltipTrigger asChild>
                         <div className={cn(
                           "relative",
-                          lead.aanZet === 'projectleider' && "ring-2 ring-amber-500 ring-offset-1 rounded-full"
+                          lead.aanZet === 'projectleider' && "ring-2 ring-amber-500 ring-offset-1 ring-offset-card rounded-full"
                         )}>
-                          <Avatar className="w-6 h-6 border-2 border-white dark:border-slate-800">
+                          <Avatar className="w-6 h-6 border-2 border-card">
                             {projectleiderUser?.avatar && (
                               <AvatarImage src={projectleiderUser.avatar} alt={lead.assignedProjectleider} />
                             )}
-                            <AvatarFallback className="text-[8px] font-bold bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300">
+                            <AvatarFallback className="text-[8px] font-bold bg-gradient-to-br from-amber-100 to-amber-200 text-amber-700 dark:from-amber-900 dark:to-amber-800 dark:text-amber-300">
                               {getInitials(lead.assignedProjectleider)}
                             </AvatarFallback>
                           </Avatar>
-                          <Briefcase className="absolute -bottom-0.5 -right-0.5 w-3 h-3 text-amber-600 bg-white dark:bg-slate-800 rounded-full p-0.5" />
+                          <Briefcase className="absolute -bottom-0.5 -right-0.5 w-3 h-3 text-amber-600 bg-card rounded-full p-0.5" />
                         </div>
                       </TooltipTrigger>
                       <TooltipContent>
@@ -325,14 +305,14 @@ export function LeadCard({ lead }: LeadCardProps) {
                   ) : (
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <Avatar className="w-6 h-6 border-2 border-white dark:border-slate-800 opacity-40">
-                          <AvatarFallback className="bg-slate-100 dark:bg-slate-800">
-                            <Briefcase className="w-3 h-3 text-slate-400" />
+                        <Avatar className="w-6 h-6 border-2 border-card opacity-30">
+                          <AvatarFallback className="bg-muted">
+                            <Briefcase className="w-3 h-3 text-muted-foreground" />
                           </AvatarFallback>
                         </Avatar>
                       </TooltipTrigger>
                       <TooltipContent>
-                        <p className="text-muted-foreground">Geen projectleider toegewezen</p>
+                        <p className="text-muted-foreground">Geen projectleider</p>
                       </TooltipContent>
                     </Tooltip>
                   )}
@@ -343,17 +323,17 @@ export function LeadCard({ lead }: LeadCardProps) {
                       <TooltipTrigger asChild>
                         <div className={cn(
                           "relative",
-                          lead.aanZet === 'rekenaar' && "ring-2 ring-blue-500 ring-offset-1 rounded-full"
+                          lead.aanZet === 'rekenaar' && "ring-2 ring-blue-500 ring-offset-1 ring-offset-card rounded-full"
                         )}>
-                          <Avatar className="w-6 h-6 border-2 border-white dark:border-slate-800">
+                          <Avatar className="w-6 h-6 border-2 border-card">
                             {rekenaarUser?.avatar && (
                               <AvatarImage src={rekenaarUser.avatar} alt={lead.assignedRekenaar} />
                             )}
-                            <AvatarFallback className="text-[8px] font-bold bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300">
+                            <AvatarFallback className="text-[8px] font-bold bg-gradient-to-br from-blue-100 to-blue-200 text-blue-700 dark:from-blue-900 dark:to-blue-800 dark:text-blue-300">
                               {getInitials(lead.assignedRekenaar)}
                             </AvatarFallback>
                           </Avatar>
-                          <Calculator className="absolute -bottom-0.5 -right-0.5 w-3 h-3 text-blue-600 bg-white dark:bg-slate-800 rounded-full p-0.5" />
+                          <Calculator className="absolute -bottom-0.5 -right-0.5 w-3 h-3 text-blue-600 bg-card rounded-full p-0.5" />
                         </div>
                       </TooltipTrigger>
                       <TooltipContent>
@@ -364,14 +344,14 @@ export function LeadCard({ lead }: LeadCardProps) {
                   ) : (
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <Avatar className="w-6 h-6 border-2 border-white dark:border-slate-800 opacity-40">
-                          <AvatarFallback className="bg-slate-100 dark:bg-slate-800">
-                            <Calculator className="w-3 h-3 text-slate-400" />
+                        <Avatar className="w-6 h-6 border-2 border-card opacity-30">
+                          <AvatarFallback className="bg-muted">
+                            <Calculator className="w-3 h-3 text-muted-foreground" />
                           </AvatarFallback>
                         </Avatar>
                       </TooltipTrigger>
                       <TooltipContent>
-                        <p className="text-muted-foreground">Geen rekenaar toegewezen</p>
+                        <p className="text-muted-foreground">Geen rekenaar</p>
                       </TooltipContent>
                     </Tooltip>
                   )}
@@ -382,17 +362,17 @@ export function LeadCard({ lead }: LeadCardProps) {
                       <TooltipTrigger asChild>
                         <div className={cn(
                           "relative",
-                          lead.aanZet === 'tekenaar' && "ring-2 ring-purple-500 ring-offset-1 rounded-full"
+                          lead.aanZet === 'tekenaar' && "ring-2 ring-violet-500 ring-offset-1 ring-offset-card rounded-full"
                         )}>
-                          <Avatar className="w-6 h-6 border-2 border-white dark:border-slate-800">
+                          <Avatar className="w-6 h-6 border-2 border-card">
                             {tekenaarUser?.avatar && (
                               <AvatarImage src={tekenaarUser.avatar} alt={lead.assignedTekenaar} />
                             )}
-                            <AvatarFallback className="text-[8px] font-bold bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300">
+                            <AvatarFallback className="text-[8px] font-bold bg-gradient-to-br from-violet-100 to-violet-200 text-violet-700 dark:from-violet-900 dark:to-violet-800 dark:text-violet-300">
                               {getInitials(lead.assignedTekenaar)}
                             </AvatarFallback>
                           </Avatar>
-                          <PenTool className="absolute -bottom-0.5 -right-0.5 w-3 h-3 text-purple-600 bg-white dark:bg-slate-800 rounded-full p-0.5" />
+                          <PenTool className="absolute -bottom-0.5 -right-0.5 w-3 h-3 text-violet-600 bg-card rounded-full p-0.5" />
                         </div>
                       </TooltipTrigger>
                       <TooltipContent>
@@ -403,14 +383,14 @@ export function LeadCard({ lead }: LeadCardProps) {
                   ) : (
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <Avatar className="w-6 h-6 border-2 border-white dark:border-slate-800 opacity-40">
-                          <AvatarFallback className="bg-slate-100 dark:bg-slate-800">
-                            <PenTool className="w-3 h-3 text-slate-400" />
+                        <Avatar className="w-6 h-6 border-2 border-card opacity-30">
+                          <AvatarFallback className="bg-muted">
+                            <PenTool className="w-3 h-3 text-muted-foreground" />
                           </AvatarFallback>
                         </Avatar>
                       </TooltipTrigger>
                       <TooltipContent>
-                        <p className="text-muted-foreground">Geen tekenaar toegewezen</p>
+                        <p className="text-muted-foreground">Geen tekenaar</p>
                       </TooltipContent>
                     </Tooltip>
                   )}
@@ -419,7 +399,7 @@ export function LeadCard({ lead }: LeadCardProps) {
             </div>
           </CardContent>
         </Card>
-      </div>
+      </motion.div>
     </TooltipProvider>
   )
 }

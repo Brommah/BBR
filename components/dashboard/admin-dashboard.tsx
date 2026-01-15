@@ -1,16 +1,18 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
+import { useSearchParams } from "next/navigation"
 import { UserPermissionsTable } from "@/components/admin/user-permissions-table"
 import { RoleManagementPanel } from "@/components/admin/role-management-panel"
 import { QuoteApprovalQueue } from "@/components/admin/quote-approval-queue"
 import { NotionSyncPanel } from "@/components/admin/notion-sync-panel"
 import { EmailAutomationPanel } from "@/components/admin/email-automation-panel"
 import { AnalyticsDashboard } from "@/components/dashboard/analytics-dashboard"
+import { UrenDashboard } from "@/components/dashboard/uren-dashboard"
 import { ComponentErrorBoundary } from "@/components/error-boundary"
 import { useAuthStore } from "@/lib/auth"
 import { useLeadStore } from "@/lib/store"
-import { Users, Database, Mail, ClipboardCheck, Link2, Copy, Check, Settings, LayoutDashboard, ExternalLink, FileText, Shield, BarChart3 } from "lucide-react"
+import { Users, Database, Mail, ClipboardCheck, Link2, Copy, Check, Settings, LayoutDashboard, ExternalLink, FileText, Shield, BarChart3, Clock } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -19,7 +21,7 @@ import { Badge } from "@/components/ui/badge"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 
-type TopTab = "dashboard" | "goedkeuringen" | "instellingen"
+type TopTab = "dashboard" | "goedkeuringen" | "uren" | "instellingen"
 
 type SettingsSection = 
     | "team-rechten" 
@@ -45,8 +47,20 @@ const settingsSections: Array<{
  * This is the home page for admin users.
  */
 export function AdminDashboard() {
+    const searchParams = useSearchParams()
     const [activeTab, setActiveTab] = useState<TopTab>("dashboard")
     const [activeSettingsSection, setActiveSettingsSection] = useState<SettingsSection>("team-rechten")
+    
+    // Sync tab with URL
+    useEffect(() => {
+        const tab = searchParams.get('tab') as TopTab
+        if (tab && ["dashboard", "goedkeuringen", "uren", "instellingen"].includes(tab)) {
+            setActiveTab(tab)
+        } else if (!tab) {
+            setActiveTab("dashboard")
+        }
+    }, [searchParams])
+
     const { currentUser } = useAuthStore()
     const { leads } = useLeadStore()
     
@@ -196,6 +210,8 @@ export function AdminDashboard() {
                 return <ComponentErrorBoundary><AnalyticsDashboard /></ComponentErrorBoundary>
             case "goedkeuringen":
                 return <ComponentErrorBoundary><QuoteApprovalQueue /></ComponentErrorBoundary>
+            case "uren":
+                return <ComponentErrorBoundary><UrenDashboard /></ComponentErrorBoundary>
             case "instellingen":
                 return renderSettingsContent()
         }
@@ -225,7 +241,7 @@ export function AdminDashboard() {
                         </Badge>
                     </div>
 
-                    {/* Top Tabs: Dashboard | Goedkeuringen | Instellingen */}
+                    {/* Top Tabs: Dashboard | Instellingen */}
                     <div className="flex items-center gap-6 border-b">
                         <button
                             type="button"
@@ -239,29 +255,6 @@ export function AdminDashboard() {
                         >
                             <BarChart3 className="w-4 h-4" />
                             Dashboard
-                        </button>
-                        <button
-                            type="button"
-                            onClick={() => setActiveTab("goedkeuringen")}
-                            className={cn(
-                                "relative flex items-center gap-2 px-1 py-3 text-sm font-medium border-b-2 -mb-px transition-colors cursor-pointer",
-                                activeTab === "goedkeuringen"
-                                    ? "border-amber-500 text-amber-600 dark:text-amber-400"
-                                    : "border-transparent text-muted-foreground hover:text-foreground"
-                            )}
-                        >
-                            <ClipboardCheck className="w-4 h-4" />
-                            Goedkeuringen
-                            {pendingApprovalsCount > 0 && (
-                                <span className={cn(
-                                    "ml-1.5 min-w-5 h-5 flex items-center justify-center rounded-full text-xs font-bold px-1.5",
-                                    activeTab === "goedkeuringen"
-                                        ? "bg-amber-600 text-white"
-                                        : "bg-red-500 text-white"
-                                )}>
-                                    {pendingApprovalsCount}
-                                </span>
-                            )}
                         </button>
                         <button
                             type="button"

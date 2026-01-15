@@ -329,10 +329,10 @@ async function getCurrentPipelineDistribution(): Promise<PipelineDistribution> {
  */
 export async function getDashboardAnalytics(): Promise<DashboardAnalytics> {
   const [pipelineData, pipelineDistribution, conversionTime, revenueData, employeeHours] = await Promise.all([
-    getWeeklyPipelineData(4),
+    getWeeklyPipelineData(3),
     getCurrentPipelineDistribution(),
     getConversionTimeData(),
-    getWeeklyRevenueData(4),
+    getWeeklyRevenueData(3),
     getEmployeeHoursData(),
   ])
   

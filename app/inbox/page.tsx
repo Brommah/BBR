@@ -182,11 +182,11 @@ export default function InboxPage() {
                     getNotes(leadId)
                 ])
                 
-                if (docsResult.success) {
-                    setLeadDocuments(prev => ({ ...prev, [leadId]: docsResult.data }))
+                if (docsResult.success && docsResult.data) {
+                    setLeadDocuments(prev => ({ ...prev, [leadId]: docsResult.data as Document[] }))
                 }
-                if (notesResult.success) {
-                    setLeadNotes(prev => ({ ...prev, [leadId]: notesResult.data }))
+                if (notesResult.success && notesResult.data) {
+                    setLeadNotes(prev => ({ ...prev, [leadId]: notesResult.data as Note[] }))
                 }
             } catch (error) {
                 console.error('Error loading lead details:', error)
@@ -223,11 +223,11 @@ export default function InboxPage() {
                 getDocuments(firstLeadId),
                 getNotes(firstLeadId)
             ]).then(([docsResult, notesResult]) => {
-                if (docsResult.success) {
-                    setLeadDocuments(prev => ({ ...prev, [firstLeadId]: docsResult.data }))
+                if (docsResult.success && docsResult.data) {
+                    setLeadDocuments(prev => ({ ...prev, [firstLeadId]: docsResult.data as Document[] }))
                 }
-                if (notesResult.success) {
-                    setLeadNotes(prev => ({ ...prev, [firstLeadId]: notesResult.data }))
+                if (notesResult.success && notesResult.data) {
+                    setLeadNotes(prev => ({ ...prev, [firstLeadId]: notesResult.data as Note[] }))
                 }
             })
         }

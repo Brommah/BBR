@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { Geist } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/sonner";
 import { GlobalProviders } from "@/components/global-providers";
 import { AppLayoutWrapper } from "@/components/app-layout-wrapper";
 
-const inter = Inter({
+const geist = Geist({
   variable: "--font-sans",
   subsets: ["latin"],
   display: "swap",
@@ -24,7 +24,7 @@ export default function RootLayout({
   return (
     <html lang="nl">
       <body
-        className={`${inter.variable} antialiased`}
+        className={`${geist.variable} antialiased`}
       >
         <GlobalProviders>
           <AppLayoutWrapper>

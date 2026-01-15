@@ -1,17 +1,9 @@
 "use client"
 
 import { useState, useEffect, useTransition } from "react"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
+import { motion, AnimatePresence } from "framer-motion"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
@@ -57,6 +49,9 @@ import {
   Pencil,
   Trash2,
   Key,
+  Users,
+  Calculator,
+  PenTool,
 } from "lucide-react"
 import {
   getRoles,
@@ -69,6 +64,7 @@ import {
   type RoleWithPermissions,
   type UserWithRole,
 } from "@/lib/rbac-actions"
+import { cn } from "@/lib/utils"
 
 export function UserPermissionsTable() {
   const [users, setUsers] = useState<UserWithRole[]>([])
@@ -132,8 +128,8 @@ export function UserPermissionsTable() {
       if (result.success) {
         toast.success("Gebruiker aangemaakt", {
           description: newUser.password 
-            ? "Gebruiker kan direct inloggen met het opgegeven wachtwoord"
-            : "Stuur een wachtwoord-reset email om de gebruiker toegang te geven"
+            ? "Gebruiker kan direct inloggen"
+            : "Stuur een wachtwoord-reset email"
         })
         setIsAddUserOpen(false)
         setNewUser({ name: "", email: "", roleId: "", engineerType: "", password: "" })
@@ -205,7 +201,7 @@ export function UserPermissionsTable() {
       
       if (result.success) {
         toast.success("Wachtwoord-reset verzonden", {
-          description: `${userName} ontvangt een email om het wachtwoord te resetten.`
+          description: `${userName} ontvangt een email.`
         })
       } else {
         toast.error(result.error || "Kon reset email niet verzenden")
@@ -213,201 +209,254 @@ export function UserPermissionsTable() {
     })
   }
 
+  const getInitials = (name: string) => {
+    const parts = name.split(' ')
+    if (parts.length > 1) {
+      return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase()
+    }
+    return name.substring(0, 2).toUpperCase()
+  }
+
   if (isLoading) {
     return (
-      <Card>
-        <CardHeader>
-          <Skeleton className="h-6 w-48" />
-          <Skeleton className="h-4 w-64" />
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-3">
-            {[1, 2, 3, 4].map(i => (
-              <Skeleton key={i} className="h-16 w-full" />
-            ))}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Skeleton className="w-10 h-10 rounded-xl" />
+            <div>
+              <Skeleton className="h-5 w-32 mb-1" />
+              <Skeleton className="h-4 w-48" />
+            </div>
           </div>
-        </CardContent>
-      </Card>
+          <Skeleton className="h-10 w-36" />
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {[1, 2, 3, 4, 5, 6].map(i => (
+            <Skeleton key={i} className="h-32 rounded-xl" />
+          ))}
+        </div>
+      </div>
     )
   }
 
   return (
     <>
-      <Card>
-        <CardHeader>
-          <div className="flex justify-between items-start">
+      <div className="space-y-6">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-100 to-violet-200 dark:from-violet-900/30 dark:to-violet-800/30 flex items-center justify-center">
+              <Users className="w-5 h-5 text-violet-600 dark:text-violet-400" />
+            </div>
             <div>
-              <CardTitle className="flex items-center gap-2">
-                Gebruikers
-                <Badge variant="outline" className="ml-2">{users.length} actief</Badge>
-              </CardTitle>
-              <CardDescription>Beheer gebruikers en wijs rollen toe.</CardDescription>
+              <h3 className="font-semibold">Team Leden</h3>
+              <p className="text-sm text-muted-foreground">{users.length} actieve gebruikers</p>
             </div>
-            <Button onClick={() => setIsAddUserOpen(true)} className="gap-2">
-              <Plus className="w-4 h-4" />
-              Nieuwe Gebruiker
-            </Button>
           </div>
-        </CardHeader>
-        <CardContent>
-          {users.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              <UserPlus className="w-12 h-12 mx-auto mb-3 opacity-30" />
-              <p className="text-sm">Geen gebruikers gevonden</p>
+          <Button 
+            onClick={() => setIsAddUserOpen(true)} 
+            className="gap-2 bg-gradient-to-r from-violet-500 to-violet-600 hover:from-violet-600 hover:to-violet-700 shadow-lg shadow-violet-500/25"
+          >
+            <Plus className="w-4 h-4" />
+            Nieuwe Gebruiker
+          </Button>
+        </div>
+
+        {/* User Cards Grid */}
+        {users.length === 0 ? (
+          <motion.div 
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="card-tactile rounded-xl text-center py-16"
+          >
+            <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-muted flex items-center justify-center">
+              <UserPlus className="w-8 h-8 text-muted-foreground" />
             </div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Gebruiker</TableHead>
-                  <TableHead>Rol</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead className="text-right">Acties</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {users.map(user => (
-                  <TableRow key={user.id}>
-                    <TableCell>
-                      <div className="flex items-center gap-3">
-                        <Avatar className="w-9 h-9">
-                          {user.avatar && <AvatarImage src={user.avatar} alt={user.name} />}
-                          <AvatarFallback className="text-sm font-bold bg-primary/10">
-                            {user.name[0]?.toUpperCase()}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div>
-                          <div className="font-medium">{user.name}</div>
-                          <div className="text-xs text-muted-foreground">{user.email}</div>
+            <p className="text-muted-foreground">Geen gebruikers gevonden</p>
+            <Button 
+              onClick={() => setIsAddUserOpen(true)} 
+              variant="outline" 
+              className="mt-4"
+            >
+              Eerste gebruiker toevoegen
+            </Button>
+          </motion.div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+            <AnimatePresence>
+              {users.map((user, index) => (
+                <motion.div
+                  key={user.id}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.95 }}
+                  transition={{ delay: index * 0.05 }}
+                  className="card-tactile rounded-xl p-5 group"
+                >
+                  <div className="flex items-start justify-between mb-4">
+                    {/* Large Avatar with Status */}
+                    <div className="relative">
+                      <Avatar className={cn(
+                        "w-14 h-14 border-2 border-card",
+                        user.roleRef && "avatar-status-online"
+                      )}>
+                        {user.avatar && <AvatarImage src={user.avatar} alt={user.name} />}
+                        <AvatarFallback 
+                          className="text-lg font-bold"
+                          style={{ 
+                            background: user.roleRef 
+                              ? `linear-gradient(135deg, ${user.roleRef.color}20, ${user.roleRef.color}40)`
+                              : 'var(--muted)',
+                            color: user.roleRef?.color || 'var(--muted-foreground)'
+                          }}
+                        >
+                          {getInitials(user.name)}
+                        </AvatarFallback>
+                      </Avatar>
+                      {user.engineerType && (
+                        <div className={cn(
+                          "absolute -bottom-1 -right-1 w-6 h-6 rounded-full flex items-center justify-center border-2 border-card",
+                          user.engineerType === 'rekenaar' ? "bg-blue-500" : "bg-violet-500"
+                        )}>
+                          {user.engineerType === 'rekenaar' 
+                            ? <Calculator className="w-3 h-3 text-white" />
+                            : <PenTool className="w-3 h-3 text-white" />
+                          }
                         </div>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <Select
-                        value={user.roleId || ""}
-                        onValueChange={(v) => handleRoleChange(user.id, v)}
-                        disabled={isPending}
-                      >
-                        <SelectTrigger className="w-[160px]">
-                          <SelectValue>
-                            {user.roleRef ? (
-                              <div className="flex items-center gap-2">
-                                <div
-                                  className="w-2 h-2 rounded-full"
-                                  style={{ backgroundColor: user.roleRef.color }}
-                                />
-                                {user.roleRef.displayName}
-                              </div>
-                            ) : (
-                              <span className="text-muted-foreground">Geen rol</span>
-                            )}
-                          </SelectValue>
-                        </SelectTrigger>
-                        <SelectContent>
-                          {roles.map(role => (
-                            <SelectItem key={role.id} value={role.id}>
-                              <div className="flex items-center gap-2">
-                                <div
-                                  className="w-2 h-2 rounded-full"
-                                  style={{ backgroundColor: role.color }}
-                                />
-                                {role.displayName}
-                              </div>
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </TableCell>
-                    <TableCell>
-                      {user.engineerType ? (
-                        <Badge variant="outline" className="capitalize">
-                          {user.engineerType}
-                        </Badge>
-                      ) : (
-                        <span className="text-muted-foreground text-sm">-</span>
                       )}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon">
-                            <MoreHorizontal className="w-4 h-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={() => handleEditUser(user)}>
-                            <Pencil className="w-4 h-4 mr-2" />
-                            Bewerken
-                          </DropdownMenuItem>
-                          <DropdownMenuItem 
-                            onClick={() => handlePasswordReset(user.id, user.name)}
-                          >
-                            <Key className="w-4 h-4 mr-2" />
-                            Wachtwoord resetten
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem
-                            className="text-destructive focus:text-destructive"
-                            onClick={() => {
-                              setDeletingUser(user)
-                              setIsDeleteOpen(true)
-                            }}
-                          >
-                            <Trash2 className="w-4 h-4 mr-2" />
-                            Verwijderen
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
+                    </div>
+                    
+                    {/* Actions Menu */}
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className="opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                          <MoreHorizontal className="w-4 h-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => handleEditUser(user)}>
+                          <Pencil className="w-4 h-4 mr-2" />
+                          Bewerken
+                        </DropdownMenuItem>
+                        <DropdownMenuItem 
+                          onClick={() => handlePasswordReset(user.id, user.name)}
+                        >
+                          <Key className="w-4 h-4 mr-2" />
+                          Wachtwoord resetten
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          className="text-destructive focus:text-destructive"
+                          onClick={() => {
+                            setDeletingUser(user)
+                            setIsDeleteOpen(true)
+                          }}
+                        >
+                          <Trash2 className="w-4 h-4 mr-2" />
+                          Verwijderen
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                  
+                  {/* User Info */}
+                  <div className="space-y-2">
+                    <div>
+                      <h4 className="font-semibold">{user.name}</h4>
+                      <p className="text-xs text-muted-foreground truncate">{user.email}</p>
+                    </div>
+                    
+                    {/* Role Selector */}
+                    <Select
+                      value={user.roleId || ""}
+                      onValueChange={(v) => handleRoleChange(user.id, v)}
+                      disabled={isPending}
+                    >
+                      <SelectTrigger className="h-9 rounded-lg">
+                        <SelectValue>
+                          {user.roleRef ? (
+                            <div className="flex items-center gap-2">
+                              <div
+                                className="w-2.5 h-2.5 rounded-full"
+                                style={{ backgroundColor: user.roleRef.color }}
+                              />
+                              <span className="text-sm">{user.roleRef.displayName}</span>
+                            </div>
+                          ) : (
+                            <span className="text-muted-foreground text-sm">Geen rol</span>
+                          )}
+                        </SelectValue>
+                      </SelectTrigger>
+                      <SelectContent>
+                        {roles.map(role => (
+                          <SelectItem key={role.id} value={role.id}>
+                            <div className="flex items-center gap-2">
+                              <div
+                                className="w-2.5 h-2.5 rounded-full"
+                                style={{ backgroundColor: role.color }}
+                              />
+                              {role.displayName}
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </motion.div>
+              ))}
+            </AnimatePresence>
+          </div>
+        )}
+      </div>
 
       {/* Add User Dialog */}
       <Dialog open={isAddUserOpen} onOpenChange={setIsAddUserOpen}>
-        <DialogContent>
+        <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <UserPlus className="w-5 h-5" />
+              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-100 to-violet-200 dark:from-violet-900/30 dark:to-violet-800/30 flex items-center justify-center">
+                <UserPlus className="w-4 h-4 text-violet-600 dark:text-violet-400" />
+              </div>
               Nieuwe Gebruiker
             </DialogTitle>
             <DialogDescription>
-              Maak een nieuwe gebruiker aan. Ze kunnen direct inloggen met het wachtwoord, 
-              of later via een reset-email.
+              Voeg een nieuw teamlid toe aan het systeem.
             </DialogDescription>
           </DialogHeader>
           
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label>Naam *</Label>
+              <Label className="text-sm font-medium">Naam *</Label>
               <Input
                 placeholder="Volledige naam"
                 value={newUser.name}
                 onChange={(e) => setNewUser({ ...newUser, name: e.target.value })}
+                className="h-11 rounded-xl"
               />
             </div>
             
             <div className="space-y-2">
-              <Label>E-mail *</Label>
+              <Label className="text-sm font-medium">E-mail *</Label>
               <Input
                 type="email"
                 placeholder="naam@broersma-bouwadvies.nl"
                 value={newUser.email}
                 onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
+                className="h-11 rounded-xl"
               />
             </div>
             
             <div className="space-y-2">
-              <Label>Rol *</Label>
+              <Label className="text-sm font-medium">Rol *</Label>
               <Select
                 value={newUser.roleId}
                 onValueChange={(v) => setNewUser({ ...newUser, roleId: v })}
               >
-                <SelectTrigger>
+                <SelectTrigger className="h-11 rounded-xl">
                   <SelectValue placeholder="Selecteer rol..." />
                 </SelectTrigger>
                 <SelectContent>
@@ -415,7 +464,7 @@ export function UserPermissionsTable() {
                     <SelectItem key={role.id} value={role.id}>
                       <div className="flex items-center gap-2">
                         <div
-                          className="w-2 h-2 rounded-full"
+                          className="w-2.5 h-2.5 rounded-full"
                           style={{ backgroundColor: role.color }}
                         />
                         {role.displayName}
@@ -427,41 +476,56 @@ export function UserPermissionsTable() {
             </div>
             
             <div className="space-y-2">
-              <Label>Engineer Type (optioneel)</Label>
+              <Label className="text-sm font-medium">Specialisatie</Label>
               <Select
                 value={newUser.engineerType || "_none"}
                 onValueChange={(v) => setNewUser({ ...newUser, engineerType: v === "_none" ? "" : v as "rekenaar" | "tekenaar" })}
               >
-                <SelectTrigger>
+                <SelectTrigger className="h-11 rounded-xl">
                   <SelectValue placeholder="Niet van toepassing" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="_none">Niet van toepassing</SelectItem>
-                  <SelectItem value="rekenaar">Rekenaar</SelectItem>
-                  <SelectItem value="tekenaar">Tekenaar</SelectItem>
+                  <SelectItem value="rekenaar">
+                    <div className="flex items-center gap-2">
+                      <Calculator className="w-4 h-4 text-blue-500" />
+                      Rekenaar
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="tekenaar">
+                    <div className="flex items-center gap-2">
+                      <PenTool className="w-4 h-4 text-violet-500" />
+                      Tekenaar
+                    </div>
+                  </SelectItem>
                 </SelectContent>
               </Select>
             </div>
             
             <div className="space-y-2">
-              <Label>Wachtwoord (optioneel)</Label>
+              <Label className="text-sm font-medium">Wachtwoord</Label>
               <Input
                 type="password"
-                placeholder="Laat leeg voor reset-email"
+                placeholder="Optioneel - anders via reset-email"
                 value={newUser.password}
                 onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
+                className="h-11 rounded-xl"
               />
               <p className="text-xs text-muted-foreground">
-                Als je dit leeg laat, moet je handmatig een wachtwoord-reset sturen.
+                Leeg laten = handmatig wachtwoord-reset sturen
               </p>
             </div>
           </div>
           
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsAddUserOpen(false)}>
+            <Button variant="outline" onClick={() => setIsAddUserOpen(false)} className="rounded-xl">
               Annuleren
             </Button>
-            <Button onClick={handleAddUser} disabled={isPending}>
+            <Button 
+              onClick={handleAddUser} 
+              disabled={isPending}
+              className="rounded-xl bg-gradient-to-r from-violet-500 to-violet-600 hover:from-violet-600 hover:to-violet-700"
+            >
               {isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
               Aanmaken
             </Button>
@@ -471,31 +535,54 @@ export function UserPermissionsTable() {
 
       {/* Edit User Dialog */}
       <Dialog open={isEditUserOpen} onOpenChange={setIsEditUserOpen}>
-        <DialogContent>
+        <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Gebruiker Bewerken</DialogTitle>
           </DialogHeader>
           
           {editingUser && (
             <div className="space-y-4 py-4">
+              {/* Avatar Preview */}
+              <div className="flex justify-center">
+                <Avatar className="w-20 h-20 border-2 border-card">
+                  {editingUser.avatar && <AvatarImage src={editingUser.avatar} alt={editingUser.name} />}
+                  <AvatarFallback 
+                    className="text-2xl font-bold"
+                    style={{ 
+                      background: editingUser.roleRef 
+                        ? `linear-gradient(135deg, ${editingUser.roleRef.color}20, ${editingUser.roleRef.color}40)`
+                        : 'var(--muted)',
+                      color: editingUser.roleRef?.color || 'var(--muted-foreground)'
+                    }}
+                  >
+                    {getInitials(editingUser.name)}
+                  </AvatarFallback>
+                </Avatar>
+              </div>
+              
               <div className="space-y-2">
-                <Label>Naam</Label>
+                <Label className="text-sm font-medium">Naam</Label>
                 <Input
                   value={editingUser.name}
                   onChange={(e) => setEditingUser({ ...editingUser, name: e.target.value })}
+                  className="h-11 rounded-xl"
                 />
               </div>
               
               <div className="space-y-2">
-                <Label>E-mail</Label>
-                <Input value={editingUser.email} disabled className="bg-muted" />
+                <Label className="text-sm font-medium">E-mail</Label>
+                <Input 
+                  value={editingUser.email} 
+                  disabled 
+                  className="h-11 rounded-xl bg-muted" 
+                />
                 <p className="text-xs text-muted-foreground">
                   E-mailadres kan niet worden gewijzigd.
                 </p>
               </div>
               
               <div className="space-y-2">
-                <Label>Engineer Type</Label>
+                <Label className="text-sm font-medium">Specialisatie</Label>
                 <Select
                   value={editingUser.engineerType || "_none"}
                   onValueChange={(v) => setEditingUser({ 
@@ -503,13 +590,23 @@ export function UserPermissionsTable() {
                     engineerType: v === "_none" ? null : v 
                   })}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger className="h-11 rounded-xl">
                     <SelectValue placeholder="Niet van toepassing" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="_none">Niet van toepassing</SelectItem>
-                    <SelectItem value="rekenaar">Rekenaar</SelectItem>
-                    <SelectItem value="tekenaar">Tekenaar</SelectItem>
+                    <SelectItem value="rekenaar">
+                      <div className="flex items-center gap-2">
+                        <Calculator className="w-4 h-4 text-blue-500" />
+                        Rekenaar
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="tekenaar">
+                      <div className="flex items-center gap-2">
+                        <PenTool className="w-4 h-4 text-violet-500" />
+                        Tekenaar
+                      </div>
+                    </SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -517,10 +614,10 @@ export function UserPermissionsTable() {
           )}
           
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsEditUserOpen(false)}>
+            <Button variant="outline" onClick={() => setIsEditUserOpen(false)} className="rounded-xl">
               Annuleren
             </Button>
-            <Button onClick={handleSaveUser} disabled={isPending}>
+            <Button onClick={handleSaveUser} disabled={isPending} className="rounded-xl">
               {isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
               Opslaan
             </Button>
@@ -530,7 +627,7 @@ export function UserPermissionsTable() {
 
       {/* Delete User Confirmation */}
       <AlertDialog open={isDeleteOpen} onOpenChange={setIsDeleteOpen}>
-        <AlertDialogContent>
+        <AlertDialogContent className="rounded-2xl">
           <AlertDialogHeader>
             <AlertDialogTitle>Gebruiker Verwijderen</AlertDialogTitle>
             <AlertDialogDescription>
@@ -539,10 +636,10 @@ export function UserPermissionsTable() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Annuleren</AlertDialogCancel>
+            <AlertDialogCancel className="rounded-xl">Annuleren</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleDeleteUser}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              className="rounded-xl bg-gradient-to-r from-rose-500 to-rose-600 hover:from-rose-600 hover:to-rose-700"
             >
               {isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
               Verwijderen
