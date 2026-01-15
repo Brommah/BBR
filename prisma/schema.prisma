@@ -156,7 +156,7 @@ model User {
   id           String        @id @default(cuid())
   name         String
   email        String        @unique
-  role         String        @default("engineer") // 'admin' (Fred/Pim - can approve), 'projectleider' (Femke/Rohina - responsible for delivery), 'engineer' (Rekenaar/Tekenaar), 'viewer'
+  role         String        @default("engineer") // 'admin' (Fred/Pim - full access, can approve quotes), 'projectleider' (Femke/Rohina - project delivery), 'engineer' (Rekenaar/Tekenaar - executes work)
   engineerType EngineerType? // Only for engineers: 'rekenaar' or 'tekenaar'
   avatar       String?
   createdAt    DateTime      @default(now())

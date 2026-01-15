@@ -12,7 +12,7 @@ interface SupabaseUser {
   email?: string
   user_metadata?: {
     name?: string
-    role?: 'admin' | 'engineer' | 'viewer'
+    role?: 'admin' | 'projectleider' | 'engineer'
     engineerType?: 'rekenaar' | 'tekenaar'
     avatar_url?: string
   }
@@ -20,11 +20,11 @@ interface SupabaseUser {
 
 /**
  * User roles in the system:
- * - admin: Projectleider - Full access, can approve quotes, manage users, assign team members
+ * - admin: Full access (Fred/Pim) - can approve quotes, manage users, see everything
+ * - projectleider: Project delivery (Femke/Rohina) - sees assigned projects, coordinates work
  * - engineer: Rekenaar or Tekenaar - Can work on assigned leads when "aan zet"
- * - viewer: Read-only access (for stakeholders)
  */
-export type UserRole = 'admin' | 'engineer' | 'viewer'
+export type UserRole = 'admin' | 'projectleider' | 'engineer'
 
 /**
  * Engineer specialization types:
@@ -38,9 +38,9 @@ export type EngineerType = 'rekenaar' | 'tekenaar'
  * Display names for roles (Dutch)
  */
 export const ROLE_DISPLAY_NAMES: Record<UserRole, string> = {
-  admin: 'Projectleider',
-  engineer: 'Engineer',
-  viewer: 'Viewer'
+  admin: 'Admin',
+  projectleider: 'Projectleider',
+  engineer: 'Engineer'
 }
 
 /**

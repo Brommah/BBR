@@ -10,7 +10,7 @@
  */
 
 import prisma from './db'
-import { LeadStatus, QuoteApprovalStatus } from '@prisma/client'
+import { LeadStatus, QuoteApprovalStatus, Prisma } from '@prisma/client'
 import { PAGINATION } from './config'
 import {
   triggerStatusChangeEmail,
@@ -1426,7 +1426,7 @@ export async function toggleNoteReaction(
     const updatedNote = await prisma.note.update({
       where: { id: validId },
       data: { 
-        reactions: Object.keys(reactions).length > 0 ? reactions : null 
+        reactions: Object.keys(reactions).length > 0 ? reactions : Prisma.DbNull 
       }
     })
     
