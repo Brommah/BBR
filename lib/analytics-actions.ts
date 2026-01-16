@@ -262,9 +262,11 @@ async function getEmployeeHoursData(): Promise<EmployeeHoursData[]> {
   const userMap = new Map<string, { hours: number; projects: Set<string> }>()
   
   timeEntries.forEach(entry => {
-    const existing = userMap.get(entry.userName) || { hours: 0, projects: new Set() }
+    const existing = userMap.get(entry.userName) || { hours: 0, projects: new Set<string>() }
     existing.hours += entry.duration / 60 // Convert minutes to hours
-    existing.projects.add(entry.leadId)
+    if (entry.leadId) {
+      existing.projects.add(entry.leadId)
+    }
     userMap.set(entry.userName, existing)
   })
   
