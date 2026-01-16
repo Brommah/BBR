@@ -1613,7 +1613,7 @@ export async function updateCostRate(id: string, data: {
   }
   
   if (data.workSpecification !== undefined) {
-    updateData.workSpecification = data.workSpecification?.trim() || null
+    updateData.workSpecification = data.workSpecification?.trim() || undefined
   }
 
   try {

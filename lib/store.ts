@@ -22,6 +22,7 @@ import {
   approveQuote as approveQuoteAction,
   rejectQuote as rejectQuoteAction,
   updateLeadTeamAssignments as updateLeadTeamAssignmentsAction,
+  type ActionResult,
   type QuoteLineItem,
   type QuoteFeedbackItem,
   type QuoteSubmission
