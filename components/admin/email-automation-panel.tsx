@@ -127,41 +127,39 @@ Wij hebben uw aanvraag voor een **{{project_type}}** aan de **{{address}}** te *
     },
     {
         id: "02",
-        name: "Engineer Toegewezen",
-        description: "Notificatie wanneer engineer wordt toegewezen",
+        name: "Engineer Toegewezen (Intern)",
+        description: "Interne notificatie wanneer engineer wordt toegewezen",
         trigger: "Assignee ingesteld → Status: Calculatie",
         timing: "Direct",
-        category: "klant",
-        targets: { openRate: 60, clickRate: 30 },
+        category: "intern",
+        targets: { openRate: 90, clickRate: 50 },
         icon: <Users className="w-4 h-4" />,
-        subject: "{{engineer_name}} gaat uw {{project_type}} berekenen | Bureau Broersma",
-        subjectAlt: "Goed nieuws: uw project is toegewezen aan onze specialist",
-        bodyPreview: `Beste {{client_name}},
+        subject: "Je bent toegewezen aan project {{project_type}} - {{client_name}}",
+        subjectAlt: "Nieuw project: {{client_name}} in {{city}}",
+        bodyPreview: `Hoi {{engineer_name}},
 
-Goed nieuws! Uw project is toegewezen aan een van onze ervaren constructie-ingenieurs.
+Je bent toegewezen aan een nieuw project:
 
-### Uw specialist: {{engineer_name}}
+### Project Details
+- **Klant:** {{client_name}}
+- **Type:** {{project_type}}
+- **Locatie:** {{address}}, {{city}}
 
-{{engineer_name}} gaat nu aan de slag met:
-✓ Analyse van uw projectgegevens
-✓ Controle van de bouwkundige situatie
-✓ Voorbereiding van de constructieberekening
-
-### Wat hebben we nodig?
-
-📐 **Bouwtekeningen** – plattegronden, gevels
-📸 **Foto's** – van de huidige situatie
-📄 **Grondonderzoek** – indien beschikbaar`,
+### Volgende stappen
+✓ Bekijk de projectdetails in het systeem
+✓ Neem contact op met de klant indien nodig
+✓ Start de calculatie`,
         variables: [
-            { name: "client_name", example: "J. de Vries" },
             { name: "engineer_name", example: "Angelo" },
+            { name: "client_name", example: "J. de Vries" },
             { name: "project_type", example: "Dakkapel" },
-            { name: "upload_link", example: "https://app.../upload/abc" },
+            { name: "address", example: "Keizersgracht 100" },
+            { name: "city", example: "Amsterdam" },
         ],
         doel: [
-            "Persoonlijke connectie creëren",
-            "Vertrouwen versterken",
-            "Documenten opvragen",
+            "Engineer informeren over nieuwe toewijzing",
+            "Snelle start mogelijk maken",
+            "Projectinfo delen",
         ]
     },
     {

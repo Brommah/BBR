@@ -11,7 +11,7 @@ import { useRouter } from "next/navigation"
 import { useState, useEffect, useRef } from "react"
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip"
 import { getProjectTypeColor } from "./pipeline-legend"
-import { useAllUsers } from "@/lib/auth"
+import { useAllUsers, useAuthStore } from "@/lib/auth"
 
 interface LeadCardProps {
   lead: Lead
@@ -83,6 +83,7 @@ const STATUS_CONFIG: Record<string, {
 export function LeadCard({ lead }: LeadCardProps) {
   const router = useRouter()
   const { users } = useAllUsers()
+  const { currentUser } = useAuthStore()
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: lead.id,
   })
@@ -240,9 +241,14 @@ export function LeadCard({ lead }: LeadCardProps) {
             </div>
              
             <div className="flex justify-between items-center border-t border-border/50 pt-2 mt-2">
-              <span className="text-currency text-sm">
-                € {(lead.quoteValue ?? lead.value).toLocaleString('nl-NL')}
-              </span>
+              {/* Value hidden for engineers */}
+              {currentUser?.role !== 'engineer' ? (
+                <span className="text-currency text-sm">
+                  € {(lead.quoteValue ?? lead.value).toLocaleString('nl-NL')}
+                </span>
+              ) : (
+                <span className="text-xs text-muted-foreground">—</span>
+              )}
               <div className="flex items-center gap-2">
                 {/* Age indicator */}
                 {showAgeIndicator && (
@@ -282,10 +288,7 @@ export function LeadCard({ lead }: LeadCardProps) {
                   {lead.assignedProjectleider ? (
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <div className={cn(
-                          "relative",
-                          lead.aanZet === 'projectleider' && "ring-2 ring-amber-500 ring-offset-1 ring-offset-card rounded-full"
-                        )}>
+                        <div className="relative">
                           <Avatar className="w-6 h-6 border-2 border-card">
                             {projectleiderUser?.avatar && (
                               <AvatarImage src={projectleiderUser.avatar} alt={lead.assignedProjectleider} />
@@ -299,7 +302,7 @@ export function LeadCard({ lead }: LeadCardProps) {
                       </TooltipTrigger>
                       <TooltipContent>
                         <p className="font-medium">{lead.assignedProjectleider}</p>
-                        <p className="text-xs text-muted-foreground">Projectleider {lead.aanZet === 'projectleider' && '• Aan zet'}</p>
+                        <p className="text-xs text-muted-foreground">Projectleider</p>
                       </TooltipContent>
                     </Tooltip>
                   ) : (
@@ -321,10 +324,7 @@ export function LeadCard({ lead }: LeadCardProps) {
                   {lead.assignedRekenaar ? (
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <div className={cn(
-                          "relative",
-                          lead.aanZet === 'rekenaar' && "ring-2 ring-blue-500 ring-offset-1 ring-offset-card rounded-full"
-                        )}>
+                        <div className="relative">
                           <Avatar className="w-6 h-6 border-2 border-card">
                             {rekenaarUser?.avatar && (
                               <AvatarImage src={rekenaarUser.avatar} alt={lead.assignedRekenaar} />
@@ -338,7 +338,7 @@ export function LeadCard({ lead }: LeadCardProps) {
                       </TooltipTrigger>
                       <TooltipContent>
                         <p className="font-medium">{lead.assignedRekenaar}</p>
-                        <p className="text-xs text-muted-foreground">Rekenaar {lead.aanZet === 'rekenaar' && '• Aan zet'}</p>
+                        <p className="text-xs text-muted-foreground">Rekenaar</p>
                       </TooltipContent>
                     </Tooltip>
                   ) : (
@@ -360,10 +360,7 @@ export function LeadCard({ lead }: LeadCardProps) {
                   {lead.assignedTekenaar ? (
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <div className={cn(
-                          "relative",
-                          lead.aanZet === 'tekenaar' && "ring-2 ring-violet-500 ring-offset-1 ring-offset-card rounded-full"
-                        )}>
+                        <div className="relative">
                           <Avatar className="w-6 h-6 border-2 border-card">
                             {tekenaarUser?.avatar && (
                               <AvatarImage src={tekenaarUser.avatar} alt={lead.assignedTekenaar} />
@@ -377,7 +374,7 @@ export function LeadCard({ lead }: LeadCardProps) {
                       </TooltipTrigger>
                       <TooltipContent>
                         <p className="font-medium">{lead.assignedTekenaar}</p>
-                        <p className="text-xs text-muted-foreground">Tekenaar {lead.aanZet === 'tekenaar' && '• Aan zet'}</p>
+                        <p className="text-xs text-muted-foreground">Tekenaar</p>
                       </TooltipContent>
                     </Tooltip>
                   ) : (

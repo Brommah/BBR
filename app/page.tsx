@@ -8,7 +8,6 @@ import { DashboardSkeleton } from "@/components/ui/skeleton-loaders"
 import { Button } from "@/components/ui/button"
 import { ArrowRight, Loader2 } from "lucide-react"
 import { useRouter } from "next/navigation"
-import { useLeadStore } from "@/lib/store"
 
 /**
  * Home page - shows different dashboards based on user role:
@@ -20,7 +19,6 @@ import { useLeadStore } from "@/lib/store"
 export default function HomePage() {
   const router = useRouter()
   const { currentUser, isAuthenticated, isInitialized, isLoading: authLoading } = useAuthStore()
-  const { isLoading: leadsLoading } = useLeadStore()
 
   // Wait for auth to initialize before making any auth-based decisions
   // This prevents flashing login screen during HMR
@@ -42,14 +40,11 @@ export default function HomePage() {
     )
   }
 
-  // Show skeleton loading state while leads data is being fetched
-  if (leadsLoading) {
-    return (
-      <div className="page-container">
-        <DashboardSkeleton />
-      </div>
-    )
-  }
+  // NOTE: We no longer check leadsLoading here because it causes an infinite loop.
+  // When leadsLoading is true, this component renders DashboardSkeleton, which 
+  // unmounts EngineerDashboard (destroying its hasLoadedRef). When loading finishes,
+  // EngineerDashboard remounts with a new ref and calls loadLeads() again → infinite loop.
+  // Dashboard components now handle their own loading states internally.
 
   // Show login prompt if not authenticated (only after auth is initialized)
   if (!isAuthenticated || !currentUser) {

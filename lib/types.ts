@@ -314,7 +314,7 @@ export interface AuditEntry {
 // Time Entry Types
 // ============================================================
 
-export type TimeCategory = 'calculatie' | 'overleg' | 'administratie' | 'site-bezoek' | 'overig'
+export type TimeCategory = 'calculatie' | 'overleg' | 'administratie' | 'site-bezoek' | 'overig' | 'algemeen' | 'prive'
 
 export interface TimeEntry {
   id: string

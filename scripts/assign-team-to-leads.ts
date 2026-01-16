@@ -4,7 +4,7 @@
  */
 
 import 'dotenv/config'
-import { PrismaClient, AanZet } from '@prisma/client'
+import { PrismaClient } from '@prisma/client'
 import { PrismaPg } from '@prisma/adapter-pg'
 import { Pool } from 'pg'
 
@@ -86,7 +86,7 @@ async function assignTeamToLeads() {
   let updatedCount = 0
   
   for (const lead of leadsWithoutTeam) {
-    const updates: { assignedRekenaar?: string; assignedTekenaar?: string; aanZet?: AanZet } = {}
+    const updates: { assignedRekenaar?: string; assignedTekenaar?: string } = {}
     
     // Assign rekenaar if missing
     if (!lead.assignedRekenaar && availableRekenaars.length > 0) {
@@ -98,11 +98,6 @@ async function assignTeamToLeads() {
     if (!lead.assignedTekenaar && availableTekenaars.length > 0) {
       updates.assignedTekenaar = availableTekenaars[tekenaarIndex % availableTekenaars.length].name
       tekenaarIndex++
-    }
-    
-    // Set "aan zet" to rekenaar by default for leads in "Opdracht" status
-    if (lead.status === 'Opdracht' && updates.assignedRekenaar) {
-      updates.aanZet = AanZet.rekenaar
     }
     
     if (Object.keys(updates).length > 0) {
@@ -125,14 +120,13 @@ async function assignTeamToLeads() {
       clientName: true,
       assignedRekenaar: true,
       assignedTekenaar: true,
-      aanZet: true,
       status: true
     }
   })
   
   console.log('\n📊 Final Summary:')
   allLeads.forEach(l => {
-    console.log(`  ${l.clientName}: R=${l.assignedRekenaar || '❌'}, T=${l.assignedTekenaar || '❌'}, AanZet=${l.aanZet || '-'}, Status=${l.status}`)
+    console.log(`  ${l.clientName}: R=${l.assignedRekenaar || '❌'}, T=${l.assignedTekenaar || '❌'}, Status=${l.status}`)
   })
 }
 

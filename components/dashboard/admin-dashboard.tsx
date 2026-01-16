@@ -7,12 +7,13 @@ import { RoleManagementPanel } from "@/components/admin/role-management-panel"
 import { QuoteApprovalQueue } from "@/components/admin/quote-approval-queue"
 import { NotionSyncPanel } from "@/components/admin/notion-sync-panel"
 import { EmailAutomationPanel } from "@/components/admin/email-automation-panel"
+import { CostDeterminationPanel } from "@/components/admin/cost-determination-panel"
 import { AnalyticsDashboard } from "@/components/dashboard/analytics-dashboard"
 import { UrenDashboard } from "@/components/dashboard/uren-dashboard"
 import { ComponentErrorBoundary } from "@/components/error-boundary"
 import { useAuthStore } from "@/lib/auth"
 import { useLeadStore } from "@/lib/store"
-import { Users, Database, Mail, ClipboardCheck, Link2, Copy, Check, Settings, LayoutDashboard, ExternalLink, FileText, Shield, BarChart3, Clock } from "lucide-react"
+import { Users, Database, Mail, Link2, Copy, Check, Settings, ExternalLink, FileText, Shield, BarChart3, Euro } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -25,6 +26,7 @@ type TopTab = "dashboard" | "goedkeuringen" | "uren" | "instellingen"
 
 type SettingsSection = 
     | "team-rechten" 
+    | "tarieven"
     | "email-automations"
     | "integraties"
     | "intake-formulier"
@@ -37,6 +39,7 @@ const settingsSections: Array<{
     description: string
 }> = [
     { id: "team-rechten", label: "Team & Rechten", shortLabel: "Team", icon: Users, description: "Gebruikers en rechten beheren" },
+    { id: "tarieven", label: "Tarieven", shortLabel: "Tarieven", icon: Euro, description: "Kostentarieven beheren" },
     { id: "email-automations", label: "E-mail Automatisering", shortLabel: "E-mails", icon: Mail, description: "Automatische e-mail flows" },
     { id: "integraties", label: "Integraties", shortLabel: "Koppelingen", icon: Database, description: "Externe koppelingen" },
     { id: "intake-formulier", label: "Intake Formulier", shortLabel: "Intake", icon: Link2, description: "Publiek aanvraagformulier" },
@@ -93,6 +96,8 @@ export function AdminDashboard() {
                         <ComponentErrorBoundary><UserPermissionsTable /></ComponentErrorBoundary>
                     </div>
                 )
+            case "tarieven":
+                return <ComponentErrorBoundary><CostDeterminationPanel /></ComponentErrorBoundary>
             case "email-automations":
                 return <ComponentErrorBoundary><EmailAutomationPanel /></ComponentErrorBoundary>
             case "integraties":

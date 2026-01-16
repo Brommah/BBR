@@ -44,6 +44,7 @@ import { createTimeEntry, getTimeEntries, deleteTimeEntry, updateTimeEntry, type
 /** Time entry from database */
 interface TimeEntry {
   id: string
+  userId: string
   date: string // YYYY-MM-DD
   startTime: string // HH:mm
   endTime: string // HH:mm
@@ -53,13 +54,18 @@ interface TimeEntry {
   userName: string
 }
 
-const CATEGORY_CONFIG: Record<TimeCategory, { label: string; color: string }> = {
-  calculatie: { label: "Calculatie", color: "bg-blue-500" },
-  overleg: { label: "Overleg", color: "bg-purple-500" },
-  administratie: { label: "Administratie", color: "bg-amber-500" },
-  "site-bezoek": { label: "Site bezoek", color: "bg-emerald-500" },
-  overig: { label: "Overig", color: "bg-slate-500" },
+const CATEGORY_CONFIG: Record<TimeCategory, { label: string; color: string; billable: boolean }> = {
+  calculatie: { label: "Calculatie", color: "bg-blue-500", billable: true },
+  overleg: { label: "Overleg", color: "bg-purple-500", billable: true },
+  administratie: { label: "Administratie", color: "bg-amber-500", billable: false },
+  "site-bezoek": { label: "Site bezoek", color: "bg-emerald-500", billable: true },
+  overig: { label: "Overig", color: "bg-slate-500", billable: true },
+  algemeen: { label: "Algemeen (non-billable)", color: "bg-rose-500", billable: false },
+  prive: { label: "Privé (non-billable)", color: "bg-orange-500", billable: false },
 }
+
+// Project-level categories (excludes 'algemeen' which is only for personal tracker)
+const PROJECT_CATEGORIES = Object.entries(CATEGORY_CONFIG).filter(([key]) => key !== 'algemeen')
 
 interface HourRegistrationPanelProps {
   leadId: string
@@ -111,17 +117,22 @@ export function HourRegistrationPanel({
   const [isSaving, setIsSaving] = useState(false)
 
   // Load time entries from database
+  // Engineers only see their own entries, admin/projectleider see all
   useEffect(() => {
     async function loadEntries() {
+      if (!currentUser) return
       setIsLoading(true)
-      const result = await getTimeEntries(leadId)
+      const result = await getTimeEntries(leadId, {
+        userId: currentUser.id,
+        role: currentUser.role as 'admin' | 'projectleider' | 'engineer'
+      })
       if (result.success && result.data) {
         setTimeEntries(result.data as TimeEntry[])
       }
       setIsLoading(false)
     }
     loadEntries()
-  }, [leadId])
+  }, [leadId, currentUser])
 
   // Formatters
   const formatDuration = useCallback((minutes: number) => {
@@ -406,7 +417,7 @@ export function HourRegistrationPanel({
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            {Object.entries(CATEGORY_CONFIG).map(
+                            {PROJECT_CATEGORIES.map(
                               ([key, config]) => (
                                 <SelectItem key={key} value={key}>
                                   <div className="flex items-center gap-2">
@@ -510,7 +521,7 @@ export function HourRegistrationPanel({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {Object.entries(CATEGORY_CONFIG).map(
+                    {PROJECT_CATEGORIES.map(
                       ([key, config]) => (
                         <SelectItem key={key} value={key}>
                           <div className="flex items-center gap-2">
@@ -628,19 +639,22 @@ export function HourRegistrationPanel({
             </div>
           </CardContent>
         </Card>
-        <Card>
-          <CardContent className="py-3">
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center">
-                <Euro className="w-4 h-4 text-emerald-600" />
+        {/* Cost card - only visible for admin/projectleider, not engineers */}
+        {currentUser?.role !== 'engineer' && (
+          <Card>
+            <CardContent className="py-3">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center">
+                  <Euro className="w-4 h-4 text-emerald-600" />
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Kosten</p>
+                  <p className="text-lg font-bold">€{estimatedCost.toFixed(0)}</p>
+                </div>
               </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Kosten</p>
-                <p className="text-lg font-bold">€{estimatedCost.toFixed(0)}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       {/* Calendar + Entries */}
@@ -788,73 +802,88 @@ export function HourRegistrationPanel({
               ) : (
                 <>
                   {(selectedDate ? selectedDateEntries : timeEntries).map(
-                    (entry) => (
-                      <div
-                        key={entry.id}
-                        className="group p-3 bg-muted/50 rounded-lg hover:bg-muted transition-colors border border-transparent hover:border-border"
-                      >
-                        <div className="flex items-center justify-between gap-3">
-                          {/* Left: Category dot + Description */}
-                          <div className="flex items-center gap-3 flex-1 min-w-0">
-                            <div
-                              className={cn(
-                                "w-3 h-3 rounded-full shrink-0",
-                                CATEGORY_CONFIG[entry.category].color
-                              )}
-                            />
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm font-semibold truncate">
-                                {entry.description}
-                              </p>
-                              <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-                                {!selectedDate && (
-                                  <>
-                                    <span>{formatDate(entry.date)}</span>
-                                    <span>•</span>
-                                  </>
+                    (entry) => {
+                      const isOwnEntry = entry.userId === currentUser?.id
+                      const canEdit = currentUser?.role !== 'engineer' || isOwnEntry
+                      
+                      return (
+                        <div
+                          key={entry.id}
+                          className="group p-3 bg-muted/50 rounded-lg hover:bg-muted transition-colors border border-transparent hover:border-border"
+                        >
+                          <div className="flex items-center justify-between gap-3">
+                            {/* Left: Category dot + Description */}
+                            <div className="flex items-center gap-3 flex-1 min-w-0">
+                              <div
+                                className={cn(
+                                  "w-3 h-3 rounded-full shrink-0",
+                                  CATEGORY_CONFIG[entry.category].color
                                 )}
-                                <span className="font-mono">
-                                  {entry.startTime} - {entry.endTime}
-                                </span>
-                                <Badge
-                                  variant="secondary"
-                                  className="text-[10px] h-4 px-1.5"
-                                >
-                                  {CATEGORY_CONFIG[entry.category].label}
-                                </Badge>
+                              />
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2">
+                                  <p className="text-sm font-semibold truncate">
+                                    {entry.description}
+                                  </p>
+                                </div>
+                                <div className="flex items-center gap-2 text-[11px] text-muted-foreground flex-wrap">
+                                  {/* Show who submitted for admin/projectleider */}
+                                  {currentUser?.role !== 'engineer' && (
+                                    <Badge className="text-[10px] h-5 px-2 bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300 border-blue-200 dark:border-blue-700">
+                                      {entry.userName}
+                                    </Badge>
+                                  )}
+                                  {!selectedDate && (
+                                    <>
+                                      <span>{formatDate(entry.date)}</span>
+                                      <span>•</span>
+                                    </>
+                                  )}
+                                  <span className="font-mono">
+                                    {entry.startTime} - {entry.endTime}
+                                  </span>
+                                  <Badge
+                                    variant="secondary"
+                                    className="text-[10px] h-4 px-1.5"
+                                  >
+                                    {CATEGORY_CONFIG[entry.category].label}
+                                  </Badge>
+                                </div>
                               </div>
                             </div>
-                          </div>
-                          
-                          {/* Right: Duration + Actions */}
-                          <div className="flex items-center gap-2 shrink-0">
-                            <span className="text-base font-mono font-bold text-primary">
-                              {formatDuration(entry.duration)}
-                            </span>
-                            <div className="flex items-center border-l pl-2 ml-1">
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-7 w-7"
-                                onClick={() => openEditModal(entry)}
-                                title="Bewerken"
-                              >
-                                <Pencil className="w-3.5 h-3.5 text-muted-foreground hover:text-primary" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-7 w-7"
-                                onClick={() => handleDeleteEntry(entry.id)}
-                                title="Verwijderen"
-                              >
-                                <Trash2 className="w-3.5 h-3.5 text-muted-foreground hover:text-destructive" />
-                              </Button>
+                            
+                            {/* Right: Duration + Actions */}
+                            <div className="flex items-center gap-2 shrink-0">
+                              <span className="text-base font-mono font-bold text-primary">
+                                {formatDuration(entry.duration)}
+                              </span>
+                              {canEdit && (
+                                <div className="flex items-center border-l pl-2 ml-1">
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-7 w-7"
+                                    onClick={() => openEditModal(entry)}
+                                    title="Bewerken"
+                                  >
+                                    <Pencil className="w-3.5 h-3.5 text-muted-foreground hover:text-primary" />
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-7 w-7"
+                                    onClick={() => handleDeleteEntry(entry.id)}
+                                    title="Verwijderen"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5 text-muted-foreground hover:text-destructive" />
+                                  </Button>
+                                </div>
+                              )}
                             </div>
                           </div>
                         </div>
-                      </div>
-                    )
+                      )
+                    }
                   )}
                   
                   {/* Summary for selected date */}
@@ -873,9 +902,9 @@ export function HourRegistrationPanel({
         </Card>
       </div>
 
-      {/* Footer with hourly rate */}
+      {/* Footer with hourly rate - only show rate for admin/projectleider */}
       <div className="shrink-0 text-center text-xs text-muted-foreground py-2 border-t">
-        Uurtarief: €{hourlyRate}/uur • Lead: {leadId}
+        {currentUser?.role !== 'engineer' ? `Uurtarief: €${hourlyRate}/uur • ` : ''}Lead: {leadId.slice(0, 8)}...
       </div>
     </div>
   )

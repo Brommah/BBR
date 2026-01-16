@@ -6,7 +6,6 @@ import { useLeadStore } from "@/lib/store"
 import { useAuthStore } from "@/lib/auth"
 import { ErrorBoundary } from "@/components/error-boundary"
 import { Toaster } from "@/components/ui/sonner"
-import { WalkthroughProvider } from "@/components/walkthrough"
 import { QueryProvider } from "@/lib/query-client"
 
 /**
@@ -52,7 +51,6 @@ function AuthInitializer() {
  * - Store initialization (Zustand for client state)
  * - Keyboard shortcuts
  * - Toast notifications
- * - Introduction walkthrough
  */
 export function GlobalProviders({ children }: { children: React.ReactNode }) {
   return (
@@ -62,7 +60,6 @@ export function GlobalProviders({ children }: { children: React.ReactNode }) {
         <StoreInitializer />
         {children}
         <KeyboardShortcuts />
-        <WalkthroughProvider />
         <Toaster position="bottom-right" richColors closeButton />
       </QueryProvider>
     </ErrorBoundary>

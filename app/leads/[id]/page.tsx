@@ -67,7 +67,7 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }
 export default function LeadDetailPage() {
     const params = useParams()
     const { leads, isLoading: storeLoading, updateLeadStatus, loadLeads } = useLeadStore()
-    const { isAdmin } = useAuthStore()
+    const { isAdmin, currentUser } = useAuthStore()
     const [directLead, setDirectLead] = useState<Lead | null>(null)
     const [isPending, startTransition] = useTransition()
     const [hasAttemptedFetch, setHasAttemptedFetch] = useState(false)
@@ -123,6 +123,10 @@ export default function LeadDetailPage() {
     
     // Auto-hide quote panel when order is accepted (status = Opdracht)
     const isOrderAccepted = lead?.status === 'Opdracht'
+    
+    // Engineers should never see quote/offerte information
+    const isEngineer = currentUser?.role === 'engineer'
+    const canSeeQuote = !isEngineer && !isOrderAccepted
     
     // Extract coordinates from specifications
     const getCoordinate = (key: string) => {
@@ -191,8 +195,8 @@ export default function LeadDetailPage() {
                 
                 <div className="flex-1" />
                 
-                {/* Quote Panel Toggle - Only show when not in Opdracht status */}
-                {!isOrderAccepted && (
+                {/* Quote Panel Toggle - Only show for non-engineers and when not in Opdracht status */}
+                {canSeeQuote && (
                     <Button 
                         variant={quotePanelOpen ? "secondary" : "outline"}
                         size="sm" 
@@ -289,7 +293,6 @@ export default function LeadDetailPage() {
                                     assignedProjectleider={lead.assignedProjectleider}
                                     assignedRekenaar={lead.assignedRekenaar}
                                     assignedTekenaar={lead.assignedTekenaar}
-                                    aanZet={lead.aanZet}
                                 />
                             </div>
 
@@ -382,8 +385,8 @@ export default function LeadDetailPage() {
                 </div>
             </div>
 
-                            {/* Quote Value - Only when approved */}
-                            {lead.quoteApproval === 'approved' && lead.quoteValue != null && (
+                            {/* Quote Value - Only when approved and not for engineers */}
+                            {lead.quoteApproval === 'approved' && lead.quoteValue != null && currentUser?.role !== 'engineer' && (
                                 <div className="p-3 rounded-xl bg-gradient-to-br from-emerald-50 to-emerald-100 dark:from-emerald-900/30 dark:to-emerald-900/20 border border-emerald-200/50 dark:border-emerald-700/50">
                                     <div className="flex items-center gap-3">
                                         <div className="w-9 h-9 rounded-lg bg-emerald-200 dark:bg-emerald-800 flex items-center justify-center shrink-0">
@@ -598,14 +601,14 @@ export default function LeadDetailPage() {
                     </Tabs>
                 </main>
 
-                {/* Right Sidebar - Collapsible Quote Panel (Hidden when order accepted) */}
-                {!isOrderAccepted && (
+                {/* Right Sidebar - Collapsible Quote Panel (Hidden for engineers and when order accepted) */}
+                {canSeeQuote && (
                     <aside className={cn(
                         "border-l border-border/50 bg-white dark:bg-slate-900 overflow-hidden shrink-0 transition-all duration-300",
-                        quotePanelOpen ? "w-[420px]" : "w-0 border-l-0"
+                        quotePanelOpen ? "w-[520px]" : "w-0 border-l-0"
                     )}>
                         <div className={cn(
-                            "w-[420px] h-full overflow-y-auto transition-opacity duration-200",
+                            "w-[520px] h-full overflow-y-auto transition-opacity duration-200",
                             quotePanelOpen ? "opacity-100" : "opacity-0"
                         )}>
                             <div className="p-4">

@@ -332,8 +332,8 @@ async function createSystemOverviewPage() {
                 
                 heading3("👥 User Roles & Permissions"),
                 bulletItem("Admin: Full access, approve/reject quotes, manage users"),
-                bulletItem("Projectleider: Project delivery, team assignment, sets 'aan zet'"),
-                bulletItem("Engineer (Rekenaar/Tekenaar): Execute work when 'aan zet'"),
+                bulletItem("Projectleider: Project delivery, team assignment"),
+                bulletItem("Engineer (Rekenaar/Tekenaar): Execute work on assigned projects"),
                 bulletItem("18 granular permissions across 4 categories"),
                 
                 heading3("📧 Email Automation (15+ Templates)"),
@@ -1084,8 +1084,8 @@ export async function syncSimpleBackofficeWiki() {
             
             heading3("Rollen & Permissies (RBAC)"),
             bulletItem("Admin: Volledige toegang, goedkeuringen, gebruikersbeheer"),
-            bulletItem("Projectleider: Projectlevering, team toewijzen, 'aan zet' bepalen"),
-            bulletItem("Engineer: Werk uitvoeren wanneer 'aan zet', uren registreren"),
+            bulletItem("Projectleider: Projectlevering, team toewijzen"),
+            bulletItem("Engineer: Werk uitvoeren op toegewezen projecten, uren registreren"),
             
             heading3("Compliance Features"),
             bulletItem("✅ Audit logging — Wie deed wat en wanneer"),
@@ -1145,24 +1145,6 @@ export async function syncSimpleBackofficeWiki() {
             callout("Totaal: 830 uur — €97.450", "💰"),
             divider(),
             
-            // Onboarding
-            heading2("🎓 Onboarding Walkthrough"),
-            paragraph("Het systeem bevat een ingebouwde rondleiding voor nieuwe gebruikers met 12 stappen:"),
-            bulletItem("1. Welkom — Introductie tot het systeem"),
-            bulletItem("2. Navigatie Sidebar — Menu uitleg"),
-            bulletItem("3. Dashboard — KPI's en overzichten"),
-            bulletItem("4. Mijn Queue — Persoonlijke taken"),
-            bulletItem("5. Pipeline Kanban — Lead management"),
-            bulletItem("6. Pipeline Legenda — Status uitleg"),
-            bulletItem("7. Lead Details — Projectinformatie"),
-            bulletItem("8. Offerte Workflow — Offerte maken"),
-            bulletItem("9. Inbox — Nieuwe leads"),
-            bulletItem("10. Incentives — Bonussen en XP"),
-            bulletItem("11. Sneltoetsen — Keyboard shortcuts"),
-            bulletItem("12. Klaar! — Start met werken"),
-            bulletItem("Bediening: Pijltjestoetsen ← → navigatie, Escape sluiten, altijd opnieuw starten via menu"),
-            divider(),
-            
             // Changelog
             heading2("📋 Changelog"),
             heading3("v0.1.0 (Januari 2026)"),
@@ -1171,7 +1153,6 @@ export async function syncSimpleBackofficeWiki() {
             bulletItem("✅ Offerte workflow met goedkeuring"),
             bulletItem("✅ E-mail automatisering (15+ templates)"),
             bulletItem("✅ Engineer incentive systeem"),
-            bulletItem("✅ Interactieve walkthrough"),
             bulletItem("✅ 337 geautomatiseerde tests"),
             bulletItem("✅ Dutch localization"),
             

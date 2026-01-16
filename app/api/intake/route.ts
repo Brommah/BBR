@@ -426,13 +426,14 @@ export async function POST(request: NextRequest) {
       console.error('[INTAKE] Failed to send confirmation email:', emailResult.error)
     }
 
-    // Notify admins about new lead
+    // Notify admins about new lead (email + in-app notifications)
     const admins = await prisma.user.findMany({
       where: { role: 'admin', deletedAt: null },
-      select: { email: true }
+      select: { id: true, name: true, email: true }
     })
     
     if (admins.length > 0) {
+      // Send email notifications
       sendNewLeadNotification({
         adminEmails: admins.map(a => a.email),
         clientName: sanitizedData.clientName,
@@ -441,10 +442,29 @@ export async function POST(request: NextRequest) {
         address: sanitizedData.address || undefined,
         leadId: lead.id
       }).then(result => {
-        console.log(`[INTAKE] Admin notifications: ${result.sent} sent, ${result.failed} failed`)
+        console.log(`[INTAKE] Admin email notifications: ${result.sent} sent, ${result.failed} failed`)
       }).catch(err => {
-        console.error('[INTAKE] Failed to send admin notifications:', err)
+        console.error('[INTAKE] Failed to send admin email notifications:', err)
       })
+      
+      // Create in-app notifications for each admin
+      const locationText = sanitizedData.address ? `${sanitizedData.address}, ${sanitizedData.city}` : sanitizedData.city
+      for (const admin of admins) {
+        await prisma.notification.create({
+          data: {
+            userId: admin.id,
+            userName: admin.name,
+            type: 'new_lead',
+            title: 'Nieuwe aanvraag',
+            message: `${sanitizedData.clientName} - ${sanitizedData.projectType} te ${locationText}`,
+            leadId: lead.id,
+            leadName: sanitizedData.clientName,
+            fromUserName: 'Website Intake'
+          }
+        }).catch(err => {
+          console.error('[INTAKE] Failed to create in-app notification:', err)
+        })
+      }
     }
 
     // Calculate successful uploads

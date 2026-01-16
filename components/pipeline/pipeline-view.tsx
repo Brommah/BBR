@@ -18,6 +18,7 @@ import { PipelineLegend, PROJECT_TYPE_COLORS, ASSIGNEE_COLORS } from "./pipeline
 import { PipelineSkeleton } from "@/components/ui/skeleton-loaders"
 import { useState, useSyncExternalStore, useMemo } from "react"
 import { createPortal } from "react-dom"
+import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
@@ -29,7 +30,7 @@ import {
     SelectTrigger, 
     SelectValue 
 } from "@/components/ui/select"
-import { Search, X, SlidersHorizontal, AlertCircle } from "lucide-react"
+import { Search, X, SlidersHorizontal, AlertCircle, LayoutGrid, List } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 const COLUMNS: { id: LeadStatus, label: string }[] = [
@@ -63,7 +64,6 @@ interface Filters {
  * - Rekenaar/Tekenaar: only sees leads where:
  *   1. Status is "Opdracht" (quote accepted)
  *   2. Assigned to them
- *   3. They are "aan zet" (their turn to work)
  */
 function filterLeadsByRole(leads: Lead[], user: { role: string; name: string; engineerType?: string } | null): Lead[] {
     if (!user) return []
@@ -96,11 +96,6 @@ function filterLeadsByRole(leads: Lead[], user: { role: string; name: string; en
                 if (lead.assignee !== user.name) return false
             }
             
-            // Must be "aan zet" for their role
-            if (lead.aanZet !== user.engineerType) {
-                return false
-            }
-            
             return true
         })
     }
@@ -109,11 +104,15 @@ function filterLeadsByRole(leads: Lead[], user: { role: string; name: string; en
     return []
 }
 
+type ViewMode = "kanban" | "list"
+
 export function PipelineView() {
+    const router = useRouter()
     const { leads, updateLeadStatus, isLoading } = useLeadStore()
     const { currentUser, isAdmin } = useAuthStore()
     const [activeId, setActiveId] = useState<string | null>(null)
     const [showFilters, setShowFilters] = useState(false)
+    const [viewMode, setViewMode] = useState<ViewMode>("kanban")
     const [filters, setFilters] = useState<Filters>({
         search: "",
         projectType: "all",
@@ -253,7 +252,7 @@ export function PipelineView() {
         visibleColumns = COLUMNS.filter(c => c.id !== "Archief")
     }
     
-    // Show message when engineer has no leads "aan zet"
+    // Show message when engineer has no assigned leads
     if (isEngineer && filteredLeads.length === 0) {
         return (
             <div className="h-full p-6 flex items-center justify-center">
@@ -261,10 +260,10 @@ export function PipelineView() {
                     <div className="w-16 h-16 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center mx-auto mb-4">
                         <AlertCircle className="w-8 h-8 text-amber-600 dark:text-amber-400" />
                     </div>
-                    <h2 className="text-xl font-semibold mb-2">Geen projecten aan zet</h2>
+                    <h2 className="text-xl font-semibold mb-2">Geen toegewezen projecten</h2>
                     <p className="text-muted-foreground">
-                        Op dit moment heb je geen projecten waarbij jij aan zet bent. 
-                        De Projectleider wijst projecten toe en bepaalt wie aan de beurt is.
+                        Op dit moment heb je geen projecten toegewezen. 
+                        De Projectleider wijst projecten aan jou toe wanneer er werk is.
                     </p>
                 </div>
             </div>
@@ -332,6 +331,28 @@ export function PipelineView() {
                                 Reset
                             </Button>
                         )}
+
+                        {/* View Toggle */}
+                        <div className="flex items-center gap-1 border rounded-lg p-0.5 bg-muted/50">
+                            <Button
+                                variant={viewMode === "kanban" ? "secondary" : "ghost"}
+                                size="sm"
+                                onClick={() => setViewMode("kanban")}
+                                className="h-7 px-2"
+                                title="Kanban weergave"
+                            >
+                                <LayoutGrid className="w-4 h-4" />
+                            </Button>
+                            <Button
+                                variant={viewMode === "list" ? "secondary" : "ghost"}
+                                size="sm"
+                                onClick={() => setViewMode("list")}
+                                className="h-7 px-2"
+                                title="Lijst weergave"
+                            >
+                                <List className="w-4 h-4" />
+                            </Button>
+                        </div>
 
                         {/* Result count */}
                         <div className="text-sm text-muted-foreground ml-auto flex items-center gap-2">
@@ -426,27 +447,92 @@ export function PipelineView() {
                     <PipelineLegend />
                 </div>
                 
-                <div 
-                    className="flex gap-4 flex-1 overflow-x-auto overflow-y-hidden pb-4"
-                    role="region"
-                    aria-label={`Pipeline met ${filteredLeads.length} leads in ${visibleColumns.length} kolommen`}
-                >
-                    {visibleColumns.map(col => {
-                        const colLeads = filteredLeads.filter(l => l.status === col.id)
-                        return (
-                            <KanbanColumn 
-                                key={col.id} 
-                                status={col.id} 
-                                title={col.label} 
-                                count={colLeads.length}
-                            >
-                                {colLeads.map(lead => (
-                                    <LeadCard key={lead.id} lead={lead} />
+                {/* Kanban View */}
+                {viewMode === "kanban" && (
+                    <div 
+                        className="flex gap-4 flex-1 overflow-x-auto overflow-y-hidden pb-4"
+                        role="region"
+                        aria-label={`Pipeline met ${filteredLeads.length} leads in ${visibleColumns.length} kolommen`}
+                    >
+                        {visibleColumns.map(col => {
+                            const colLeads = filteredLeads.filter(l => l.status === col.id)
+                            return (
+                                <KanbanColumn 
+                                    key={col.id} 
+                                    status={col.id} 
+                                    title={col.label} 
+                                    count={colLeads.length}
+                                >
+                                    {colLeads.map(lead => (
+                                        <LeadCard key={lead.id} lead={lead} />
+                                    ))}
+                                </KanbanColumn>
+                            )
+                        })}
+                    </div>
+                )}
+
+                {/* List View */}
+                {viewMode === "list" && (
+                    <div className="flex-1 overflow-auto">
+                        <table className="w-full border-collapse">
+                            <thead className="sticky top-0 bg-background border-b">
+                                <tr>
+                                    <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">Klant</th>
+                                    <th className="text-left py-3 px-2 text-sm font-medium text-muted-foreground">Type</th>
+                                    <th className="text-left py-3 px-2 text-sm font-medium text-muted-foreground">Locatie</th>
+                                    <th className="text-left py-3 px-2 text-sm font-medium text-muted-foreground">Status</th>
+                                    {!isEngineer && (
+                                        <th className="text-right py-3 px-4 text-sm font-medium text-muted-foreground">Waarde</th>
+                                    )}
+                                    <th className="text-left py-3 px-2 text-sm font-medium text-muted-foreground">Toegewezen</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {filteredLeads.map((lead) => (
+                                    <tr 
+                                        key={lead.id} 
+                                        className="border-b hover:bg-muted/50 cursor-pointer transition-colors"
+                                        onClick={() => router.push(`/leads/${lead.id}`)}
+                                    >
+                                        <td className="py-2 px-4">
+                                            <div className="font-medium text-sm">{lead.clientName}</div>
+                                            {lead.werknummer && (
+                                                <div className="text-xs text-muted-foreground font-mono">#{lead.werknummer}</div>
+                                            )}
+                                        </td>
+                                        <td className="py-2 px-2">
+                                            <Badge variant="outline" className="text-xs">{lead.projectType}</Badge>
+                                        </td>
+                                        <td className="py-2 px-2 text-sm text-muted-foreground">
+                                            {lead.address ? `${lead.address}, ${lead.city}` : lead.city}
+                                        </td>
+                                        <td className="py-2 px-2">
+                                            <Badge className={cn(
+                                                "text-xs",
+                                                lead.status === "Nieuw" && "bg-blue-100 text-blue-700 border-blue-200",
+                                                lead.status === "Calculatie" && "bg-amber-100 text-amber-700 border-amber-200",
+                                                lead.status === "Offerte Verzonden" && "bg-violet-100 text-violet-700 border-violet-200",
+                                                lead.status === "Opdracht" && "bg-emerald-100 text-emerald-700 border-emerald-200",
+                                                lead.status === "Archief" && "bg-slate-100 text-slate-700 border-slate-200"
+                                            )}>
+                                                {lead.status}
+                                            </Badge>
+                                        </td>
+                                        {!isEngineer && (
+                                            <td className="py-2 px-4 text-right font-mono text-sm">
+                                                €{(lead.quoteValue ?? lead.value).toLocaleString('nl-NL')}
+                                            </td>
+                                        )}
+                                        <td className="py-2 px-2 text-sm text-muted-foreground">
+                                            {lead.assignedRekenaar || lead.assignee || "-"}
+                                        </td>
+                                    </tr>
                                 ))}
-                            </KanbanColumn>
-                        )
-                    })}
-                </div>
+                            </tbody>
+                        </table>
+                    </div>
+                )}
             </div>
 
             {typeof window !== "undefined" && createPortal(

@@ -158,14 +158,12 @@ broersma-backoffice/
 │   ├── lead-detail/       # Lead panels
 │   ├── pipeline/          # Kanban componenten
 │   ├── templates/         # E-mail/PDF templates
-│   ├── walkthrough/       # Onboarding tour
 │   └── ui/                # Shadcn componenten
 ├── lib/                   # Utilities & stores
 │   ├── auth.ts            # Auth store (Zustand)
 │   ├── store.ts           # Lead store (Zustand)
 │   ├── db-actions.ts      # Server actions
-│   ├── email.ts           # E-mail functies
-│   └── walkthrough.ts     # Onboarding systeem
+│   └── email.ts           # E-mail functies
 ├── prisma/                # Database schema
 ├── tests/                 # Unit tests (Vitest)
 ├── e2e/                   # E2E tests (Playwright)
@@ -314,31 +312,6 @@ npm run start
 
 ---
 
-## 🎓 Onboarding Walkthrough
-
-Het systeem bevat een ingebouwde rondleiding voor nieuwe gebruikers:
-
-### 12 Stappen
-1. **Welkom** — Introductie tot het systeem
-2. **Navigatie Sidebar** — Menu uitleg
-3. **Dashboard** — KPI's en overzichten
-4. **Mijn Queue** — Persoonlijke taken
-5. **Pipeline Kanban** — Lead management
-6. **Pipeline Legenda** — Status uitleg
-7. **Lead Details** — Projectinformatie
-8. **Offerte Workflow** — Offerte maken
-9. **Inbox** — Nieuwe leads
-10. **Incentives** — Bonussen en XP
-11. **Sneltoetsen** — Keyboard shortcuts
-12. **Klaar!** — Start met werken
-
-### Bediening
-- Pijltjestoetsen ← → voor navigatie
-- Escape om te sluiten
-- Altijd opnieuw te starten via het menu
-
----
-
 ## 📞 Support & Contact
 
 ### Technische Vragen
@@ -363,7 +336,6 @@ Raadpleeg de documentatie in `/docs`:
 - ✅ Offerte workflow met goedkeuring
 - ✅ E-mail automatisering (15+ templates)
 - ✅ Engineer incentive systeem
-- ✅ Interactieve walkthrough
 - ✅ 337 geautomatiseerde tests
 - ✅ Dutch localization
 

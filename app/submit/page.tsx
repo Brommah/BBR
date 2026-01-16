@@ -1,17 +1,18 @@
 "use client"
 
-import React, { useState, useEffect, useRef } from "react"
+import React, { useState, useRef, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import { motion, AnimatePresence } from "framer-motion"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { Checkbox } from "@/components/ui/checkbox"
 import { AccessGuard } from "@/components/auth/access-guard"
 import { useAuthStore } from "@/lib/auth"
-import { createLead, createActivity, addNote, getEngineers, updateLeadAssignee } from "@/lib/db-actions"
+import { useLeadStore } from "@/lib/store"
+import { createActivity, addNote } from "@/lib/db-actions"
 import { uploadFile } from "@/lib/storage"
 import { PROJECT_TYPES } from "@/lib/config"
 import { toast } from "sonner"
@@ -22,33 +23,32 @@ import {
   Mail, 
   Phone, 
   MapPin, 
-  Home, 
-  FileText, 
-  UserCheck,
+  Building2,
   Loader2,
   CheckCircle2,
   ArrowRight,
   ArrowLeft,
   Plus,
-  Euro,
-  StickyNote,
-  Building2,
-  Send,
-  Hash,
   Upload,
   File,
   X,
   Check,
-  Sparkles
+  Camera,
+  FileText,
+  Search,
+  Users,
+  HardHat
 } from "lucide-react"
+import { Label } from "@/components/ui/label"
 
-interface Engineer {
-  id: string
-  name: string
-  email: string
-  role: string
-  avatar: string | null
-}
+// Client role options
+const CLIENT_ROLES = [
+  { value: "particulier", label: "Particulier", icon: User },
+  { value: "architect", label: "Architect & Ontwerper", icon: Users },
+  { value: "aannemer", label: "Aannemer & Bouwbedrijf", icon: HardHat },
+] as const
+
+type ClientRole = typeof CLIENT_ROLES[number]["value"]
 
 const projectTypeIcons: Record<string, string> = {
   "Dakkapel": "🏠",
@@ -63,71 +63,156 @@ const projectTypeIcons: Record<string, string> = {
 
 const WIZARD_STEPS = [
   { id: 1, title: "Klant", icon: User, description: "Contactgegevens" },
-  { id: 2, title: "Project", icon: Building2, description: "Type & locatie" },
-  { id: 3, title: "Details", icon: FileText, description: "Extra informatie" },
-  { id: 4, title: "Bevestigen", icon: CheckCircle2, description: "Controleren" },
+  { id: 2, title: "Project", icon: Building2, description: "Locatie & type" },
+  { id: 3, title: "Bevestigen", icon: CheckCircle2, description: "Controleren" },
 ]
+
+interface AddressLookupResult {
+  straat: string
+  woonplaats: string
+  gemeente: string
+  provincie: string
+  volledigAdres: string
+}
+
+/**
+ * Lookup address from postcode + huisnummer using PDOK Locatieserver
+ */
+async function lookupAddress(postcode: string, huisnummer: string): Promise<AddressLookupResult | null> {
+  try {
+    // Clean postcode (remove spaces)
+    const cleanPostcode = postcode.replace(/\s+/g, '').toUpperCase()
+    const query = `${cleanPostcode} ${huisnummer}`
+    
+    const response = await fetch(
+      `https://api.pdok.nl/bzk/locatieserver/search/v3_1/free?q=${encodeURIComponent(query)}&fq=type:adres&rows=1`
+    )
+    
+    if (!response.ok) return null
+    
+    const data = await response.json()
+    
+    if (data.response?.docs?.length > 0) {
+      const doc = data.response.docs[0]
+      return {
+        straat: doc.straatnaam || '',
+        woonplaats: doc.woonplaatsnaam || '',
+        gemeente: doc.gemeentenaam || '',
+        provincie: doc.provincienaam || '',
+        volledigAdres: doc.weergavenaam || `${doc.straatnaam} ${huisnummer}, ${doc.woonplaatsnaam}`
+      }
+    }
+    
+    return null
+  } catch (error) {
+    console.error('Address lookup error:', error)
+    return null
+  }
+}
 
 export default function SubmitPage() {
   const router = useRouter()
   const { currentUser } = useAuthStore()
+  const { addLead } = useLeadStore()
   const [currentStep, setCurrentStep] = useState(1)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isSubmitted, setIsSubmitted] = useState(false)
   const [createdLeadId, setCreatedLeadId] = useState<string | null>(null)
-  const [engineers, setEngineers] = useState<Engineer[]>([])
-  const [loadingEngineers, setLoadingEngineers] = useState(true)
 
+  // Form state - Klant
   const [formData, setFormData] = useState({
+    // Klant section
+    rol: "" as ClientRole | "",
     clientName: "",
     clientEmail: "",
     clientPhone: "",
-    projectType: "",
+    architectName: "",
+    architectEmail: "",
+    // Project section
+    postcode: "",
+    huisnummer: "",
     city: "",
     address: "",
+    projectTypes: [] as string[],
     description: "",
-    assignee: "",
-    estimatedValue: "",
-    initialNote: "",
-    werknummer: "",
-    source: "telefoon" as "telefoon" | "email" | "balie" | "doorverwijzing" | "anders"
   })
   
-  const [pendingFiles, setPendingFiles] = useState<File[]>([])
-  const fileInputRef = useRef<HTMLInputElement>(null)
+  // Address lookup state
+  const [isLookingUpAddress, setIsLookingUpAddress] = useState(false)
+  const [addressFound, setAddressFound] = useState(false)
+  
+  // File uploads - separated by category
+  const [photoFiles, setPhotoFiles] = useState<File[]>([])
+  const [documentFiles, setDocumentFiles] = useState<File[]>([])
+  const photoInputRef = useRef<HTMLInputElement>(null)
+  const documentInputRef = useRef<HTMLInputElement>(null)
 
-  useEffect(() => {
-    async function loadEngineers() {
-      setLoadingEngineers(true)
-      try {
-        const result = await getEngineers()
-        if (result.success && result.data) {
-          setEngineers(result.data as Engineer[])
-        }
-      } catch (error) {
-        console.error("Failed to load engineers:", error)
-      } finally {
-        setLoadingEngineers(false)
-      }
+  // Address lookup handler
+  const handleAddressLookup = useCallback(async () => {
+    if (!formData.postcode || !formData.huisnummer) return
+    
+    setIsLookingUpAddress(true)
+    setAddressFound(false)
+    
+    const result = await lookupAddress(formData.postcode, formData.huisnummer)
+    
+    if (result) {
+      setFormData(prev => ({
+        ...prev,
+        address: `${result.straat} ${prev.huisnummer}`,
+        city: result.woonplaats,
+      }))
+      setAddressFound(true)
+      toast.success("Adres gevonden", {
+        description: result.volledigAdres
+      })
+    } else {
+      toast.error("Adres niet gevonden", {
+        description: "Controleer de postcode en het huisnummer"
+      })
     }
-    loadEngineers()
-  }, [])
+    
+    setIsLookingUpAddress(false)
+  }, [formData.postcode, formData.huisnummer])
+
+  // Toggle project type selection
+  const toggleProjectType = (type: string) => {
+    setFormData(prev => ({
+      ...prev,
+      projectTypes: prev.projectTypes.includes(type)
+        ? prev.projectTypes.filter(t => t !== type)
+        : [...prev.projectTypes, type]
+    }))
+  }
 
   const validateStep = (step: number): boolean => {
     switch (step) {
       case 1:
+        if (!formData.rol) {
+          toast.error("Selecteer een rol")
+          return false
+        }
         if (!formData.clientName.trim()) {
-          toast.error("Vul een klantnaam in")
+          toast.error("Vul de naam van de opdrachtgever in")
+          return false
+        }
+        if (!formData.clientEmail.trim()) {
+          toast.error("Vul het e-mailadres van de opdrachtgever in")
+          return false
+        }
+        // Basic email validation
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.clientEmail)) {
+          toast.error("Vul een geldig e-mailadres in")
           return false
         }
         return true
       case 2:
-        if (!formData.projectType) {
-          toast.error("Selecteer een projecttype")
+        if (!formData.postcode.trim() || !formData.huisnummer.trim()) {
+          toast.error("Vul postcode en huisnummer in")
           return false
         }
-        if (!formData.city.trim()) {
-          toast.error("Vul een stad/plaats in")
+        if (formData.projectTypes.length === 0) {
+          toast.error("Selecteer minimaal één projecttype")
           return false
         }
         return true
@@ -137,7 +222,7 @@ export default function SubmitPage() {
   }
 
   const nextStep = () => {
-    if (validateStep(currentStep) && currentStep < 4) {
+    if (validateStep(currentStep) && currentStep < 3) {
       setCurrentStep(currentStep + 1)
     }
   }
@@ -163,15 +248,18 @@ export default function SubmitPage() {
     setIsSubmitting(true)
 
     try {
-      const leadResult = await createLead({
+      // Create lead with primary project type (first selected)
+      const primaryProjectType = formData.projectTypes[0]
+      
+      const leadResult = await addLead({
         clientName: formData.clientName.trim(),
-        clientEmail: formData.clientEmail.trim() || undefined,
+        clientEmail: formData.clientEmail.trim(),
         clientPhone: formData.clientPhone.trim() || undefined,
-        projectType: formData.projectType,
+        projectType: primaryProjectType,
         city: formData.city.trim(),
         address: formData.address.trim() || undefined,
-        value: formData.estimatedValue ? parseFloat(formData.estimatedValue) : 0,
-        werknummer: formData.werknummer.trim() || undefined,
+        status: "Nieuw",
+        value: 0,
       })
 
       if (!leadResult.success || !leadResult.data) {
@@ -181,46 +269,54 @@ export default function SubmitPage() {
       const leadId = (leadResult.data as { id: string }).id
       setCreatedLeadId(leadId)
 
+      // Build activity content
+      const rolLabel = CLIENT_ROLES.find(r => r.value === formData.rol)?.label || formData.rol
+      let activityContent = `Handmatig ingevoerd (rol: ${rolLabel})`
+      if (formData.projectTypes.length > 1) {
+        activityContent += ` - Projecttypes: ${formData.projectTypes.join(', ')}`
+      }
+
       await createActivity({
         leadId,
         type: "lead_created",
-        content: `Handmatig ingevoerd via receptie (bron: ${formData.source})${formData.description ? ` - ${formData.description.substring(0, 100)}${formData.description.length > 100 ? '...' : ''}` : ''}`,
+        content: activityContent,
         author: currentUser?.name || "Receptie"
       })
 
+      // Add notes for additional info
+      const notes: string[] = []
+      
+      if (formData.architectName || formData.architectEmail) {
+        notes.push(`**Architect:** ${formData.architectName || 'Niet opgegeven'}${formData.architectEmail ? ` (${formData.architectEmail})` : ''}`)
+      }
+      
+      if (formData.projectTypes.length > 1) {
+        notes.push(`**Projecttypes:** ${formData.projectTypes.join(', ')}`)
+      }
+      
       if (formData.description.trim()) {
+        notes.push(`**Projectomschrijving:**\n${formData.description.trim()}`)
+      }
+      
+      if (notes.length > 0) {
         await addNote(
           leadId,
-          `**Projectomschrijving:**\n${formData.description.trim()}`,
+          notes.join('\n\n'),
           currentUser?.name || "Receptie"
         )
       }
 
-      if (formData.initialNote.trim()) {
-        await addNote(
-          leadId,
-          formData.initialNote.trim(),
-          currentUser?.name || "Receptie"
-        )
-      }
-
-      if (formData.assignee) {
-        const selectedEngineer = engineers.find(e => e.id === formData.assignee)
-        if (selectedEngineer) {
-          await updateLeadAssignee(leadId, selectedEngineer.name)
-        }
-      }
-
-      if (pendingFiles.length > 0) {
+      // Upload photos
+      const allFiles = [...photoFiles, ...documentFiles]
+      if (allFiles.length > 0) {
         const uploadErrors: string[] = []
         
-        for (let i = 0; i < pendingFiles.length; i++) {
-          const file = pendingFiles[i]
-          
+        for (const file of allFiles) {
+          const isPhoto = photoFiles.includes(file)
           const uploadData = new FormData()
           uploadData.append('file', file)
           uploadData.append('leadId', leadId)
-          uploadData.append('category', 'overig')
+          uploadData.append('category', isPhoto ? 'fotos' : 'tekeningen')
           uploadData.append('uploadedBy', currentUser?.name || 'Receptie')
           
           const result = await uploadFile(uploadData)
@@ -239,7 +335,7 @@ export default function SubmitPage() {
 
       setIsSubmitted(true)
       toast.success("Project succesvol aangemaakt!", {
-        description: `${formData.clientName} - ${formData.projectType}`
+        description: `${formData.clientName} - ${primaryProjectType}`
       })
 
     } catch (error) {
@@ -254,23 +350,25 @@ export default function SubmitPage() {
 
   const resetForm = () => {
     setFormData({
+      rol: "",
       clientName: "",
       clientEmail: "",
       clientPhone: "",
-      projectType: "",
+      architectName: "",
+      architectEmail: "",
+      postcode: "",
+      huisnummer: "",
       city: "",
       address: "",
+      projectTypes: [],
       description: "",
-      assignee: "",
-      estimatedValue: "",
-      initialNote: "",
-      werknummer: "",
-      source: "telefoon"
     })
-    setPendingFiles([])
+    setPhotoFiles([])
+    setDocumentFiles([])
     setIsSubmitted(false)
     setCreatedLeadId(null)
     setCurrentStep(1)
+    setAddressFound(false)
   }
 
   // Success state
@@ -304,21 +402,17 @@ export default function SubmitPage() {
                 </div>
 
                 <div className="card-tactile rounded-xl p-4 text-left space-y-2">
-                  <div className="flex items-center gap-2 text-sm">
-                    <span className={cn(
-                      "px-2 py-0.5 rounded-full text-xs font-medium pill-glass-amber"
-                    )}>
-                      {projectTypeIcons[formData.projectType]} {formData.projectType}
-                    </span>
+                  <div className="flex flex-wrap gap-2">
+                    {formData.projectTypes.map(type => (
+                      <Badge key={type} variant="secondary" className="pill-glass-amber">
+                        {projectTypeIcons[type]} {type}
+                      </Badge>
+                    ))}
                   </div>
-                  <p className="text-sm text-muted-foreground flex items-center gap-2">
-                    <MapPin className="w-4 h-4" />
-                    {formData.city}{formData.address && `, ${formData.address}`}
-                  </p>
-                  {formData.assignee && (
+                  {formData.address && (
                     <p className="text-sm text-muted-foreground flex items-center gap-2">
-                      <UserCheck className="w-4 h-4" />
-                      Toegewezen aan: {engineers.find(e => e.id === formData.assignee)?.name}
+                      <MapPin className="w-4 h-4" />
+                      {formData.address}, {formData.city}
                     </p>
                   )}
                 </div>
@@ -461,7 +555,7 @@ export default function SubmitPage() {
                   transition={{ duration: 0.3, ease: "easeOut" }}
                   className="p-6 sm:p-8"
                 >
-                  {/* Step 1: Klantgegevens */}
+                  {/* Step 1: Klant */}
                   {currentStep === 1 && (
                     <div className="space-y-6">
                       <div className="text-center mb-8">
@@ -473,17 +567,46 @@ export default function SubmitPage() {
                         >
                           <User className="w-7 h-7 text-amber-600 dark:text-amber-400" />
                         </motion.div>
-                        <h2 className="text-xl font-semibold">Klantgegevens</h2>
-                        <p className="text-sm text-muted-foreground mt-1">Wie is de klant?</p>
+                        <h2 className="text-xl font-semibold">Klant</h2>
+                        <p className="text-sm text-muted-foreground mt-1">Contactgegevens opdrachtgever</p>
                       </div>
 
+                      {/* Rol dropdown */}
                       <div className="space-y-2">
-                        <label className="text-sm font-medium">
-                          Naam klant <span className="text-rose-500">*</span>
-                        </label>
+                        <Label>
+                          Rol <span className="text-rose-500">*</span>
+                        </Label>
+                        <Select 
+                          value={formData.rol} 
+                          onValueChange={(value: ClientRole) => setFormData({...formData, rol: value})}
+                        >
+                          <SelectTrigger className="h-12 rounded-xl">
+                            <SelectValue placeholder="Selecteer rol" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {CLIENT_ROLES.map((role) => {
+                              const Icon = role.icon
+                              return (
+                                <SelectItem key={role.value} value={role.value}>
+                                  <div className="flex items-center gap-2">
+                                    <Icon className="w-4 h-4 text-muted-foreground" />
+                                    <span>{role.label}</span>
+                                  </div>
+                                </SelectItem>
+                              )
+                            })}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      {/* Naam opdrachtgever */}
+                      <div className="space-y-2">
+                        <Label>
+                          Volledige naam opdrachtgever <span className="text-rose-500">*</span>
+                        </Label>
                         <div className="relative">
                           <Input
-                            placeholder="Volledige naam"
+                            placeholder="Bijv. Jan de Vries"
                             value={formData.clientName}
                             onChange={(e) => setFormData({...formData, clientName: e.target.value})}
                             className="pl-10 h-12 rounded-xl input-focus"
@@ -493,57 +616,74 @@ export default function SubmitPage() {
                         </div>
                       </div>
 
-                      <div className="grid sm:grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <label className="text-sm font-medium">E-mailadres</label>
-                          <div className="relative">
-                            <Input
-                              type="email"
-                              placeholder="klant@email.nl"
-                              value={formData.clientEmail}
-                              onChange={(e) => setFormData({...formData, clientEmail: e.target.value})}
-                              className="pl-10 h-12 rounded-xl"
-                            />
-                            <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                          </div>
-                        </div>
-                        <div className="space-y-2">
-                          <label className="text-sm font-medium">Telefoonnummer</label>
-                          <div className="relative">
-                            <Input
-                              type="tel"
-                              placeholder="06 12345678"
-                              value={formData.clientPhone}
-                              onChange={(e) => setFormData({...formData, clientPhone: e.target.value})}
-                              className="pl-10 h-12 rounded-xl"
-                            />
-                            <Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                          </div>
+                      {/* E-mail opdrachtgever */}
+                      <div className="space-y-2">
+                        <Label>
+                          E-mail opdrachtgever <span className="text-rose-500">*</span>
+                        </Label>
+                        <div className="relative">
+                          <Input
+                            type="email"
+                            placeholder="klant@email.nl"
+                            value={formData.clientEmail}
+                            onChange={(e) => setFormData({...formData, clientEmail: e.target.value})}
+                            className="pl-10 h-12 rounded-xl"
+                          />
+                          <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                         </div>
                       </div>
 
+                      {/* Telefoonnummer */}
                       <div className="space-y-2">
-                        <label className="text-sm font-medium">Bron aanvraag</label>
-                        <Select 
-                          value={formData.source} 
-                          onValueChange={(value: typeof formData.source) => setFormData({...formData, source: value})}
-                        >
-                          <SelectTrigger className="h-12 rounded-xl">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="telefoon">📞 Telefoon</SelectItem>
-                            <SelectItem value="email">📧 E-mail</SelectItem>
-                            <SelectItem value="balie">🏢 Balie</SelectItem>
-                            <SelectItem value="doorverwijzing">🔗 Doorverwijzing</SelectItem>
-                            <SelectItem value="anders">📝 Anders</SelectItem>
-                          </SelectContent>
-                        </Select>
+                        <Label>Telefoonnummer</Label>
+                        <div className="relative">
+                          <Input
+                            type="tel"
+                            placeholder="06 12345678"
+                            value={formData.clientPhone}
+                            onChange={(e) => setFormData({...formData, clientPhone: e.target.value})}
+                            className="pl-10 h-12 rounded-xl"
+                          />
+                          <Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                        </div>
+                      </div>
+
+                      {/* Architect info (optional) */}
+                      <div className="pt-4 border-t border-border/50">
+                        <p className="text-sm font-medium text-muted-foreground mb-4">Architect gegevens (optioneel)</p>
+                        
+                        <div className="grid sm:grid-cols-2 gap-4">
+                          <div className="space-y-2">
+                            <Label>Volledige naam architect</Label>
+                            <div className="relative">
+                              <Input
+                                placeholder="Naam architect"
+                                value={formData.architectName}
+                                onChange={(e) => setFormData({...formData, architectName: e.target.value})}
+                                className="pl-10 h-12 rounded-xl"
+                              />
+                              <Users className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                            </div>
+                          </div>
+                          <div className="space-y-2">
+                            <Label>E-mail architect</Label>
+                            <div className="relative">
+                              <Input
+                                type="email"
+                                placeholder="architect@email.nl"
+                                value={formData.architectEmail}
+                                onChange={(e) => setFormData({...formData, architectEmail: e.target.value})}
+                                className="pl-10 h-12 rounded-xl"
+                              />
+                              <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                            </div>
+                          </div>
+                        </div>
                       </div>
                     </div>
                   )}
 
-                  {/* Step 2: Projectdetails */}
+                  {/* Step 2: Projectlocatie en details */}
                   {currentStep === 2 && (
                     <div className="space-y-6">
                       <div className="text-center mb-8">
@@ -555,65 +695,118 @@ export default function SubmitPage() {
                         >
                           <Building2 className="w-7 h-7 text-amber-600 dark:text-amber-400" />
                         </motion.div>
-                        <h2 className="text-xl font-semibold">Projectdetails</h2>
-                        <p className="text-sm text-muted-foreground mt-1">Wat voor project is het?</p>
+                        <h2 className="text-xl font-semibold">Projectlocatie en details</h2>
+                        <p className="text-sm text-muted-foreground mt-1">Waar en wat voor project?</p>
                       </div>
 
+                      {/* Postcode + Huisnummer with lookup */}
                       <div className="space-y-2">
-                        <label className="text-sm font-medium">
-                          Type project <span className="text-rose-500">*</span>
-                        </label>
-                        <Select 
-                          value={formData.projectType} 
-                          onValueChange={(value) => setFormData({...formData, projectType: value})}
-                        >
-                          <SelectTrigger className="h-12 rounded-xl">
-                            <SelectValue placeholder="Selecteer projecttype" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {PROJECT_TYPES.map((type) => (
-                              <SelectItem key={type} value={type}>
-                                <div className="flex items-center gap-2">
-                                  <span>{projectTypeIcons[type] || "📋"}</span>
-                                  <span>{type}</span>
-                                </div>
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      <div className="grid sm:grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <label className="text-sm font-medium">
-                            Stad/Plaats <span className="text-rose-500">*</span>
-                          </label>
-                          <div className="relative">
+                        <Label>
+                          Postcode en huisnummer <span className="text-rose-500">*</span>
+                        </Label>
+                        <div className="flex gap-2">
+                          <div className="relative flex-1">
                             <Input
-                              placeholder="bijv. Amsterdam"
-                              value={formData.city}
-                              onChange={(e) => setFormData({...formData, city: e.target.value})}
+                              placeholder="1234 AB"
+                              value={formData.postcode}
+                              onChange={(e) => {
+                                setFormData({...formData, postcode: e.target.value})
+                                setAddressFound(false)
+                              }}
                               className="pl-10 h-12 rounded-xl"
                             />
                             <MapPin className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                           </div>
-                        </div>
-                        <div className="space-y-2">
-                          <label className="text-sm font-medium">Adres</label>
-                          <div className="relative">
+                          <div className="relative w-28">
                             <Input
-                              placeholder="Straatnaam 123"
-                              value={formData.address}
-                              onChange={(e) => setFormData({...formData, address: e.target.value})}
-                              className="pl-10 h-12 rounded-xl"
+                              placeholder="123"
+                              value={formData.huisnummer}
+                              onChange={(e) => {
+                                setFormData({...formData, huisnummer: e.target.value})
+                                setAddressFound(false)
+                              }}
+                              className="h-12 rounded-xl"
                             />
-                            <Home className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                           </div>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="h-12 px-4 rounded-xl"
+                            onClick={handleAddressLookup}
+                            disabled={isLookingUpAddress || !formData.postcode || !formData.huisnummer}
+                          >
+                            {isLookingUpAddress ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <Search className="w-4 h-4" />
+                            )}
+                          </Button>
                         </div>
+                        
+                        {/* Address result */}
+                        {addressFound && formData.address && (
+                          <motion.div
+                            initial={{ opacity: 0, y: -10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            className="flex items-center gap-2 p-3 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-xl"
+                          >
+                            <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                            <span className="text-sm text-emerald-800 dark:text-emerald-200">
+                              {formData.address}, {formData.city}
+                            </span>
+                          </motion.div>
+                        )}
                       </div>
 
+                      {/* Project Type - Multi-select */}
+                      <div className="space-y-3">
+                        <Label>
+                          Type project <span className="text-rose-500">*</span>
+                          <span className="text-muted-foreground font-normal ml-2">(meerdere mogelijk)</span>
+                        </Label>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                          {PROJECT_TYPES.map((type) => {
+                            const isSelected = formData.projectTypes.includes(type)
+                            return (
+                              <motion.button
+                                key={type}
+                                type="button"
+                                onClick={() => toggleProjectType(type)}
+                                className={cn(
+                                  "flex items-center gap-2 p-3 rounded-xl border-2 transition-all text-left",
+                                  isSelected
+                                    ? "border-amber-400 bg-amber-50 dark:bg-amber-950/30"
+                                    : "border-border hover:border-amber-200 hover:bg-muted/50"
+                                )}
+                                whileHover={{ scale: 1.02 }}
+                                whileTap={{ scale: 0.98 }}
+                              >
+                                <div className={cn(
+                                  "w-5 h-5 rounded flex items-center justify-center border-2 transition-colors shrink-0",
+                                  isSelected
+                                    ? "bg-amber-500 border-amber-500"
+                                    : "border-muted-foreground/30"
+                                )}>
+                                  {isSelected && <Check className="w-3 h-3 text-white" />}
+                                </div>
+                                <div className="min-w-0">
+                                  <span className="text-lg mr-1">{projectTypeIcons[type] || "📋"}</span>
+                                  <span className="text-sm font-medium truncate">{type}</span>
+                                </div>
+                              </motion.button>
+                            )
+                          })}
+                        </div>
+                        {formData.projectTypes.length > 0 && (
+                          <p className="text-xs text-muted-foreground">
+                            Geselecteerd: {formData.projectTypes.join(', ')}
+                          </p>
+                        )}
+                      </div>
+
+                      {/* Description */}
                       <div className="space-y-2">
-                        <label className="text-sm font-medium">Projectomschrijving</label>
+                        <Label>Projectomschrijving</Label>
                         <Textarea
                           placeholder="Beschrijving: afmetingen, wensen, bijzonderheden..."
                           value={formData.description}
@@ -621,156 +814,108 @@ export default function SubmitPage() {
                           className="min-h-[100px] resize-none rounded-xl"
                         />
                       </div>
-                    </div>
-                  )}
 
-                  {/* Step 3: Extra Details */}
-                  {currentStep === 3 && (
-                    <div className="space-y-6">
-                      <div className="text-center mb-8">
-                        <motion.div 
-                          className="w-14 h-14 rounded-2xl bg-gradient-to-br from-amber-100 to-amber-200 dark:from-amber-900/30 dark:to-amber-800/30 flex items-center justify-center mx-auto mb-4"
-                          initial={{ scale: 0 }}
-                          animate={{ scale: 1 }}
-                          transition={{ type: "spring", delay: 0.1 }}
-                        >
-                          <Sparkles className="w-7 h-7 text-amber-600 dark:text-amber-400" />
-                        </motion.div>
-                        <h2 className="text-xl font-semibold">Extra Informatie</h2>
-                        <p className="text-sm text-muted-foreground mt-1">Optionele details</p>
-                      </div>
-
-                      <div className="grid sm:grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <label className="text-sm font-medium">Geschatte waarde</label>
-                          <div className="relative">
-                            <Input
-                              type="number"
-                              placeholder="0.00"
-                              value={formData.estimatedValue}
-                              onChange={(e) => setFormData({...formData, estimatedValue: e.target.value})}
-                              className="pl-10 h-12 rounded-xl"
-                              min="0"
-                              step="0.01"
-                            />
-                            <Euro className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                          </div>
-                        </div>
-                        <div className="space-y-2">
-                          <label className="text-sm font-medium">Werknummer</label>
-                          <div className="relative">
-                            <Input
-                              placeholder="bijv. 2026-001"
-                              value={formData.werknummer}
-                              onChange={(e) => setFormData({...formData, werknummer: e.target.value})}
-                              className="pl-10 h-12 rounded-xl"
-                            />
-                            <Hash className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="space-y-2">
-                        <label className="text-sm font-medium">Toewijzen aan</label>
-                        <Select 
-                          value={formData.assignee || "_none_"} 
-                          onValueChange={(value) => setFormData({...formData, assignee: value === "_none_" ? "" : value})}
-                          disabled={loadingEngineers}
-                        >
-                          <SelectTrigger className="h-12 rounded-xl">
-                            <SelectValue placeholder={loadingEngineers ? "Laden..." : "Selecteer (optioneel)"} />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="_none_">
-                              <span className="text-muted-foreground">Niet toewijzen</span>
-                            </SelectItem>
-                            {engineers.map((engineer) => (
-                              <SelectItem key={engineer.id} value={engineer.id}>
-                                <div className="flex items-center gap-2">
-                                  <div className="w-6 h-6 rounded-full bg-gradient-to-br from-amber-100 to-amber-200 flex items-center justify-center text-xs font-semibold text-amber-700">
-                                    {engineer.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
-                                  </div>
-                                  <span>{engineer.name}</span>
-                                </div>
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      <div className="space-y-2">
-                        <label className="text-sm font-medium flex items-center gap-2">
-                          <StickyNote className="w-4 h-4" />
-                          Interne notitie
-                        </label>
-                        <Textarea
-                          placeholder="Opmerkingen voor het team..."
-                          value={formData.initialNote}
-                          onChange={(e) => setFormData({...formData, initialNote: e.target.value})}
-                          className="min-h-[80px] resize-none rounded-xl"
-                        />
-                      </div>
-
-                      {/* File Upload */}
-                      <div className="space-y-2">
-                        <label className="text-sm font-medium flex items-center gap-2">
-                          <Upload className="w-4 h-4" />
-                          Documenten
-                        </label>
-                        <motion.div 
-                          className="card-tactile rounded-xl p-6 text-center cursor-pointer group"
-                          onClick={() => fileInputRef.current?.click()}
-                          whileHover={{ scale: 1.01 }}
-                          whileTap={{ scale: 0.99 }}
-                        >
-                          <Upload className="w-8 h-8 mx-auto mb-2 text-muted-foreground group-hover:text-amber-500 transition-colors" />
-                          <p className="text-sm text-muted-foreground">
-                            Klik om bestanden toe te voegen
-                          </p>
-                        </motion.div>
-                        <input 
-                          ref={fileInputRef}
-                          type="file"
-                          multiple
-                          className="hidden"
-                          onChange={(e) => {
-                            const files = Array.from(e.target.files || [])
-                            setPendingFiles(prev => [...prev, ...files])
-                            e.target.value = ""
-                          }}
-                        />
+                      {/* Document uploads */}
+                      <div className="space-y-4 pt-4 border-t border-border/50">
+                        <p className="text-sm font-medium">Documenten uploaden</p>
                         
-                        {pendingFiles.length > 0 && (
-                          <div className="flex flex-wrap gap-2 mt-3">
-                            {pendingFiles.map((file, idx) => (
-                              <motion.div
-                                key={idx}
-                                initial={{ scale: 0, opacity: 0 }}
-                                animate={{ scale: 1, opacity: 1 }}
-                                className="pill-glass-slate px-2 py-1 rounded-full text-xs flex items-center gap-1"
-                              >
-                                <File className="w-3 h-3" />
-                                {file.name.length > 20 ? file.name.substring(0, 20) + '...' : file.name}
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    setPendingFiles(prev => prev.filter((_, i) => i !== idx))
-                                  }}
-                                  className="ml-1 p-0.5 hover:bg-slate-300 dark:hover:bg-slate-600 rounded"
-                                >
-                                  <X className="w-3 h-3" />
-                                </button>
-                              </motion.div>
-                            ))}
-                          </div>
-                        )}
+                        {/* Photos */}
+                        <div className="space-y-2">
+                          <Label className="flex items-center gap-2">
+                            <Camera className="w-4 h-4" />
+                            Foto&apos;s van de huidige situatie
+                          </Label>
+                          <motion.div 
+                            className="card-tactile rounded-xl p-4 text-center cursor-pointer group"
+                            onClick={() => photoInputRef.current?.click()}
+                            whileHover={{ scale: 1.01 }}
+                            whileTap={{ scale: 0.99 }}
+                          >
+                            <Camera className="w-6 h-6 mx-auto mb-1 text-muted-foreground group-hover:text-amber-500 transition-colors" />
+                            <p className="text-xs text-muted-foreground">Klik om foto&apos;s te selecteren</p>
+                          </motion.div>
+                          <input 
+                            ref={photoInputRef}
+                            type="file"
+                            multiple
+                            accept="image/*"
+                            className="hidden"
+                            onChange={(e) => {
+                              const files = Array.from(e.target.files || [])
+                              setPhotoFiles(prev => [...prev, ...files])
+                              e.target.value = ""
+                            }}
+                          />
+                          {photoFiles.length > 0 && (
+                            <div className="flex flex-wrap gap-2">
+                              {photoFiles.map((file, idx) => (
+                                <Badge key={idx} variant="secondary" className="gap-1 pr-1">
+                                  <Camera className="w-3 h-3" />
+                                  {file.name.length > 15 ? file.name.substring(0, 15) + '...' : file.name}
+                                  <button
+                                    type="button"
+                                    onClick={() => setPhotoFiles(prev => prev.filter((_, i) => i !== idx))}
+                                    className="ml-1 p-0.5 hover:bg-slate-300 dark:hover:bg-slate-600 rounded"
+                                  >
+                                    <X className="w-3 h-3" />
+                                  </button>
+                                </Badge>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Technical drawings */}
+                        <div className="space-y-2">
+                          <Label className="flex items-center gap-2">
+                            <FileText className="w-4 h-4" />
+                            Bouwkundige en/of archieftekeningen
+                          </Label>
+                          <motion.div 
+                            className="card-tactile rounded-xl p-4 text-center cursor-pointer group"
+                            onClick={() => documentInputRef.current?.click()}
+                            whileHover={{ scale: 1.01 }}
+                            whileTap={{ scale: 0.99 }}
+                          >
+                            <Upload className="w-6 h-6 mx-auto mb-1 text-muted-foreground group-hover:text-amber-500 transition-colors" />
+                            <p className="text-xs text-muted-foreground">Klik om tekeningen te uploaden (PDF, DWG)</p>
+                          </motion.div>
+                          <input 
+                            ref={documentInputRef}
+                            type="file"
+                            multiple
+                            accept=".pdf,.dwg,.dxf,image/*"
+                            className="hidden"
+                            onChange={(e) => {
+                              const files = Array.from(e.target.files || [])
+                              setDocumentFiles(prev => [...prev, ...files])
+                              e.target.value = ""
+                            }}
+                          />
+                          {documentFiles.length > 0 && (
+                            <div className="flex flex-wrap gap-2">
+                              {documentFiles.map((file, idx) => (
+                                <Badge key={idx} variant="secondary" className="gap-1 pr-1">
+                                  <File className="w-3 h-3" />
+                                  {file.name.length > 15 ? file.name.substring(0, 15) + '...' : file.name}
+                                  <button
+                                    type="button"
+                                    onClick={() => setDocumentFiles(prev => prev.filter((_, i) => i !== idx))}
+                                    className="ml-1 p-0.5 hover:bg-slate-300 dark:hover:bg-slate-600 rounded"
+                                  >
+                                    <X className="w-3 h-3" />
+                                  </button>
+                                </Badge>
+                              ))}
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
                   )}
 
-                  {/* Step 4: Bevestigen */}
-                  {currentStep === 4 && (
+                  {/* Step 3: Bevestigen */}
+                  {currentStep === 3 && (
                     <div className="space-y-6">
                       <div className="text-center mb-8">
                         <motion.div 
@@ -793,19 +938,29 @@ export default function SubmitPage() {
                             <User className="w-5 h-5 text-amber-600 dark:text-amber-400" />
                           </div>
                           <div>
+                            <Badge variant="outline" className="mb-1 text-xs">
+                              {CLIENT_ROLES.find(r => r.value === formData.rol)?.label}
+                            </Badge>
                             <p className="font-semibold">{formData.clientName}</p>
                             <div className="text-sm text-muted-foreground space-y-0.5 mt-1">
-                              {formData.clientEmail && (
-                                <p className="flex items-center gap-1.5">
-                                  <Mail className="w-3.5 h-3.5" /> {formData.clientEmail}
-                                </p>
-                              )}
+                              <p className="flex items-center gap-1.5">
+                                <Mail className="w-3.5 h-3.5" /> {formData.clientEmail}
+                              </p>
                               {formData.clientPhone && (
                                 <p className="flex items-center gap-1.5">
                                   <Phone className="w-3.5 h-3.5" /> {formData.clientPhone}
                                 </p>
                               )}
                             </div>
+                            {(formData.architectName || formData.architectEmail) && (
+                              <div className="mt-2 pt-2 border-t border-border/50">
+                                <p className="text-xs text-muted-foreground">Architect:</p>
+                                <p className="text-sm">{formData.architectName || '-'}</p>
+                                {formData.architectEmail && (
+                                  <p className="text-xs text-muted-foreground">{formData.architectEmail}</p>
+                                )}
+                              </div>
+                            )}
                           </div>
                         </div>
 
@@ -817,43 +972,49 @@ export default function SubmitPage() {
                             <Building2 className="w-5 h-5 text-amber-600 dark:text-amber-400" />
                           </div>
                           <div>
-                            <span className="pill-glass-amber px-2 py-0.5 rounded-full text-xs font-medium">
-                              {projectTypeIcons[formData.projectType]} {formData.projectType}
-                            </span>
-                            <p className="text-sm text-muted-foreground flex items-center gap-1.5 mt-2">
-                              <MapPin className="w-3.5 h-3.5" />
-                              {formData.city}{formData.address && `, ${formData.address}`}
-                            </p>
+                            <div className="flex flex-wrap gap-1 mb-2">
+                              {formData.projectTypes.map(type => (
+                                <Badge key={type} className="pill-glass-amber text-xs">
+                                  {projectTypeIcons[type]} {type}
+                                </Badge>
+                              ))}
+                            </div>
+                            {formData.address && (
+                              <p className="text-sm text-muted-foreground flex items-center gap-1.5">
+                                <MapPin className="w-3.5 h-3.5" />
+                                {formData.address}, {formData.city}
+                              </p>
+                            )}
+                            {!formData.address && formData.postcode && (
+                              <p className="text-sm text-muted-foreground flex items-center gap-1.5">
+                                <MapPin className="w-3.5 h-3.5" />
+                                {formData.postcode} {formData.huisnummer}
+                              </p>
+                            )}
                             {formData.description && (
-                              <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
+                              <p className="text-sm text-muted-foreground mt-2 line-clamp-2">
                                 {formData.description}
                               </p>
                             )}
                           </div>
                         </div>
 
-                        {/* Optional Info */}
-                        {(formData.assignee || formData.estimatedValue || pendingFiles.length > 0) && (
+                        {/* Uploaded files */}
+                        {(photoFiles.length > 0 || documentFiles.length > 0) && (
                           <>
                             <hr className="border-border/50" />
                             <div className="flex flex-wrap gap-2">
-                              {formData.assignee && (
-                                <span className="pill-glass-blue px-2 py-0.5 rounded-full text-xs font-medium flex items-center gap-1">
-                                  <UserCheck className="w-3 h-3" />
-                                  {engineers.find(e => e.id === formData.assignee)?.name}
-                                </span>
+                              {photoFiles.length > 0 && (
+                                <Badge variant="outline" className="gap-1">
+                                  <Camera className="w-3 h-3" />
+                                  {photoFiles.length} foto{photoFiles.length > 1 ? "'s" : ""}
+                                </Badge>
                               )}
-                              {formData.estimatedValue && (
-                                <span className="pill-glass-emerald px-2 py-0.5 rounded-full text-xs font-medium flex items-center gap-1">
-                                  <Euro className="w-3 h-3" />
-                                  €{parseFloat(formData.estimatedValue).toLocaleString('nl-NL')}
-                                </span>
-                              )}
-                              {pendingFiles.length > 0 && (
-                                <span className="pill-glass-violet px-2 py-0.5 rounded-full text-xs font-medium flex items-center gap-1">
-                                  <File className="w-3 h-3" />
-                                  {pendingFiles.length} bestand{pendingFiles.length > 1 ? 'en' : ''}
-                                </span>
+                              {documentFiles.length > 0 && (
+                                <Badge variant="outline" className="gap-1">
+                                  <FileText className="w-3 h-3" />
+                                  {documentFiles.length} document{documentFiles.length > 1 ? "en" : ""}
+                                </Badge>
                               )}
                             </div>
                           </>
@@ -892,7 +1053,7 @@ export default function SubmitPage() {
                   ))}
                 </div>
 
-                {currentStep < 4 ? (
+                {currentStep < 3 ? (
                   <Button
                     type="button"
                     onClick={nextStep}
@@ -915,7 +1076,7 @@ export default function SubmitPage() {
                       </>
                     ) : (
                       <>
-                        <Send className="w-4 h-4" />
+                        <CheckCircle2 className="w-4 h-4" />
                         <span className="hidden sm:inline">Aanmaken</span>
                       </>
                     )}

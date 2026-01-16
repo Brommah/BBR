@@ -8,7 +8,6 @@ import { updateSession, isSupabaseConfigured } from '@/lib/supabase-middleware'
 const PROTECTED_ROUTES = [
   '/admin',
   '/pipeline',
-  '/inbox',
   '/leads',
   '/templates',
   '/incentives',
@@ -18,6 +17,7 @@ const PROTECTED_ROUTES = [
   '/feedback',
   '/improvements',
   '/marketing-preview',
+  '/notifications',
 ]
 
 /**

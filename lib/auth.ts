@@ -23,7 +23,7 @@ interface SupabaseUser {
  * User roles in the system:
  * - admin: Full access - can approve quotes, manage users, see everything
  * - projectleider: Project delivery - sees assigned projects, coordinates work
- * - engineer: Rekenaar or Tekenaar - Can work on assigned leads when "aan zet"
+ * - engineer: Rekenaar or Tekenaar - Can work on assigned leads
  */
 export type UserRole = 'admin' | 'projectleider' | 'engineer'
 
@@ -83,11 +83,10 @@ export type Permission =
   | 'leads:create'
   | 'leads:assign'           // Can assign Rekenaar/Tekenaar to leads (Projectleider only)
   | 'leads:view-all'         // Can see all leads in all statuses
-  | 'leads:view-own'         // Can only see leads assigned to them and "aan zet"
+  | 'leads:view-own'         // Can only see leads assigned to them
   | 'leads:view-offerte'     // Can see leads in offerte phase (Projectleider only)
   | 'leads:edit'
   | 'leads:delete'
-  | 'leads:set-aan-zet'      // Can change who is "aan zet" (Projectleider only)
   | 'admin:access'
   | 'admin:manage-users'
   | 'admin:manage-pricing'
@@ -106,7 +105,6 @@ export type Permission =
  * Projectleider role:
  * - Responsible for project delivery
  * - Can assign Rekenaar and Tekenaar to leads
- * - Can set "aan zet" status
  * - Sees leads assigned to them in all statuses
  * - Can see leads in offerte phase (for their projects)
  * 
@@ -114,11 +112,10 @@ export type Permission =
  * - Only sees leads when:
  *   1. Assigned to them (as rekenaar or tekenaar)
  *   2. Status is "Opdracht" (quote accepted)
- *   3. They are "aan zet" (their turn to work)
  * - Can register hours
  * - Can submit calculations/drawings
  * 
- * Workflow: Lead → Offerte accepted → Projectleider assigns team → Sets "aan zet"
+ * Workflow: Lead → Offerte accepted → Projectleider assigns team
  */
 const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
   admin: [
@@ -133,7 +130,6 @@ const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     'leads:view-offerte',
     'leads:edit',
     'leads:delete',
-    'leads:set-aan-zet',
     'admin:access',
     'admin:manage-users',
     'admin:manage-pricing',
@@ -144,7 +140,6 @@ const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     // Projectleider can:
     // - See leads assigned to them (all statuses including offerte)
     // - Assign team members (Rekenaar/Tekenaar)
-    // - Set "aan zet" status
     // - Create new leads
     // - Edit leads
     'quotes:submit',
@@ -155,12 +150,11 @@ const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     'leads:view-own',      // Only sees leads assigned to them
     'leads:view-offerte',  // Can see offerte phase for their projects
     'leads:edit',
-    'leads:set-aan-zet',
     'settings:view',
   ],
   engineer: [
     // Engineers (Rekenaar/Tekenaar) can:
-    // - View only leads assigned to them AND "aan zet" AND status = Opdracht
+    // - View only leads assigned to them with status = Opdracht
     // - Register hours
     // - Download documents
     // - View quote details (read-only)

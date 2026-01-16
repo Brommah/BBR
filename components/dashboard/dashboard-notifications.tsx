@@ -109,8 +109,11 @@ export function useEngineerUpdatesCount(engineerName: string | undefined) {
   
   // Count assigned leads with recent updates
   return leads.filter(lead => {
-    // Only their assigned leads
-    if (lead.assignee !== engineerName) return false
+    // Only their assigned leads (check new team assignment fields - legacy 'assignee' is deprecated)
+    const isAssigned = lead.assignedProjectleider === engineerName || 
+                       lead.assignedRekenaar === engineerName || 
+                       lead.assignedTekenaar === engineerName
+    if (!isAssigned) return false
     
     // Only active statuses
     if (!['Calculatie', 'Opdracht'].includes(lead.status)) return false

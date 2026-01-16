@@ -10,8 +10,8 @@ export const COMPANY = {
   email: process.env.NEXT_PUBLIC_COMPANY_EMAIL || 'info@broersma-bouwadvies.nl',
   website: process.env.NEXT_PUBLIC_COMPANY_WEBSITE || 'https://broersma-bouwadvies.nl',
   phone: process.env.NEXT_PUBLIC_COMPANY_PHONE || '',
-  kvk: process.env.NEXT_PUBLIC_COMPANY_KVK || '',
-  btw: process.env.NEXT_PUBLIC_COMPANY_BTW || '',
+  kvk: process.env.NEXT_PUBLIC_COMPANY_KVK || '64955133',
+  btw: process.env.NEXT_PUBLIC_COMPANY_BTW || 'NL855919851B01',
   tagline: 'Constructieve berekeningen voor aanbouw, uitbouw, dakkapel, kozijn & VvE',
 } as const
 
@@ -91,7 +91,8 @@ export const RATE_LIMITS = {
 export const EMAIL = {
   from: process.env.FROM_EMAIL || 'onboarding@resend.dev',
   replyTo: process.env.REPLY_TO_EMAIL || 'info@broersma-bouwadvies.nl',
-  quoteValidityDays: 30,
+  quoteValidityMonths: 6, // 6 months validity
+  quoteValidityDays: 180, // ~6 months for backwards compatibility
   reminderDays: [7, 14], // Days after quote sent to send reminder
 } as const
 

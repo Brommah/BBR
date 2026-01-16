@@ -480,3 +480,61 @@ export async function sendFeedbackRequest(data: {
     sentBy: data.sentBy
   })
 }
+
+export async function sendWelcomeEmail(data: {
+  to: string
+  name: string
+  password?: string
+  role: string
+  sentBy: string
+}): Promise<EmailResult> {
+  const subject = `Welkom bij Broersma Bouwadvies - Uw account is aangemaakt`
+  const loginUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/login`
+  
+  const passwordSection = data.password 
+    ? `
+      <div class="highlight">
+        <strong>Uw inloggegevens:</strong><br>
+        E-mail: ${data.to}<br>
+        Wachtwoord: <code style="background: #eee; padding: 2px 4px; border-radius: 4px;">${data.password}</code>
+      </div>
+      <p style="color: #ef4444; font-size: 13px;">
+        <strong>Let op:</strong> Wij raden u aan om uw wachtwoord direct na de eerste keer inloggen te wijzigen via de "Wachtwoord vergeten" functie op het inlogscherm.
+      </p>
+    `
+    : `
+      <div class="highlight">
+        <strong>Uw account is aangemaakt</strong><br>
+        E-mail: ${data.to}<br>
+        U kunt een wachtwoord instellen via de "Wachtwoord vergeten" link op het inlogscherm.
+      </div>
+    `
+
+  const body = `
+    <p>Beste ${data.name},</p>
+    
+    <p>Er is een account voor u aangemaakt in het <strong>Broersma Engineer OS</strong>.</p>
+    
+    <p>U bent toegevoegd met de rol: <strong>${data.role}</strong>.</p>
+    
+    ${passwordSection}
+    
+    <p>Klik op de onderstaande knop om naar het inlogscherm te gaan:</p>
+    
+    <a href="${loginUrl}" class="button">
+      🔓 Direct inloggen
+    </a>
+    
+    <p>Heeft u problemen met inloggen? Neem dan contact op met de systeembeheerder.</p>
+    
+    <p>Met vriendelijke groet,<br>
+    <strong>Team Broersma Bouwadvies</strong></p>
+  `
+  
+  return sendEmail({
+    to: data.to,
+    subject,
+    body,
+    sentBy: data.sentBy
+  })
+}

@@ -22,9 +22,12 @@ import {
   RefreshCw,
   Circle,
   CheckCheck,
-  Inbox
+  Inbox,
+  Sparkles,
+  MapPin
 } from "lucide-react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { format } from "date-fns"
 import { nl } from "date-fns/locale"
@@ -38,7 +41,7 @@ import { toast } from "sonner"
 
 interface Notification {
   id: string
-  type: 'mention' | 'status_change' | 'document' | 'quote_feedback' | 'assignment'
+  type: 'mention' | 'status_change' | 'document' | 'quote_feedback' | 'assignment' | 'new_lead'
   title: string
   message: string
   leadId: string | null
@@ -54,6 +57,7 @@ const NOTIFICATION_ICONS = {
   document: FileText,
   quote_feedback: MessageSquare,
   assignment: UserPlus,
+  new_lead: Sparkles,
 }
 
 const NOTIFICATION_COLORS = {
@@ -82,10 +86,16 @@ const NOTIFICATION_COLORS = {
     text: 'text-indigo-700 dark:text-indigo-300',
     ring: 'ring-indigo-200 dark:ring-indigo-800'
   },
+  new_lead: {
+    bg: 'bg-rose-100 dark:bg-rose-900/50',
+    text: 'text-rose-700 dark:text-rose-300',
+    ring: 'ring-rose-200 dark:ring-rose-800'
+  },
 }
 
 function NotificationsContent() {
   const { currentUser } = useAuthStore()
+  const router = useRouter()
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [isRefreshing, setIsRefreshing] = useState(false)
@@ -167,6 +177,10 @@ function NotificationsContent() {
   const handleCardClick = async (notification: Notification) => {
     if (!notification.read) {
       await markAsRead(notification.id)
+    }
+    // Navigate to lead detail page for new_lead notifications (and others with leadId)
+    if (notification.leadId) {
+      router.push(`/leads/${notification.leadId}`)
     }
   }
 
@@ -253,7 +267,7 @@ function NotificationsContent() {
               </p>
 
               <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                {notification.fromUserName && (
+                {notification.fromUserName && notification.type !== 'new_lead' && (
                   <span className="flex items-center gap-1">
                     <User className="w-3 h-3" />
                     {notification.fromUserName}
@@ -263,7 +277,7 @@ function NotificationsContent() {
                   <Clock className="w-3 h-3" />
                   {formatTimestamp(notification.createdAt)}
                 </span>
-                {notification.leadId && notification.leadName && (
+                {notification.leadId && notification.leadName && notification.type !== 'new_lead' && (
                   <Link 
                     href={`/leads/${notification.leadId}`}
                     onClick={(e) => e.stopPropagation()}
@@ -274,6 +288,21 @@ function NotificationsContent() {
                   </Link>
                 )}
               </div>
+              
+              {/* Prominent CTA for new_lead notifications */}
+              {notification.type === 'new_lead' && notification.leadId && (
+                <div className="mt-3 pt-3 border-t border-border/50">
+                  <Link 
+                    href={`/leads/${notification.leadId}`}
+                    onClick={(e) => e.stopPropagation()}
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-sm font-medium transition-colors shadow-sm"
+                  >
+                    <MapPin className="w-4 h-4" />
+                    Dossier bekijken & configureren
+                    <ChevronRight className="w-4 h-4" />
+                  </Link>
+                </div>
+              )}
             </div>
 
             {/* Actions */}
@@ -406,7 +435,7 @@ function NotificationsContent() {
 
 export default function NotificationsPage() {
   return (
-    <AccessGuard roles={['admin', 'engineer']}>
+    <AccessGuard roles={['admin', 'projectleider', 'engineer']}>
       <NotificationsContent />
     </AccessGuard>
   )

@@ -2,7 +2,6 @@
 
 import { useState } from "react"
 import { useAuthStore } from "@/lib/auth"
-import { useWalkthroughStore } from "@/lib/walkthrough"
 import { useRouter } from "next/navigation"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
@@ -21,7 +20,6 @@ import { useSidebar } from "@/components/ui/sidebar"
 
 export function UserMenu() {
     const { currentUser, isAuthenticated, logout, isAdmin } = useAuthStore()
-    const { startWalkthrough } = useWalkthroughStore()
     const router = useRouter()
     const { setOpen, setLocked } = useSidebar()
     const [dropdownOpen, setDropdownOpen] = useState(false)
@@ -32,13 +30,6 @@ export function UserMenu() {
             description: "Tot ziens!"
         })
         router.push("/login")
-    }
-
-    const handleStartWalkthrough = () => {
-        startWalkthrough()
-        toast.info("Rondleiding gestart", {
-            description: "Navigeer door alle functies van het systeem."
-        })
     }
 
     if (!isAuthenticated || !currentUser) {
@@ -109,10 +100,6 @@ export function UserMenu() {
                     </div>
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={handleStartWalkthrough}>
-                    <BookOpen className="mr-2 h-4 w-4" />
-                    Rondleiding
-                </DropdownMenuItem>
                 {isAdmin() && (
                     <DropdownMenuItem asChild>
                         <Link href="/admin" className="flex items-center">

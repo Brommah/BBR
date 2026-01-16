@@ -36,7 +36,6 @@ const PERMISSIONS = [
   { key: 'leads:edit', name: 'Leads bewerken', description: 'Kan lead gegevens bewerken', category: 'leads', sortOrder: 5 },
   { key: 'leads:delete', name: 'Leads verwijderen', description: 'Kan leads verwijderen', category: 'leads', sortOrder: 6 },
   { key: 'leads:assign', name: 'Team toewijzen', description: 'Kan teamleden aan leads toewijzen', category: 'leads', sortOrder: 7 },
-  { key: 'leads:set-aan-zet', name: 'Aan zet wijzigen', description: 'Kan "aan zet" status wijzigen', category: 'leads', sortOrder: 8 },
   
   // Quotes
   { key: 'quotes:view', name: 'Offertes bekijken', description: 'Kan offertes bekijken', category: 'quotes', sortOrder: 10 },
@@ -80,7 +79,7 @@ const DEFAULT_ROLES = [
     color: '#f59e0b', // amber
     isSystem: true,
     permissions: [
-      'leads:view-all', 'leads:view-offerte', 'leads:create', 'leads:edit', 'leads:delete', 'leads:assign', 'leads:set-aan-zet',
+      'leads:view-all', 'leads:view-offerte', 'leads:create', 'leads:edit', 'leads:delete', 'leads:assign',
       'quotes:view', 'quotes:submit', 'quotes:approve', 'quotes:reject', 'quotes:feedback',
       'team:view', 'team:manage-users', 'team:manage-roles',
       'admin:access', 'admin:manage-pricing', 'admin:view-financials', 'admin:manage-automations',
@@ -96,7 +95,7 @@ const DEFAULT_ROLES = [
     color: '#8b5cf6', // purple
     isSystem: true,
     permissions: [
-      'leads:view-own', 'leads:view-offerte', 'leads:create', 'leads:edit', 'leads:assign', 'leads:set-aan-zet',
+      'leads:view-own', 'leads:view-offerte', 'leads:create', 'leads:edit', 'leads:assign',
       'quotes:view', 'quotes:submit', 'quotes:feedback',
       'team:view',
       'admin:access', 'admin:view-financials',

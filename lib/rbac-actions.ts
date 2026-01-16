@@ -9,6 +9,7 @@
 
 import prisma from './db'
 import { createClient } from '@supabase/supabase-js'
+import { sendWelcomeEmail } from './email'
 
 // ============================================================
 // Types
@@ -609,6 +610,18 @@ export async function removeUserPermissionOverride(
 }
 
 /**
+ * Generate a random temporary password
+ */
+function generateTemporaryPassword(length = 12): string {
+  const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*"
+  let retVal = ""
+  for (let i = 0, n = charset.length; i < length; ++i) {
+    retVal += charset.charAt(Math.floor(Math.random() * n))
+  }
+  return retVal
+}
+
+/**
  * Create a new user (in both Supabase Auth and local database)
  */
 export async function createUser(data: {
@@ -616,7 +629,7 @@ export async function createUser(data: {
   email: string
   roleId: string
   engineerType?: 'rekenaar' | 'tekenaar'
-  password?: string // If not provided, user will need to reset password
+  password?: string // If not provided, a random one will be generated and emailed
 }): Promise<ActionResult<{ id: string }>> {
   const name = validateString(data.name, 200)
   const email = validateString(data.email, 255)?.toLowerCase()
@@ -637,6 +650,9 @@ export async function createUser(data: {
   if (!role) {
     return { success: false, error: 'Role not found' }
   }
+
+  // Use provided password or generate a temporary one
+  const password = data.password || generateTemporaryPassword()
   
   try {
     // Create in Supabase Auth if SUPABASE_SERVICE_ROLE_KEY is available
@@ -650,7 +666,7 @@ export async function createUser(data: {
       
       const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
         email,
-        password: data.password || undefined,
+        password,
         email_confirm: true, // Auto-confirm email
         user_metadata: {
           name,
@@ -677,6 +693,15 @@ export async function createUser(data: {
         role: role.name,
         engineerType: data.engineerType || null,
       }
+    })
+
+    // Send welcome email with password
+    await sendWelcomeEmail({
+      to: email,
+      name,
+      password,
+      role: role.displayName,
+      sentBy: 'Admin'
     })
     
     return { success: true, data: { id: user.id } }
@@ -814,6 +839,41 @@ export async function sendPasswordReset(userId: string): Promise<ActionResult> {
     return { success: true }
   } catch (error) {
     console.error('[RBAC] Error sending password reset:', error)
+    return { success: false, error: 'Failed to send password reset' }
+  }
+}
+
+/**
+ * Send password reset email to user by email address
+ */
+export async function sendPasswordResetByEmail(email: string): Promise<ActionResult> {
+  const validEmail = validateString(email, 255)?.toLowerCase()
+  if (!validEmail) return { success: false, error: 'Invalid email address' }
+  
+  try {
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+    
+    if (!supabaseUrl || !supabaseServiceKey) {
+      return { success: false, error: 'Supabase not configured' }
+    }
+    
+    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
+      auth: { autoRefreshToken: false, persistSession: false }
+    })
+    
+    const { error } = await supabaseAdmin.auth.resetPasswordForEmail(validEmail, {
+      redirectTo: `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/login/reset-password`,
+    })
+    
+    if (error) {
+      console.error('[RBAC] Password reset error:', error)
+      return { success: false, error: error.message }
+    }
+    
+    return { success: true }
+  } catch (error) {
+    console.error('[RBAC] Error sending password reset by email:', error)
     return { success: false, error: 'Failed to send password reset' }
   }
 }

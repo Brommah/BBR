@@ -4,16 +4,16 @@ import { useState, useEffect, useCallback } from "react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Separator } from "@/components/ui/separator"
+import { Textarea } from "@/components/ui/textarea"
 import { Skeleton } from "@/components/ui/skeleton"
 import { toast } from "sonner"
-import { Save, Euro, Percent, Plus, Trash2, Loader2 } from "lucide-react"
+import { Save, Euro, Loader2, FileText } from "lucide-react"
 import { 
     getCostRates, 
     createCostRate, 
-    updateCostRate as updateCostRateAction, 
-    deleteCostRate as deleteCostRateAction 
+    updateCostRate as updateCostRateAction
 } from "@/lib/db-actions"
+import { PROJECT_TYPES } from "@/lib/config"
 
 interface CostItem {
     id: string
@@ -21,15 +21,19 @@ interface CostItem {
     basePrice: number
     category: string
     isPercentage: boolean
+    projectType: string | null
+    workSpecification: string | null
 }
 
+/**
+ * Cost Determination Panel - Manage base rates per project type with work specifications
+ */
 export function CostDeterminationPanel() {
     const [costItems, setCostItems] = useState<CostItem[]>([])
     const [isLoading, setIsLoading] = useState(true)
     const [isSaving, setIsSaving] = useState(false)
-    const [pendingChanges, setPendingChanges] = useState<Map<string, number>>(new Map())
-    const [newItemName, setNewItemName] = useState("")
-    const [newItemPrice, setNewItemPrice] = useState("")
+    const [pendingPriceChanges, setPendingPriceChanges] = useState<Map<string, number>>(new Map())
+    const [pendingSpecChanges, setPendingSpecChanges] = useState<Map<string, string>>(new Map())
 
     // Load cost rates from database
     const loadCostRates = useCallback(async () => {
@@ -56,77 +60,62 @@ export function CostDeterminationPanel() {
         loadCostRates()
     }, [loadCostRates])
 
-    // Separate base rates and surcharges
-    const baseRates = costItems.filter(item => item.category === 'base' || !item.category)
-    const surcharges = costItems.filter(item => item.category === 'surcharge')
+    // Initialize missing project types
+    useEffect(() => {
+        if (!isLoading && costItems.length > 0) {
+            const existingProjectTypes = costItems
+                .filter(item => item.projectType)
+                .map(item => item.projectType)
+            
+            const missingTypes = PROJECT_TYPES.filter(pt => !existingProjectTypes.includes(pt))
+            
+            if (missingTypes.length > 0) {
+                // Create missing project type rates
+                Promise.all(
+                    missingTypes.map(projectType =>
+                        createCostRate({
+                            name: projectType,
+                            basePrice: 0,
+                            category: 'base',
+                            isPercentage: false,
+                            projectType: projectType,
+                            workSpecification: ''
+                        })
+                    )
+                ).then(() => {
+                    loadCostRates()
+                })
+            }
+        }
+    }, [isLoading, costItems, loadCostRates])
+
+    // Get rates mapped by project type
+    const projectTypeRates = PROJECT_TYPES.map(pt => {
+        const rate = costItems.find(item => item.projectType === pt)
+        return {
+            projectType: pt,
+            rate: rate || null
+        }
+    })
 
     const handlePriceChange = (id: string, newPrice: string) => {
         const price = parseFloat(newPrice) || 0
-        // Track pending changes
-        setPendingChanges(prev => new Map(prev).set(id, price))
-        // Update local state for immediate feedback
+        setPendingPriceChanges(prev => new Map(prev).set(id, price))
         setCostItems(costItems.map(item => 
             item.id === id ? { ...item, basePrice: price } : item
         ))
     }
 
-    const handleAddItem = async () => {
-        if (!newItemName.trim() || !newItemPrice) return
-        
-        setIsSaving(true)
-        try {
-            const result = await createCostRate({
-                name: newItemName.trim(),
-                basePrice: parseFloat(newItemPrice) || 0,
-                category: 'base',
-                isPercentage: false
-            })
-            
-            if (result.success && result.data) {
-                const newRate = result.data as CostItem
-                setCostItems([...costItems, newRate])
-                setNewItemName("")
-                setNewItemPrice("")
-                toast.success("Nieuw tarief toegevoegd")
-            } else {
-                toast.error("Kon tarief niet toevoegen", {
-                    description: result.error
-                })
-            }
-        } catch (error) {
-            console.error('Failed to create cost rate:', error)
-            toast.error("Fout bij aanmaken tarief")
-        } finally {
-            setIsSaving(false)
-        }
-    }
-
-    const handleDeleteItem = async (id: string) => {
-        // Optimistic update
-        const previousItems = costItems
-        setCostItems(costItems.filter(item => item.id !== id))
-        
-        try {
-            const result = await deleteCostRateAction(id)
-            if (!result.success) {
-                // Rollback
-                setCostItems(previousItems)
-                toast.error("Kon tarief niet verwijderen", {
-                    description: result.error
-                })
-            } else {
-                toast.info("Tarief verwijderd")
-            }
-        } catch (error) {
-            // Rollback
-            setCostItems(previousItems)
-            console.error('Failed to delete cost rate:', error)
-            toast.error("Fout bij verwijderen tarief")
-        }
+    const handleSpecChange = (id: string, newSpec: string) => {
+        setPendingSpecChanges(prev => new Map(prev).set(id, newSpec))
+        setCostItems(costItems.map(item => 
+            item.id === id ? { ...item, workSpecification: newSpec } : item
+        ))
     }
 
     const handleSave = async () => {
-        if (pendingChanges.size === 0) {
+        const totalChanges = pendingPriceChanges.size + pendingSpecChanges.size
+        if (totalChanges === 0) {
             toast.info("Geen wijzigingen om op te slaan")
             return
         }
@@ -135,10 +124,25 @@ export function CostDeterminationPanel() {
         let successCount = 0
         let errorCount = 0
 
+        // Collect all unique IDs that have changes
+        const changedIds = new Set([
+            ...pendingPriceChanges.keys(),
+            ...pendingSpecChanges.keys()
+        ])
+
         // Save all pending changes
-        for (const [id, price] of pendingChanges.entries()) {
+        for (const id of changedIds) {
             try {
-                const result = await updateCostRateAction(id, price)
+                const updateData: { basePrice?: number; workSpecification?: string } = {}
+                
+                if (pendingPriceChanges.has(id)) {
+                    updateData.basePrice = pendingPriceChanges.get(id)
+                }
+                if (pendingSpecChanges.has(id)) {
+                    updateData.workSpecification = pendingSpecChanges.get(id)
+                }
+                
+                const result = await updateCostRateAction(id, updateData)
                 if (result.success) {
                     successCount++
                 } else {
@@ -150,11 +154,12 @@ export function CostDeterminationPanel() {
         }
 
         setIsSaving(false)
-        setPendingChanges(new Map())
+        setPendingPriceChanges(new Map())
+        setPendingSpecChanges(new Map())
 
         if (errorCount === 0) {
             toast.success("Tarieven opgeslagen", {
-                description: `${successCount} prijzen bijgewerkt`
+                description: `${successCount} items bijgewerkt`
             })
         } else {
             toast.error("Sommige tarieven niet opgeslagen", {
@@ -172,14 +177,14 @@ export function CostDeterminationPanel() {
                 </CardHeader>
                 <CardContent className="space-y-4">
                     {[1, 2, 3, 4].map(i => (
-                        <Skeleton key={i} className="h-12 w-full" />
+                        <Skeleton key={i} className="h-24 w-full" />
                     ))}
                 </CardContent>
             </Card>
         )
     }
 
-    const hasPendingChanges = pendingChanges.size > 0
+    const hasPendingChanges = pendingPriceChanges.size > 0 || pendingSpecChanges.size > 0
 
     return (
         <Card className="border-2 border-slate-200 dark:border-slate-700">
@@ -187,10 +192,10 @@ export function CostDeterminationPanel() {
                 <div className="flex items-center justify-between">
                     <div>
                         <CardTitle className="text-xl font-bold text-slate-900 dark:text-slate-100">
-                            Tarieven & Toeslagen
+                            Tarieven
                         </CardTitle>
                         <CardDescription className="text-slate-600 dark:text-slate-400">
-                            Beheer basis tarieven en toeslagen voor offertes.
+                            Beheer basis tarieven per projecttype voor offertes.
                         </CardDescription>
                     </div>
                     <Button 
@@ -203,136 +208,75 @@ export function CostDeterminationPanel() {
                         ) : (
                             <Save className="w-4 h-4" />
                         )}
-                        {hasPendingChanges ? `Opslaan (${pendingChanges.size})` : "Opslaan"}
+                        {hasPendingChanges ? `Opslaan (${pendingPriceChanges.size + pendingSpecChanges.size})` : "Opslaan"}
                     </Button>
                 </div>
             </CardHeader>
-            <CardContent className="space-y-6">
-                {/* Base Rates */}
+            <CardContent className="space-y-8">
+                {/* Base Rates per Project Type */}
                 <div className="space-y-4">
                     <h4 className="text-sm font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-2">
                         <Euro className="w-4 h-4" />
-                        Basis Tarieven
+                        Basis Tarieven per Projecttype
                     </h4>
-                    {baseRates.length === 0 ? (
-                        <p className="text-sm text-muted-foreground py-4 text-center">
-                            Geen tarieven geconfigureerd. Voeg hieronder een nieuw tarief toe.
-                        </p>
-                    ) : (
-                        <div className="space-y-2">
-                            {baseRates.map((item) => (
-                                <div key={item.id} className="flex items-center gap-3 p-3 bg-slate-50 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700">
-                                    <div className="flex-1">
-                                        <span className="font-medium text-sm text-slate-900 dark:text-slate-100">
-                                            {item.name}
-                                        </span>
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                        <span className="text-sm text-slate-500">€</span>
-                                        <Input
-                                            type="number"
-                                            value={item.basePrice}
-                                            onChange={(e) => handlePriceChange(item.id, e.target.value)}
-                                            className="w-24 h-8 text-right font-mono bg-white dark:bg-slate-900"
-                                        />
-                                        <Button 
-                                            variant="ghost" 
-                                            size="icon" 
-                                            className="h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-50"
-                                            onClick={() => handleDeleteItem(item.id)}
-                                        >
-                                            <Trash2 className="w-4 h-4" />
-                                        </Button>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    )}
-
-                    {/* Add new item */}
-                    <div className="flex items-center gap-3 p-3 bg-slate-100/50 dark:bg-slate-800/50 rounded-lg border-2 border-dashed border-slate-300 dark:border-slate-600">
-                        <Input
-                            placeholder="Naam nieuw tarief..."
-                            value={newItemName}
-                            onChange={(e) => setNewItemName(e.target.value)}
-                            className="flex-1 h-9"
-                        />
-                        <div className="flex items-center gap-2">
-                            <span className="text-sm text-slate-500">€</span>
-                            <Input
-                                type="number"
-                                placeholder="0"
-                                value={newItemPrice}
-                                onChange={(e) => setNewItemPrice(e.target.value)}
-                                className="w-24 h-9 text-right font-mono"
-                            />
-                            <Button 
-                                size="sm" 
-                                onClick={handleAddItem} 
-                                className="gap-1 h-9"
-                                disabled={isSaving || !newItemName.trim() || !newItemPrice}
+                    
+                    <div className="grid gap-3">
+                        {projectTypeRates.map(({ projectType, rate }) => (
+                            <div 
+                                key={projectType} 
+                                className="flex items-center gap-4 p-3 bg-slate-50 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700"
                             >
-                                {isSaving ? (
-                                    <Loader2 className="w-4 h-4 animate-spin" />
-                                ) : (
-                                    <Plus className="w-4 h-4" />
-                                )}
-                                Toevoegen
-                            </Button>
-                        </div>
+                                <div className="w-48 shrink-0">
+                                    <span className="font-medium text-sm text-slate-900 dark:text-slate-100">
+                                        {projectType}
+                                    </span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <span className="text-sm text-slate-500">€</span>
+                                    <Input
+                                        type="number"
+                                        value={rate?.basePrice || 0}
+                                        onChange={(e) => rate && handlePriceChange(rate.id, e.target.value)}
+                                        className="w-28 h-9 text-right font-mono bg-white dark:bg-slate-900"
+                                        disabled={!rate}
+                                    />
+                                    <span className="text-xs text-slate-400">excl. BTW</span>
+                                </div>
+                            </div>
+                        ))}
                     </div>
                 </div>
 
-                <Separator />
-
-                {/* Surcharges */}
+                {/* Work Specifications per Project Type */}
                 <div className="space-y-4">
                     <h4 className="text-sm font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-2">
-                        <Percent className="w-4 h-4" />
-                        Toeslagen
+                        <FileText className="w-4 h-4" />
+                        Specificatie werkzaamheden onder basistarieven
                     </h4>
-                    {surcharges.length === 0 ? (
-                        <p className="text-sm text-muted-foreground py-4 text-center">
-                            Geen toeslagen geconfigureerd. Voeg toeslagen toe via de database.
-                        </p>
-                    ) : (
-                        <div className="space-y-2">
-                            {surcharges.map((item) => (
-                                <div key={item.id} className="flex items-center gap-3 p-3 bg-amber-50 dark:bg-amber-950/20 rounded-lg border border-amber-200 dark:border-amber-800">
-                                    <div className="flex-1">
-                                        <span className="font-medium text-sm text-slate-900 dark:text-slate-100">
-                                            {item.name}
-                                        </span>
-                                        <span className="ml-2 text-xs text-slate-500">
-                                            ({item.isPercentage ? "%" : "vast bedrag"})
-                                        </span>
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                        <span className="text-sm text-slate-500">
-                                            {item.isPercentage ? "+" : "€"}
-                                        </span>
-                                        <Input
-                                            type="number"
-                                            value={item.basePrice}
-                                            onChange={(e) => handlePriceChange(item.id, e.target.value)}
-                                            className="w-20 h-8 text-right font-mono bg-white dark:bg-slate-900"
-                                        />
-                                        <span className="text-sm text-slate-500 w-4">
-                                            {item.isPercentage ? "%" : ""}
-                                        </span>
-                                        <Button 
-                                            variant="ghost" 
-                                            size="icon" 
-                                            className="h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-50"
-                                            onClick={() => handleDeleteItem(item.id)}
-                                        >
-                                            <Trash2 className="w-4 h-4" />
-                                        </Button>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    )}
+                    <p className="text-sm text-muted-foreground">
+                        Beschrijf per projecttype welke werkzaamheden inbegrepen zijn bij het basistarief. 
+                        Deze tekst wordt automatisch op de offerte geplaatst onder &ldquo;Overzicht van de werkzaamheden&rdquo;.
+                    </p>
+                    
+                    <div className="space-y-4">
+                        {projectTypeRates.map(({ projectType, rate }) => (
+                            <div 
+                                key={projectType} 
+                                className="p-4 bg-slate-50 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700"
+                            >
+                                <label className="block text-sm font-medium text-slate-900 dark:text-slate-100 mb-2">
+                                    {projectType}
+                                </label>
+                                <Textarea
+                                    placeholder={`Beschrijf de werkzaamheden die inbegrepen zijn bij ${projectType}...`}
+                                    value={rate?.workSpecification || ''}
+                                    onChange={(e) => rate && handleSpecChange(rate.id, e.target.value)}
+                                    className="min-h-[100px] text-sm bg-white dark:bg-slate-900"
+                                    disabled={!rate}
+                                />
+                            </div>
+                        ))}
+                    </div>
                 </div>
             </CardContent>
         </Card>

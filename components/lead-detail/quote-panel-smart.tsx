@@ -20,20 +20,17 @@ import {
     Eye, 
     Plus, 
     Trash2, 
-    Euro, 
     MessageSquare, 
     Loader2, 
     Calculator, 
     Download,
     FileCheck,
-    ExternalLink,
     PartyPopper,
     AlertCircle,
-    ChevronDown,
-    ChevronUp,
-    User,
-    Calendar
+    AlertTriangle
 } from "lucide-react"
+import { Checkbox } from "@/components/ui/checkbox"
+import { getCostRates } from "@/lib/db-actions"
 import { DocumentPreview } from "@/components/templates/document-preview"
 import { downloadQuotePDF, generateQuoteNumber, generateQuotePDF } from "@/lib/pdf"
 import { sendQuoteEmail } from "@/lib/email"
@@ -73,11 +70,14 @@ export function QuotePanelSmart({ lead, onQuoteAccepted }: QuotePanelSmartProps)
 
     // Quote editing state
     const [lineItems, setLineItems] = useState<QuoteLineItem[]>([{ description: "", amount: 0 }])
-    const [estimatedHours, setEstimatedHours] = useState<number>(0)
     const [description, setDescription] = useState("")
+    const [aandachtspunten, setAandachtspunten] = useState("")
+    const [includeArchiefonderzoek, setIncludeArchiefonderzoek] = useState(false)
+    const [includeWerkbezoek, setIncludeWerkbezoek] = useState(false)
     const [previewOpen, setPreviewOpen] = useState(false)
     const [isSubmitting, setIsSubmitting] = useState(false)
     const [isSending, setIsSending] = useState(false)
+    const [baseRate, setBaseRate] = useState<{ price: number; workSpecification: string | null } | null>(null)
     
     // Admin approval state
     const [showRejectForm, setShowRejectForm] = useState(false)
@@ -94,10 +94,34 @@ export function QuotePanelSmart({ lead, onQuoteAccepted }: QuotePanelSmartProps)
         if (lead?.quoteDescription) {
             setDescription(lead.quoteDescription)
         }
-        if (lead?.quoteEstimatedHours) {
-            setEstimatedHours(lead.quoteEstimatedHours)
+    }, [lead?.id, lead?.quoteLineItems, lead?.quoteDescription])
+
+    // Load base rate for this project type
+    useEffect(() => {
+        async function loadBaseRate() {
+            try {
+                const result = await getCostRates()
+                if (result.success && result.data) {
+                    const rates = result.data as Array<{
+                        id: string
+                        basePrice: number
+                        projectType: string | null
+                        workSpecification: string | null
+                    }>
+                    const rate = rates.find(r => r.projectType === lead.projectType)
+                    if (rate) {
+                        setBaseRate({
+                            price: rate.basePrice,
+                            workSpecification: rate.workSpecification
+                        })
+                    }
+                }
+            } catch (error) {
+                console.error('Failed to load base rate:', error)
+            }
         }
-    }, [lead?.id, lead?.quoteLineItems, lead?.quoteDescription, lead?.quoteEstimatedHours])
+        loadBaseRate()
+    }, [lead.projectType])
 
     const addLineItem = () => setLineItems([...lineItems, { description: "", amount: 0 }])
     
@@ -134,11 +158,19 @@ export function QuotePanelSmart({ lead, onQuoteAccepted }: QuotePanelSmartProps)
 
         setIsSubmitting(true)
         try {
+            // Build extended description with metadata
+            const extendedDescription = JSON.stringify({
+                description,
+                aandachtspunten,
+                includeArchiefonderzoek,
+                includeWerkbezoek,
+                workSpecification: baseRate?.workSpecification || ''
+            })
+            
             const success = await submitQuoteForApproval(leadId, {
                 quoteValue: total,
-                quoteDescription: description,
-                quoteLineItems: validLineItems,
-                quoteEstimatedHours: estimatedHours || undefined
+                quoteDescription: extendedDescription,
+                quoteLineItems: validLineItems
             })
             
             if (success) {
@@ -146,7 +178,7 @@ export function QuotePanelSmart({ lead, onQuoteAccepted }: QuotePanelSmartProps)
                     leadId,
                     value: total,
                     lineItems: validLineItems,
-                    description: description || undefined,
+                    description: extendedDescription,
                     status: 'submitted',
                     createdBy: currentUser?.name || 'Unknown'
                 })
@@ -252,9 +284,13 @@ export function QuotePanelSmart({ lead, onQuoteAccepted }: QuotePanelSmartProps)
     }
     
     const handleDownloadPDF = async () => {
-        const quoteNumber = generateQuoteNumber(leadId)
+        // Generate filename: offerte_${projectType}${streetname}${date}
+        const streetName = lead.address?.split(/\s+\d/)[0]?.replace(/\s+/g, '') || 'Onbekend'
+        const dateStr = new Date().toISOString().split('T')[0].replace(/-/g, '')
+        const filename = `offerte_${lead.projectType.replace(/\s+/g, '')}${streetName}${dateStr}.pdf`
+        
         const validUntil = new Date()
-        validUntil.setDate(validUntil.getDate() + 30)
+        validUntil.setMonth(validUntil.getMonth() + 6) // 6 months validity
         
         await downloadQuotePDF({
             clientName: lead.clientName,
@@ -267,11 +303,15 @@ export function QuotePanelSmart({ lead, onQuoteAccepted }: QuotePanelSmartProps)
             quoteValue: lead.quoteValue || total,
             quoteDescription: description,
             lineItems: validLineItems.length > 0 ? validLineItems : (lead.quoteLineItems || []),
-            estimatedHours: estimatedHours || lead.quoteEstimatedHours || undefined,
             quoteDate: new Date(),
             validUntil,
-            quoteNumber
-        })
+            quoteNumber: generateQuoteNumber(leadId),
+            // Extended fields for PDF
+            aandachtspunten,
+            includeArchiefonderzoek,
+            includeWerkbezoek,
+            workSpecification: baseRate?.workSpecification || undefined
+        }, filename)
         toast.success("PDF gedownload")
     }
     
@@ -280,9 +320,23 @@ export function QuotePanelSmart({ lead, onQuoteAccepted }: QuotePanelSmartProps)
      */
     const saveQuotePDFToDocuments = async () => {
         try {
-            const quoteNumber = generateQuoteNumber(leadId)
+            // Parse extended description if available
+            let parsedDescription = { description: '', aandachtspunten: '', includeArchiefonderzoek: false, includeWerkbezoek: false, workSpecification: '' }
+            try {
+                if (lead.quoteDescription) {
+                    parsedDescription = JSON.parse(lead.quoteDescription)
+                }
+            } catch {
+                parsedDescription.description = lead.quoteDescription || ''
+            }
+            
+            // Generate filename: offerte_${projectType}${streetname}${date}
+            const streetName = lead.address?.split(/\s+\d/)[0]?.replace(/\s+/g, '') || 'Onbekend'
+            const dateStr = new Date().toISOString().split('T')[0].replace(/-/g, '')
+            const filename = `offerte_${lead.projectType.replace(/\s+/g, '')}${streetName}${dateStr}.pdf`
+            
             const validUntil = new Date()
-            validUntil.setDate(validUntil.getDate() + 30)
+            validUntil.setMonth(validUntil.getMonth() + 6) // 6 months validity
             
             const pdfData = {
                 clientName: lead.clientName,
@@ -293,16 +347,18 @@ export function QuotePanelSmart({ lead, onQuoteAccepted }: QuotePanelSmartProps)
                 projectType: lead.projectType,
                 leadId,
                 quoteValue: lead.quoteValue || total,
-                quoteDescription: lead.quoteDescription || description,
+                quoteDescription: parsedDescription.description || description,
                 lineItems: lead.quoteLineItems || validLineItems,
-                estimatedHours: lead.quoteEstimatedHours || estimatedHours || undefined,
                 quoteDate: new Date(),
                 validUntil,
-                quoteNumber
+                quoteNumber: generateQuoteNumber(leadId),
+                aandachtspunten: parsedDescription.aandachtspunten || aandachtspunten,
+                includeArchiefonderzoek: parsedDescription.includeArchiefonderzoek || includeArchiefonderzoek,
+                includeWerkbezoek: parsedDescription.includeWerkbezoek || includeWerkbezoek,
+                workSpecification: parsedDescription.workSpecification || baseRate?.workSpecification || undefined
             }
             
             const pdfBlob = await generateQuotePDF(pdfData)
-            const filename = `Offerte_${quoteNumber}.pdf`
             const file = new File([pdfBlob], filename, { type: 'application/pdf' })
             
             const formData = new FormData()
@@ -651,6 +707,66 @@ export function QuotePanelSmart({ lead, onQuoteAccepted }: QuotePanelSmartProps)
                         </div>
                     )}
 
+                    {/* Base Rate Info */}
+                    {baseRate && baseRate.price > 0 && (
+                        <div className="p-3 bg-emerald-50 dark:bg-emerald-950/30 rounded-lg border border-emerald-200 dark:border-emerald-800">
+                            <p className="text-sm text-emerald-800 dark:text-emerald-200">
+                                <span className="font-medium">Basistarief {lead.projectType}:</span>{' '}
+                                <span className="font-mono">€{baseRate.price.toLocaleString('nl-NL')}</span>
+                            </p>
+                        </div>
+                    )}
+
+                    {/* Checkboxes for standard inclusions */}
+                    <div className="space-y-3 p-3 bg-slate-50 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700">
+                        <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                            Standaard werkzaamheden
+                        </label>
+                        
+                        <div className="flex items-start gap-3">
+                            <Checkbox
+                                id="archiefonderzoek"
+                                checked={includeArchiefonderzoek}
+                                onCheckedChange={(checked) => setIncludeArchiefonderzoek(checked === true)}
+                                disabled={!isEditable || isSubmitting}
+                            />
+                            <div className="grid gap-1">
+                                <label htmlFor="archiefonderzoek" className="text-sm font-medium cursor-pointer">
+                                    Archiefonderzoek
+                                </label>
+                                <p className="text-xs text-muted-foreground">
+                                    Onderzoek bij het archief van de gemeente naar de oorspronkelijke bouwtekeningen
+                                </p>
+                            </div>
+                        </div>
+                        
+                        <div className="flex items-start gap-3">
+                            <Checkbox
+                                id="werkbezoek"
+                                checked={includeWerkbezoek}
+                                onCheckedChange={(checked) => setIncludeWerkbezoek(checked === true)}
+                                disabled={!isEditable || isSubmitting}
+                            />
+                            <div className="grid gap-1">
+                                <label htmlFor="werkbezoek" className="text-sm font-medium cursor-pointer">
+                                    Werkbezoek
+                                </label>
+                                <p className="text-xs text-muted-foreground">
+                                    Werkbezoek 1 uur, binnen omgeving Den Haag
+                                </p>
+                            </div>
+                        </div>
+                        
+                        {(!includeArchiefonderzoek || !includeWerkbezoek) && (
+                            <div className="flex items-start gap-2 mt-2 p-2 bg-amber-50 dark:bg-amber-950/30 rounded text-xs">
+                                <AlertTriangle className="w-3.5 h-3.5 text-amber-600 mt-0.5 shrink-0" />
+                                <span className="text-amber-700 dark:text-amber-300">
+                                    Niet-aangevinkte items komen in sectie &apos;Niet inbegrepen&apos; op de offerte
+                                </span>
+                            </div>
+                        )}
+                    </div>
+
                     {/* Line Items */}
                     <div className="space-y-2">
                         <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
@@ -668,7 +784,7 @@ export function QuotePanelSmart({ lead, onQuoteAccepted }: QuotePanelSmartProps)
                                         disabled={!isEditable || isSubmitting}
                                         className="flex-1 h-9 text-sm"
                                     />
-                                    <div className="relative w-24">
+                                    <div className="relative w-28">
                                         <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">€</span>
                                         <Input
                                             type="number"
@@ -710,33 +826,31 @@ export function QuotePanelSmart({ lead, onQuoteAccepted }: QuotePanelSmartProps)
                         )}
                     </div>
 
-                    {/* Estimated Hours */}
-                    <div className="flex items-center gap-3">
-                        <label className="text-xs font-medium text-muted-foreground whitespace-nowrap">
-                            Geschatte uren:
-                        </label>
-                        <Input
-                            type="number"
-                            placeholder="0"
-                            value={estimatedHours || ''}
-                            onChange={(e) => setEstimatedHours(parseFloat(e.target.value) || 0)}
-                            disabled={!isEditable || isSubmitting}
-                            className="w-20 h-8 text-sm"
-                            min="0"
-                            step="0.5"
-                        />
-                    </div>
-
-                    {/* Description */}
+                    {/* Onderbouwing (internal) */}
                     <div className="space-y-2">
                         <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
                             <MessageSquare className="w-3.5 h-3.5" />
-                            Onderbouwing
+                            Onderbouwing (intern)
                         </label>
                         <Textarea
-                            placeholder="Leg uit waarom dit bedrag passend is..."
+                            placeholder="Leg uit waarom dit bedrag passend is (niet zichtbaar op offerte)..."
                             value={description}
                             onChange={(e) => setDescription(e.target.value)}
+                            disabled={!isEditable || isSubmitting}
+                            className="min-h-[60px] text-sm resize-none"
+                        />
+                    </div>
+
+                    {/* Aandachtspunten */}
+                    <div className="space-y-2">
+                        <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+                            <AlertCircle className="w-3.5 h-3.5" />
+                            Aandachtspunten
+                        </label>
+                        <Textarea
+                            placeholder="Specifieke aandachtspunten voor dit project (wordt getoond op offerte)..."
+                            value={aandachtspunten}
+                            onChange={(e) => setAandachtspunten(e.target.value)}
                             disabled={!isEditable || isSubmitting}
                             className="min-h-[60px] text-sm resize-none"
                         />

@@ -16,8 +16,11 @@ export function MyProjectsWidget({ leads, userName }: EngineerDashboardProps) {
     const router = useRouter()
     
     // Filter leads assigned to this engineer that are active (not archived or new)
+    // Check new team assignment fields only - legacy 'assignee' field is deprecated
     const myProjects = leads.filter(l => 
-        l.assignee === userName && 
+        (l.assignedProjectleider === userName || 
+         l.assignedRekenaar === userName || 
+         l.assignedTekenaar === userName) && 
         l.status !== "Archief" && 
         l.status !== "Nieuw"
     )

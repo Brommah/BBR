@@ -1,13 +1,13 @@
 "use client"
 
-import { Home, Bell, Kanban, ClipboardPlus, AtSign, LayoutDashboard, ClipboardCheck, Clock } from "lucide-react"
+import { Home, Bell, Kanban, ClipboardPlus, LayoutDashboard, ClipboardCheck, Clock } from "lucide-react"
 import Link from "next/link"
 import Image from "next/image"
-import { usePathname, useRouter, useSearchParams } from "next/navigation"
+import { usePathname, useSearchParams } from "next/navigation"
 import { useAuthStore } from "@/lib/auth"
 import { useLeadStore } from "@/lib/store"
 import { UserMenu } from "@/components/auth/user-menu"
-import { useInboxCount, useNotificationCount } from "@/components/dashboard/dashboard-notifications"
+import { useNotificationCount } from "@/components/dashboard/dashboard-notifications"
 import { cn } from "@/lib/utils"
 
 import {
@@ -39,13 +39,6 @@ const menuItems = [
     roles: ['admin', 'projectleider'] as const,
   },
   {
-    title: "Inbox",
-    url: "/inbox",
-    icon: Bell,
-    roles: ['admin'] as const,
-    dynamicBadge: true, // Will be populated with actual inbox count
-  },
-  {
     title: "Goedkeuringen",
     url: "/?tab=goedkeuringen",
     icon: ClipboardCheck,
@@ -55,9 +48,9 @@ const menuItems = [
   {
     title: "Meldingen",
     url: "/notifications",
-    icon: AtSign,
+    icon: Bell,
     roles: ['admin', 'projectleider', 'engineer'] as const,
-    notificationBadge: true, // @-mention notifications
+    notificationBadge: true, // All notifications including new leads
   },
   {
     title: "Uren",
@@ -82,7 +75,6 @@ export function AppSidebar() {
   const searchParams = useSearchParams()
   const { currentUser, isAuthenticated } = useAuthStore()
   const { leads } = useLeadStore()
-  const inboxCount = useInboxCount()
   const notificationCount = useNotificationCount(currentUser?.name)
   const { state, setOpen, locked } = useSidebar()
   const isCollapsed = state === "collapsed"
@@ -139,7 +131,6 @@ export function AppSidebar() {
               {visibleItems.map((item) => {
                 // Determine notifications/badges
                 const isMeldingen = 'notificationBadge' in item && item.notificationBadge
-                const isInbox = 'dynamicBadge' in item && item.dynamicBadge
                 const isApprovals = 'approvalBadge' in item && item.approvalBadge
                 const isAdminHome = item.url === "/" && currentUser?.role === "admin"
                 
@@ -149,9 +140,6 @@ export function AppSidebar() {
                 
                 if (isMeldingen) {
                   badgeCount = notificationCount
-                  badgeColor = "bg-amber-500"
-                } else if (isInbox) {
-                  badgeCount = inboxCount
                   badgeColor = "bg-rose-500"
                 } else if (isApprovals) {
                   badgeCount = pendingApprovalsCount

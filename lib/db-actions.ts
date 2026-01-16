@@ -530,6 +530,7 @@ export async function createLead(data: {
         projectType,
         city,
         address: data.address?.trim() || null,
+        status: 'Nieuw', // Explicitly set initial status
         value: data.value || 0,
         werknummer: data.werknummer?.trim() || null,
         specifications: {
@@ -553,6 +554,45 @@ export async function createLead(data: {
         content: `Lead aangemaakt: ${clientName} (${projectType})`
       }
     })
+
+    // Notify admins about the new lead (email + in-app notifications)
+    const admins = await prisma.user.findMany({
+      where: { role: 'admin', deletedAt: null },
+      select: { id: true, name: true, email: true }
+    })
+
+    if (admins.length > 0) {
+      // Send email notifications
+      sendNewLeadNotification({
+        adminEmails: admins.map(a => a.email),
+        clientName: lead.clientName,
+        projectType: lead.projectType,
+        city: lead.city,
+        address: lead.address || undefined,
+        leadId: lead.id
+      }).catch(err => {
+        console.error('[DB] Failed to send new lead notification email:', err)
+      })
+      
+      // Create in-app notifications for each admin
+      const locationText = lead.address ? `${lead.address}, ${lead.city}` : lead.city
+      for (const admin of admins) {
+        await prisma.notification.create({
+          data: {
+            userId: admin.id,
+            userName: admin.name,
+            type: 'new_lead',
+            title: 'Nieuwe aanvraag',
+            message: `${lead.clientName} - ${lead.projectType} te ${locationText}`,
+            leadId: lead.id,
+            leadName: lead.clientName,
+            fromUserName: 'Website Intake'
+          }
+        }).catch(err => {
+          console.error('[DB] Failed to create in-app notification:', err)
+        })
+      }
+    }
     
     return {
       success: true,
@@ -712,31 +752,46 @@ export async function updateLeadAssignee(id: string, assignee: string, triggered
     
     // Send assignment notification emails if this is a new assignment
     if (isNewAssignment && assigneeName && triggeredBy) {
-      // Get engineer's email
+      // Get engineer details
       const engineer = await prisma.user.findFirst({
         where: { name: assigneeName, deletedAt: null },
-        select: { email: true }
+        select: { id: true, name: true, email: true }
       })
       
-      triggerAssignmentEmails(
-        {
-          id: validId,
-          clientName: currentLead.clientName,
-          clientEmail: currentLead.clientEmail,
-          projectType: currentLead.projectType,
-          city: currentLead.city,
-          address: currentLead.address,
-          status: 'Calculatie', // Typically assigned when moving to Calculatie
-          assignee: assigneeName
-        },
-        assigneeName,
-        engineer?.email || null,
-        triggeredBy
-      ).then(result => {
-        console.log(`[Email] Assignment notification: client=${result.clientNotified}, engineer=${result.engineerNotified}`)
-      }).catch(err => {
-        console.error('[Email] Failed to send assignment emails:', err)
-      })
+      if (engineer) {
+        // Create in-app notification
+        await createNotification({
+          userId: engineer.id,
+          userName: engineer.name,
+          type: 'assignment',
+          title: 'Nieuw project toegewezen',
+          message: `Je bent toegewezen aan project: ${currentLead.clientName} (${currentLead.projectType})`,
+          leadId: validId,
+          leadName: currentLead.clientName,
+          fromUserName: triggeredBy
+        }).catch(err => console.error('[Notifications] Failed to create assignment notification:', err))
+
+        // Trigger email
+        triggerAssignmentEmails(
+          {
+            id: validId,
+            clientName: currentLead.clientName,
+            clientEmail: currentLead.clientEmail,
+            projectType: currentLead.projectType,
+            city: currentLead.city,
+            address: currentLead.address,
+            status: 'Calculatie', // Typically assigned when moving to Calculatie
+            assignee: assigneeName
+          },
+          assigneeName,
+          engineer.email,
+          triggeredBy
+        ).then(result => {
+          console.log(`[Email] Assignment notification: client=${result.clientNotified}, engineer=${result.engineerNotified}`)
+        }).catch(err => {
+          console.error('[Email] Failed to send assignment emails:', err)
+        })
+      }
     }
     
     return { success: true, data: lead }
@@ -812,6 +867,40 @@ export async function updateLeadTeamAssignments(
       data: updateData
     })
     
+    // Create notifications for team members
+    if (triggeredBy) {
+      const rolesToNotify = [
+        { name: data.assignedProjectleider, type: 'Projectleider' },
+        { name: data.assignedRekenaar, type: 'Rekenaar' },
+        { name: data.assignedTekenaar, type: 'Tekenaar' }
+      ].filter(r => r.name && r.name !== triggeredBy)
+
+      for (const role of rolesToNotify) {
+        // Skip if this assignment didn't change
+        if (role.type === 'Projectleider' && currentLead.assignedProjectleider === role.name) continue
+        if (role.type === 'Rekenaar' && currentLead.assignedRekenaar === role.name) continue
+        if (role.type === 'Tekenaar' && currentLead.assignedTekenaar === role.name) continue
+
+        const user = await prisma.user.findFirst({
+          where: { name: role.name as string, deletedAt: null },
+          select: { id: true, name: true }
+        })
+
+        if (user) {
+          await createNotification({
+            userId: user.id,
+            userName: user.name,
+            type: 'assignment',
+            title: 'Nieuw project toegewezen',
+            message: `Je bent toegewezen als ${role.type} voor project: ${currentLead.clientName}`,
+            leadId: validId,
+            leadName: currentLead.clientName,
+            fromUserName: triggeredBy
+          }).catch(err => console.error(`[Notifications] Failed to notify ${role.name}:`, err))
+        }
+      }
+    }
+    
     // Log activity for each change
     for (const change of changes) {
       await prisma.activity.create({
@@ -833,64 +922,10 @@ export async function updateLeadTeamAssignments(
 }
 
 /**
- * Update "aan zet" status for a lead
- * Determines which team member is currently working on the project
- * Only Projectleider (admin) can change this
- */
-export async function updateLeadAanZet(
-  id: string,
-  aanZet: 'rekenaar' | 'tekenaar' | 'projectleider' | null,
-  triggeredBy?: string
-): Promise<ActionResult> {
-  const validId = validateId(id)
-  if (!validId) return { success: false, error: 'Invalid lead ID' }
-
-  const aanZetLabels: Record<string, string> = {
-    rekenaar: 'Rekenaar',
-    tekenaar: 'Tekenaar',
-    projectleider: 'Projectleider'
-  }
-
-  try {
-    const currentLead = await prisma.lead.findUnique({
-      where: { id: validId },
-      select: { aanZet: true, clientName: true }
-    })
-    
-    if (!currentLead) {
-      return { success: false, error: 'Lead not found' }
-    }
-
-    const lead = await prisma.lead.update({
-      where: { id: validId },
-      data: { aanZet }
-    })
-    
-    // Log activity
-    await prisma.activity.create({
-      data: {
-        leadId: validId,
-        type: 'aan_zet_change',
-        content: aanZet 
-          ? `Aan zet: ${aanZetLabels[aanZet]}`
-          : 'Aan zet status verwijderd',
-        author: triggeredBy
-      }
-    })
-    
-    return { success: true, data: lead }
-  } catch (error) {
-    console.error('[DB] Error updating aan zet:', error)
-    return { success: false, error: 'Failed to update aan zet status' }
-  }
-}
-
-/**
- * Get leads visible to a specific engineer based on their type and "aan zet" status
+ * Get leads visible to a specific engineer based on their type
  * Engineers only see leads where:
  * 1. They are assigned (as rekenaar or tekenaar)
  * 2. Status is "Opdracht" (quote accepted)
- * 3. They are "aan zet" (their turn to work)
  */
 export async function getLeadsForEngineer(
   engineerName: string,
@@ -904,7 +939,6 @@ export async function getLeadsForEngineer(
       where: {
         deletedAt: null,
         status: 'Opdracht', // Only show leads where quote is accepted
-        aanZet: engineerType, // Only show when it's their turn
         OR: [
           { assignedRekenaar: engineerType === 'rekenaar' ? name : undefined },
           { assignedTekenaar: engineerType === 'tekenaar' ? name : undefined }
@@ -1536,6 +1570,8 @@ export async function createCostRate(data: {
   basePrice: number
   category?: string
   isPercentage?: boolean
+  projectType?: string
+  workSpecification?: string
 }): Promise<ActionResult> {
   const name = validateString(data.name, 200)
   const basePrice = validateNumber(data.basePrice, 0)
@@ -1549,7 +1585,9 @@ export async function createCostRate(data: {
         name,
         basePrice,
         category: data.category?.trim() || 'base',
-        isPercentage: data.isPercentage || false
+        isPercentage: data.isPercentage || false,
+        projectType: data.projectType?.trim() || null,
+        workSpecification: data.workSpecification?.trim() || null
       }
     })
     return { success: true, data: rate }
@@ -1559,17 +1597,29 @@ export async function createCostRate(data: {
   }
 }
 
-export async function updateCostRate(id: string, basePrice: number): Promise<ActionResult> {
+export async function updateCostRate(id: string, data: { 
+  basePrice?: number
+  workSpecification?: string 
+}): Promise<ActionResult> {
   const validId = validateId(id)
-  const validPrice = validateNumber(basePrice, 0)
-  
   if (!validId) return { success: false, error: 'Invalid rate ID' }
-  if (validPrice === null) return { success: false, error: 'Base price must be a valid number' }
+  
+  const updateData: { basePrice?: number; workSpecification?: string } = {}
+  
+  if (data.basePrice !== undefined) {
+    const validPrice = validateNumber(data.basePrice, 0)
+    if (validPrice === null) return { success: false, error: 'Base price must be a valid number' }
+    updateData.basePrice = validPrice
+  }
+  
+  if (data.workSpecification !== undefined) {
+    updateData.workSpecification = data.workSpecification?.trim() || null
+  }
 
   try {
     const rate = await prisma.costRate.update({
       where: { id: validId },
-      data: { basePrice: validPrice }
+      data: updateData
     })
     return { success: true, data: rate }
   } catch (error) {
@@ -2501,10 +2551,10 @@ export async function getAuditLogs(params: {
 // Time Entry Operations
 // ============================================================
 
-export type TimeCategory = 'calculatie' | 'overleg' | 'administratie' | 'site-bezoek' | 'overig'
+export type TimeCategory = 'calculatie' | 'overleg' | 'administratie' | 'site-bezoek' | 'overig' | 'algemeen' | 'prive'
 
 export interface TimeEntryInput {
-  leadId: string
+  leadId: string | null // Nullable for general/non-project hours
   userId: string
   userName: string
   date: string // ISO date string
@@ -2519,11 +2569,13 @@ export interface TimeEntryInput {
  * Create a new time entry for a lead
  */
 export async function createTimeEntry(data: TimeEntryInput): Promise<ActionResult> {
-  const validLeadId = validateId(data.leadId)
+  // leadId can be null for general/non-project hours
+  const validLeadId = data.leadId ? validateId(data.leadId) : null
   const validUserId = validateId(data.userId)
   const description = validateString(data.description, 1000)
   
-  if (!validLeadId) return { success: false, error: 'Invalid lead ID' }
+  // Only validate leadId if it was provided
+  if (data.leadId && !validLeadId) return { success: false, error: 'Invalid lead ID' }
   if (!validUserId) return { success: false, error: 'Invalid user ID' }
   if (!description) return { success: false, error: 'Description is required' }
   if (data.duration <= 0) return { success: false, error: 'Duration must be positive' }
@@ -2531,7 +2583,7 @@ export async function createTimeEntry(data: TimeEntryInput): Promise<ActionResul
   try {
     const entry = await prisma.timeEntry.create({
       data: {
-        leadId: validLeadId,
+        leadId: validLeadId, // Can be null for general hours
         userId: validUserId,
         userName: data.userName,
         date: new Date(data.date),
@@ -2543,15 +2595,17 @@ export async function createTimeEntry(data: TimeEntryInput): Promise<ActionResul
       }
     })
 
-    // Log activity
-    await prisma.activity.create({
-      data: {
-        leadId: validLeadId,
-        type: 'time_logged',
-        content: `${data.userName} registreerde ${data.duration} min (${data.category})`,
-        author: data.userName,
-      }
-    })
+    // Only log activity if there's a lead
+    if (validLeadId) {
+      await prisma.activity.create({
+        data: {
+          leadId: validLeadId,
+          type: 'time_logged',
+          content: `${data.userName} registreerde ${data.duration} min (${data.category})`,
+          author: data.userName,
+        }
+      })
+    }
 
     return { 
       success: true, 
@@ -2570,14 +2624,25 @@ export async function createTimeEntry(data: TimeEntryInput): Promise<ActionResul
 
 /**
  * Get all time entries for a lead
+ * For engineers: only returns their own entries
+ * For admin/projectleider: returns all entries
  */
-export async function getTimeEntries(leadId: string): Promise<ActionResult> {
+export async function getTimeEntries(
+  leadId: string, 
+  options?: { userId?: string; role?: 'admin' | 'projectleider' | 'engineer' }
+): Promise<ActionResult> {
   const validId = validateId(leadId)
   if (!validId) return { success: false, error: 'Invalid lead ID' }
 
   try {
+    // Build where clause - engineers only see their own entries
+    const where: Record<string, unknown> = { leadId: validId }
+    if (options?.role === 'engineer' && options?.userId) {
+      where.userId = options.userId
+    }
+
     const entries = await prisma.timeEntry.findMany({
-      where: { leadId: validId },
+      where,
       orderBy: [{ date: 'desc' }, { startTime: 'desc' }],
     })
 
@@ -2707,6 +2772,43 @@ export async function deleteTimeEntry(id: string): Promise<ActionResult> {
 }
 
 /**
+ * Get all team time entries for a date range (for projectleider overview)
+ */
+export async function getTeamTimeEntries(
+  startDate: string,
+  endDate: string
+): Promise<ActionResult> {
+  try {
+    const entries = await prisma.timeEntry.findMany({
+      where: {
+        date: {
+          gte: new Date(startDate),
+          lte: new Date(endDate),
+        }
+      },
+      orderBy: { date: 'desc' }
+    })
+
+    return { 
+      success: true, 
+      data: entries.map(e => ({
+        id: e.id,
+        userId: e.userId,
+        userName: e.userName,
+        leadId: e.leadId,
+        date: e.date.toISOString().split('T')[0],
+        duration: e.duration,
+        category: e.category,
+        description: e.description,
+      }))
+    }
+  } catch (error) {
+    console.error('[DB] Error fetching team time entries:', error)
+    return { success: false, error: 'Failed to load team time entries' }
+  }
+}
+
+/**
  * Get total hours per lead (for reporting)
  */
 export async function getLeadTotalHours(leadId: string): Promise<ActionResult> {
@@ -2730,6 +2832,124 @@ export async function getLeadTotalHours(leadId: string): Promise<ActionResult> {
     console.error('[DB] Error getting lead total hours:', error)
     return { success: false, error: 'Failed to calculate total hours' }
   }
+}
+
+/**
+ * Get average billable hours per week per employee
+ * Calculates over the last N weeks (default 12 weeks / ~3 months)
+ */
+export async function getAverageBillableHoursPerEmployee(
+  weeksToAnalyze: number = 12
+): Promise<ActionResult> {
+  try {
+    // Calculate date range: from N weeks ago to now
+    const endDate = new Date()
+    const startDate = new Date()
+    startDate.setDate(startDate.getDate() - (weeksToAnalyze * 7))
+    
+    // Get all time entries in the date range
+    const entries = await prisma.timeEntry.findMany({
+      where: {
+        date: {
+          gte: startDate,
+          lte: endDate,
+        }
+      },
+      select: {
+        userId: true,
+        userName: true,
+        duration: true,
+        category: true,
+        date: true,
+      }
+    })
+    
+    // Group by user and calculate stats
+    const userStats = new Map<string, {
+      userId: string
+      userName: string
+      totalBillableMinutes: number
+      totalMinutes: number
+      weeksActive: Set<string> // Track unique weeks
+    }>()
+    
+    // Non-billable categories
+    const nonBillableCategories = ['administratie', 'algemeen']
+    
+    entries.forEach(entry => {
+      if (!userStats.has(entry.userId)) {
+        userStats.set(entry.userId, {
+          userId: entry.userId,
+          userName: entry.userName,
+          totalBillableMinutes: 0,
+          totalMinutes: 0,
+          weeksActive: new Set(),
+        })
+      }
+      
+      const stats = userStats.get(entry.userId)!
+      stats.totalMinutes += entry.duration
+      
+      // Check if billable
+      if (!nonBillableCategories.includes(entry.category)) {
+        stats.totalBillableMinutes += entry.duration
+      }
+      
+      // Track which week this entry is in (ISO week number)
+      const weekKey = getISOWeekKey(entry.date)
+      stats.weeksActive.add(weekKey)
+    })
+    
+    // Calculate averages per employee
+    const employeeAverages = Array.from(userStats.values()).map(stats => {
+      const weeksWorked = stats.weeksActive.size || 1 // Avoid division by zero
+      const avgBillableMinutesPerWeek = Math.round(stats.totalBillableMinutes / weeksWorked)
+      const avgTotalMinutesPerWeek = Math.round(stats.totalMinutes / weeksWorked)
+      const avgBillableHoursPerWeek = avgBillableMinutesPerWeek / 60
+      
+      return {
+        userId: stats.userId,
+        userName: stats.userName,
+        avgBillableHoursPerWeek: Math.round(avgBillableHoursPerWeek * 10) / 10, // 1 decimal
+        avgTotalHoursPerWeek: Math.round(avgTotalMinutesPerWeek / 60 * 10) / 10,
+        weeksAnalyzed: weeksWorked,
+        billablePercent: stats.totalMinutes > 0 
+          ? Math.round((stats.totalBillableMinutes / stats.totalMinutes) * 100)
+          : 0,
+      }
+    }).sort((a, b) => b.avgBillableHoursPerWeek - a.avgBillableHoursPerWeek)
+    
+    // Calculate team average
+    const teamAvgBillableHours = employeeAverages.length > 0
+      ? Math.round(employeeAverages.reduce((sum, e) => sum + e.avgBillableHoursPerWeek, 0) / employeeAverages.length * 10) / 10
+      : 0
+    
+    return {
+      success: true,
+      data: {
+        employees: employeeAverages,
+        teamAverage: teamAvgBillableHours,
+        weeksAnalyzed: weeksToAnalyze,
+        periodStart: startDate.toISOString().split('T')[0],
+        periodEnd: endDate.toISOString().split('T')[0],
+      }
+    }
+  } catch (error) {
+    console.error('[DB] Error calculating average billable hours:', error)
+    return { success: false, error: 'Failed to calculate average billable hours' }
+  }
+}
+
+/**
+ * Helper: Get ISO week key for a date (YYYY-WW format)
+ */
+function getISOWeekKey(date: Date): string {
+  const d = new Date(date)
+  d.setHours(0, 0, 0, 0)
+  d.setDate(d.getDate() + 4 - (d.getDay() || 7))
+  const yearStart = new Date(d.getFullYear(), 0, 1)
+  const weekNum = Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7)
+  return `${d.getFullYear()}-W${String(weekNum).padStart(2, '0')}`
 }
 
 // ============================================================
@@ -2882,7 +3102,7 @@ export async function getEngineerStats(engineerName: string): Promise<ActionResu
 // Notification Operations
 // ============================================================
 
-export type NotificationType = 'mention' | 'status_change' | 'quote_feedback' | 'document' | 'assignment'
+export type NotificationType = 'mention' | 'status_change' | 'quote_feedback' | 'document' | 'assignment' | 'new_lead'
 
 /**
  * Create a notification for a user

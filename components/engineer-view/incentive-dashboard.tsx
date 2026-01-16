@@ -209,19 +209,7 @@ export function IncentiveDashboard() {
                     </CardContent>
                 </Card>
 
-                <Card className="bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800">
-                    <CardContent className="p-4">
-                        <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-lg bg-amber-500 flex items-center justify-center">
-                                <Euro className="w-5 h-5 text-white" />
-                            </div>
-                            <div>
-                                <p className="text-xs text-amber-700 dark:text-amber-400 font-medium">Omzet</p>
-                                <p className="text-2xl font-bold text-amber-800 dark:text-amber-300">€{((myStats?.revenue || 0) / 1000).toFixed(0)}k</p>
-                            </div>
-                        </div>
-                    </CardContent>
-                </Card>
+                {/* Revenue card hidden per management request - engineers focus on hours not revenue */}
 
                 <Card className="bg-rose-50 dark:bg-rose-950/30 border-rose-200 dark:border-rose-800">
                     <CardContent className="p-4">
@@ -273,7 +261,7 @@ export function IncentiveDashboard() {
                                     <div className="flex-1">
                                         <p className="font-semibold">{engineer.name}</p>
                                         <p className="text-xs text-muted-foreground">
-                                            {engineer.quotesWon} gewonnen • €{engineer.revenue.toLocaleString()}
+                                            {engineer.quotesWon} gewonnen • {engineer.hoursLogged}u gelogd
                                         </p>
                                     </div>
                                     <div className="flex items-center gap-1 text-emerald-600">

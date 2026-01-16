@@ -4,6 +4,7 @@ import { useState } from "react"
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Lead, ProjectSpec, useLeadStore, LeadStatus } from "@/lib/store"
+import { useAuthStore } from "@/lib/auth"
 import { MapPin, Phone, Mail, Building, ExternalLink, Plus, Pencil, Trash2, Save, X as XIcon, Euro, Hash } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Separator } from "@/components/ui/separator"
@@ -125,6 +126,7 @@ function EditableField({ label, value, onChange, isEditing, icon, type = "text",
 
 export function ContextPanel({ lead }: { lead: Lead }) {
     const { updateLeadStatus, updateProjectSpecs, updateLead } = useLeadStore()
+    const { currentUser } = useAuthStore()
     const [isEditing, setIsEditing] = useState(false)
     
     // Editable lead fields
@@ -338,8 +340,8 @@ export function ContextPanel({ lead }: { lead: Lead }) {
                     icon={<Hash className="w-4 h-4" />}
                 />
 
-                {/* Confirmed Offer Value - Only show when quote is approved */}
-                {lead.quoteApproval === 'approved' && lead.quoteValue != null && (
+                {/* Confirmed Offer Value - Only show when quote is approved and not for engineers */}
+                {lead.quoteApproval === 'approved' && lead.quoteValue != null && currentUser?.role !== 'engineer' && (
                     <div className="p-3 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800">
                         <span className="text-[10px] uppercase tracking-wider text-emerald-600 dark:text-emerald-400 font-semibold block">
                             Offertewaarde

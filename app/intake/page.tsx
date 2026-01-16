@@ -86,7 +86,9 @@ export default function IntakePage() {
     projectType: "",
     city: "",
     address: "",
-    description: ""
+    description: "",
+    isVVE: false,
+    needsPermit: false
   })
   const [files, setFiles] = useState<File[]>([])
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -168,6 +170,8 @@ export default function IntakePage() {
       submitData.append('city', formData.city)
       submitData.append('address', formData.address)
       submitData.append('description', formData.description)
+      submitData.append('isVVE', formData.isVVE.toString())
+      submitData.append('needsPermit', formData.needsPermit.toString())
       
       // Add files
       for (const file of files) {
@@ -257,7 +261,9 @@ export default function IntakePage() {
                   projectType: "",
                   city: "",
                   address: "",
-                  description: ""
+                  description: "",
+                  isVVE: false,
+                  needsPermit: false
                 })
                 setFiles([])
               }}
@@ -498,6 +504,65 @@ export default function IntakePage() {
                       className="pl-10"
                     />
                     <Home className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  </div>
+                </div>
+
+                {/* VVE & Vergunning Options */}
+                <div className="grid sm:grid-cols-2 gap-4">
+                  {/* VVE Checkbox */}
+                  <div 
+                    className={`
+                      flex items-center gap-3 p-4 rounded-lg border-2 cursor-pointer transition-all
+                      ${formData.isVVE 
+                        ? 'border-amber-400 bg-amber-50' 
+                        : 'border-slate-200 hover:border-slate-300'
+                      }
+                    `}
+                    onClick={() => setFormData({...formData, isVVE: !formData.isVVE})}
+                  >
+                    <div className={`
+                      w-5 h-5 rounded border-2 flex items-center justify-center transition-colors
+                      ${formData.isVVE 
+                        ? 'bg-amber-500 border-amber-500' 
+                        : 'border-slate-300'
+                      }
+                    `}>
+                      {formData.isVVE && (
+                        <CheckCircle2 className="w-3.5 h-3.5 text-white" />
+                      )}
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-slate-700">Onderdeel van VVE</p>
+                      <p className="text-xs text-slate-500">Appartementencomplex/VvE constructie</p>
+                    </div>
+                  </div>
+
+                  {/* Vergunning Checkbox */}
+                  <div 
+                    className={`
+                      flex items-center gap-3 p-4 rounded-lg border-2 cursor-pointer transition-all
+                      ${formData.needsPermit 
+                        ? 'border-amber-400 bg-amber-50' 
+                        : 'border-slate-200 hover:border-slate-300'
+                      }
+                    `}
+                    onClick={() => setFormData({...formData, needsPermit: !formData.needsPermit})}
+                  >
+                    <div className={`
+                      w-5 h-5 rounded border-2 flex items-center justify-center transition-colors
+                      ${formData.needsPermit 
+                        ? 'bg-amber-500 border-amber-500' 
+                        : 'border-slate-300'
+                      }
+                    `}>
+                      {formData.needsPermit && (
+                        <CheckCircle2 className="w-3.5 h-3.5 text-white" />
+                      )}
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-slate-700">Vergunning aanvragen</p>
+                      <p className="text-xs text-slate-500">Hulp nodig bij vergunningaanvraag</p>
+                    </div>
                   </div>
                 </div>
 

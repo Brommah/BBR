@@ -7,7 +7,7 @@
 1. [Rollenstructuur](#1-rollenstructuur)
 2. [Project Workflow](#2-project-workflow)
 3. [Pipeline Statussen](#3-pipeline-statussen)
-4. [Team Toewijzing & "Aan Zet" Systeem](#4-team-toewijzing--aan-zet-systeem)
+4. [Team Toewijzing](#4-team-toewijzing)
 5. [Offerte Proces](#5-offerte-proces)
 6. [Email Automatisering](#6-email-automatisering)
 7. [Documenten & Communicatie](#7-documenten--communicatie)
@@ -41,12 +41,11 @@
 | Gebied | Permissies |
 |--------|------------|
 | **Offertes** | Indienen, bekijken, feedback geven |
-| **Leads** | Aanmaken, bewerken, team toewijzen, "aan zet" bepalen |
+| **Leads** | Aanmaken, bewerken, team toewijzen |
 | **Zichtbaarheid** | Alleen eigen toegewezen projecten |
 
 **Belangrijke taken:**
 - ✅ Wijst Rekenaar en Tekenaar toe aan projecten
-- ✅ Bepaalt wie "aan zet" is
 - ✅ Is contactpersoon voor de klant (wordt vermeld in offerte-email)
 - ✅ Ziet projecten in alle statussen (voor eigen projecten)
 
@@ -62,14 +61,13 @@
 
 | Gebied | Permissies |
 |--------|------------|
-| **Leads** | Alleen eigen toegewezen leads bekijken (wanneer "aan zet") |
+| **Leads** | Alleen eigen toegewezen leads bekijken |
 | **Offertes** | Bekijken (alleen lezen) |
 | **Uren** | Registreren op eigen projecten |
 
-**Zichtbaarheid - Een Rekenaar ziet een project ALLEEN als:**
+**Zichtbaarheid - Een Rekenaar ziet een project als:**
 1. ✅ Status = **"Opdracht"** (offerte geaccepteerd)
 2. ✅ Zij zijn toegewezen als **Rekenaar**
-3. ✅ **"Aan zet"** staat op **"rekenaar"**
 
 ---
 
@@ -79,14 +77,13 @@
 
 | Gebied | Permissies |
 |--------|------------|
-| **Leads** | Alleen eigen toegewezen leads bekijken (wanneer "aan zet") |
+| **Leads** | Alleen eigen toegewezen leads bekijken |
 | **Offertes** | Bekijken (alleen lezen) |
 | **Uren** | Registreren op eigen projecten |
 
-**Zichtbaarheid - Een Tekenaar ziet een project ALLEEN als:**
+**Zichtbaarheid - Een Tekenaar ziet een project als:**
 1. ✅ Status = **"Opdracht"** (offerte geaccepteerd)
 2. ✅ Zij zijn toegewezen als **Tekenaar**
-3. ✅ **"Aan zet"** staat op **"tekenaar"**
 
 ---
 
@@ -128,9 +125,7 @@
    └── Klant accepteert offerte (via secure link)
        └── Status: Opdracht
        └── Email: Opdracht bevestiging → Klant
-   └── Projectleider zet "aan zet" naar Rekenaar
    └── Rekenaar maakt berekening
-   └── Projectleider zet "aan zet" naar Tekenaar
    └── Tekenaar maakt tekeningen
 
 5. ARCHIEF
@@ -154,11 +149,11 @@
 | **Archief** | ⚫ Grijs | Afgerond of vervallen | Admin, Projectleider* |
 
 \* Alleen voor eigen toegewezen projecten  
-\** Alleen wanneer toegewezen EN "aan zet"
+\** Alleen wanneer toegewezen
 
 ---
 
-## 4. Team Toewijzing & "Aan Zet" Systeem
+## 4. Team Toewijzing
 
 ### 4.1 Team Toewijzing
 
@@ -170,30 +165,15 @@ Elk project kan drie teamleden hebben:
 | **Rekenaar** | `assignedRekenaar` | Maakt constructieve berekeningen |
 | **Tekenaar** | `assignedTekenaar` | Maakt technische tekeningen |
 
-### 4.2 "Aan Zet" Systeem
-
-Het "Aan Zet" veld bepaalt wie momenteel aan het project werkt:
-
-| Waarde | Betekenis |
-|--------|-----------|
-| `projectleider` | Projectleider is aan de beurt (coördinatie/review) |
-| `rekenaar` | Rekenaar is aan de beurt (berekeningen maken) |
-| `tekenaar` | Tekenaar is aan de beurt (tekeningen maken) |
-
-**Belangrijk:** Rekenaar en Tekenaar werken **nooit** tegelijkertijd aan hetzelfde project!
-
-### 4.3 Voorbeeld Workflow
+### 4.2 Voorbeeld Workflow
 
 ```
 Dag 1:  Klant accepteert offerte → Status = "Opdracht"
         Projectleider wijst Cees (Rekenaar) en Marieke (Tekenaar) toe
-        Projectleider zet "Aan Zet" = rekenaar
-        → Cees ziet project in zijn werkvoorraad
+        → Cees en Marieke zien project in hun werkvoorraad
 
 Dag 3:  Cees voltooit berekening
-        Projectleider zet "Aan Zet" = tekenaar
-        → Project verdwijnt bij Cees
-        → Marieke ziet project in haar werkvoorraad
+        Marieke maakt tekeningen
 
 Dag 5:  Marieke voltooit tekeningen
         Projectleider zet status naar Archief
@@ -340,7 +320,7 @@ Alle communicatie met klanten wordt gelogd:
 
 | Menu-item | Functie |
 |-----------|---------|
-| 🏠 Home | Werkvoorraad (alleen "aan zet" projecten) |
+| 🏠 Home | Werkvoorraad (toegewezen projecten) |
 | 🔔 Meldingen | @-mentions en notificaties |
 
 ---
@@ -404,7 +384,6 @@ Engineers kunnen uren registreren per project:
 | `leads:view-offerte` | ✅ | ✅ | ❌ |
 | `leads:edit` | ✅ | ✅ | ❌ |
 | `leads:delete` | ✅ | ❌ | ❌ |
-| `leads:set-aan-zet` | ✅ | ✅ | ❌ |
 | `admin:access` | ✅ | ❌ | ❌ |
 | `admin:manage-users` | ✅ | ❌ | ❌ |
 | `admin:manage-pricing` | ✅ | ❌ | ❌ |

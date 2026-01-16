@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useTransition } from "react"
-import { Check, ChevronsUpDown, Loader2, User, Calculator, Pencil, ArrowRight, Briefcase } from "lucide-react"
+import { Check, ChevronsUpDown, Loader2, Calculator, Pencil, Briefcase } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar"
@@ -19,16 +19,9 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
-import { useLeadStore, AanZet } from "@/lib/store"
+import { useLeadStore } from "@/lib/store"
 import { getUsers } from "@/lib/db-actions"
-import { useAuthStore, ENGINEER_TYPE_DISPLAY_NAMES } from "@/lib/auth"
+import { useAuthStore } from "@/lib/auth"
 import { toast } from "sonner"
 
 interface TeamMember {
@@ -45,19 +38,16 @@ interface TeamAssignmentPanelProps {
   assignedProjectleider?: string | null
   assignedRekenaar?: string | null
   assignedTekenaar?: string | null
-  aanZet?: AanZet
 }
 
 /**
  * Panel for Admin to assign Projectleider, Rekenaar and Tekenaar to a project
- * and to set who is "aan zet" (currently working)
  */
 export function TeamAssignmentPanel({ 
   leadId, 
   assignedProjectleider,
   assignedRekenaar, 
-  assignedTekenaar,
-  aanZet 
+  assignedTekenaar
 }: TeamAssignmentPanelProps) {
   const [projectleiders, setProjectleiders] = useState<TeamMember[]>([])
   const [engineers, setEngineers] = useState<TeamMember[]>([])
@@ -67,8 +57,8 @@ export function TeamAssignmentPanel({
   const [rekenaarOpen, setRekenaarOpen] = useState(false)
   const [tekenaarOpen, setTekenaarOpen] = useState(false)
   
-  const { updateTeamAssignments, updateAanZet } = useLeadStore()
-  const { isAdmin } = useAuthStore()
+  const { updateTeamAssignments } = useLeadStore()
+  const { isAdmin, currentUser } = useAuthStore()
   
   // Only Admin can assign
   const canAssign = isAdmin()
@@ -144,20 +134,6 @@ export function TeamAssignmentPanel({
     setTekenaarOpen(false)
   }
 
-  const handleAanZetChange = async (value: string) => {
-    const newAanZet = value === 'none' ? null : value as AanZet
-    
-    startTransition(async () => {
-      const success = await updateAanZet(leadId, newAanZet)
-      if (success) {
-        const label = newAanZet 
-          ? ENGINEER_TYPE_DISPLAY_NAMES[newAanZet as 'rekenaar' | 'tekenaar'] || 'Projectleider'
-          : 'Niemand'
-        toast.success(`Aan zet: ${label}`)
-      }
-    })
-  }
-
   const currentProjectleider = projectleiders.find(p => p.name === assignedProjectleider)
   const currentRekenaar = engineers.find(e => e.name === assignedRekenaar)
   const currentTekenaar = engineers.find(e => e.name === assignedTekenaar)
@@ -191,14 +167,6 @@ export function TeamAssignmentPanel({
               {assignedTekenaar || 'Niet toegewezen'}
             </span>
           </div>
-          {aanZet && (
-            <div className="flex items-center gap-2 p-2 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
-              <ArrowRight className="w-4 h-4 text-amber-600" />
-              <span className="text-sm font-medium text-amber-700 dark:text-amber-400">
-                Aan zet: {ENGINEER_TYPE_DISPLAY_NAMES[aanZet as 'rekenaar' | 'tekenaar'] || 'Projectleider'}
-              </span>
-            </div>
-          )}
         </div>
       </div>
     )
@@ -460,55 +428,6 @@ export function TeamAssignmentPanel({
             </Command>
           </PopoverContent>
         </Popover>
-      </div>
-      
-      {/* Aan Zet Selector */}
-      <div className="space-y-1.5">
-        <label className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
-          <ArrowRight className="w-3.5 h-3.5 text-green-500" />
-          Aan Zet
-        </label>
-        <Select
-          value={aanZet || 'none'}
-          onValueChange={handleAanZetChange}
-          disabled={isPending}
-        >
-          <SelectTrigger className="h-9 text-sm">
-            <SelectValue placeholder="Wie is aan zet?" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="none">
-              <span className="text-muted-foreground">Niemand aan zet</span>
-            </SelectItem>
-            {assignedProjectleider && (
-              <SelectItem value="projectleider">
-                <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 rounded-full bg-amber-500" />
-                  Projectleider ({assignedProjectleider})
-                </div>
-              </SelectItem>
-            )}
-            {assignedRekenaar && (
-              <SelectItem value="rekenaar">
-                <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 rounded-full bg-blue-500" />
-                  Rekenaar ({assignedRekenaar})
-                </div>
-              </SelectItem>
-            )}
-            {assignedTekenaar && (
-              <SelectItem value="tekenaar">
-                <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 rounded-full bg-purple-500" />
-                  Tekenaar ({assignedTekenaar})
-                </div>
-              </SelectItem>
-            )}
-          </SelectContent>
-        </Select>
-        <p className="text-[10px] text-muted-foreground">
-          De persoon &quot;aan zet&quot; ziet dit project in zijn werkvoorraad
-        </p>
       </div>
     </div>
   )
