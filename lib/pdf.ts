@@ -24,6 +24,7 @@ interface QuotePDFData {
   quoteValue: number
   quoteDescription?: string
   lineItems: QuoteLineItem[]
+  estimatedHours?: number
   
   // Meta
   quoteDate: Date
