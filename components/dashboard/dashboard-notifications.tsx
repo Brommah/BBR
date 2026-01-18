@@ -4,25 +4,27 @@ import { toast } from "sonner"
 import { useRouter } from "next/navigation"
 import { useLeadStore, Lead } from "@/lib/store"
 import { getUnreadNotificationCount } from "@/lib/db-actions"
+import { useLeadRealtime } from "@/lib/realtime"
 
+/**
+ * DashboardNotifications - Handles real-time lead notifications
+ *
+ * Uses Supabase real-time subscriptions for instant updates.
+ * Falls back to store-based detection for leads added through other means.
+ */
 export function DashboardNotifications() {
   const router = useRouter()
   const { leads } = useLeadStore()
   const shownLeadIdsRef = useRef<Set<string>>(new Set())
   const initialLoadRef = useRef(true)
 
-  // Get new leads (status "Nieuw") that haven't been shown yet
-  const getNewLeads = useCallback(() => {
-    return leads.filter(lead => 
-      lead.status === "Nieuw" && 
-      !shownLeadIdsRef.current.has(lead.id)
-    )
-  }, [leads])
-
   // Show notification for a specific lead
   const showLeadNotification = useCallback((lead: Lead) => {
+    // Skip if already shown
+    if (shownLeadIdsRef.current.has(lead.id)) return
+
     shownLeadIdsRef.current.add(lead.id)
-    
+
     toast("Nieuwe Lead", {
       description: `Aanvraag ontvangen: ${lead.clientName} (${lead.projectType})`,
       duration: 10000,
@@ -36,55 +38,40 @@ export function DashboardNotifications() {
     })
   }, [router])
 
-  // Check for new leads and show notifications
-  const checkForNewLeads = useCallback(() => {
-    const newLeads = getNewLeads()
-    
-    // On initial load, mark all existing new leads as "seen" but show notification for the first one
-    if (initialLoadRef.current) {
+  // Real-time subscription for new leads (instant WebSocket updates)
+  useLeadRealtime({
+    showToasts: false, // We handle toasts ourselves with custom formatting
+    onNewLead: (lead) => {
+      if (lead.status === "Nieuw") {
+        showLeadNotification(lead)
+      }
+    }
+  })
+
+  // On initial mount, mark existing "Nieuw" leads as seen
+  useEffect(() => {
+    if (initialLoadRef.current && leads.length > 0) {
       initialLoadRef.current = false
-      
-      // Mark all as seen
+
+      // Mark all existing new leads as seen
+      const newLeads = leads.filter(lead => lead.status === "Nieuw")
       newLeads.forEach(lead => shownLeadIdsRef.current.add(lead.id))
-      
-      // Show notification for the most recent one if exists
+
+      // Show notification for the most recent one
       if (newLeads.length > 0) {
-        const mostRecent = newLeads.sort((a, b) => 
+        const mostRecent = newLeads.sort((a, b) =>
           new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
         )[0]
-        
-        // Remove from shown set so it can be shown
+
+        // Remove from shown set so it can be displayed
         shownLeadIdsRef.current.delete(mostRecent.id)
-        
+
         setTimeout(() => {
           showLeadNotification(mostRecent)
         }, 2000)
       }
-      return
     }
-    
-    // For subsequent checks, show notifications for all new leads
-    newLeads.forEach(lead => {
-      showLeadNotification(lead)
-    })
-  }, [getNewLeads, showLeadNotification])
-
-  useEffect(() => {
-    // Initial check
-    checkForNewLeads()
-    
-    // Periodically check for new leads (in case they're added externally)
-    const interval = setInterval(checkForNewLeads, 30000) // Every 30 seconds
-    
-    return () => clearInterval(interval)
-  }, [checkForNewLeads])
-
-  // Also check whenever leads array changes
-  useEffect(() => {
-    if (!initialLoadRef.current) {
-      checkForNewLeads()
-    }
-  }, [leads, checkForNewLeads])
+  }, [leads, showLeadNotification])
 
   return null
 }
@@ -143,19 +130,18 @@ export interface EngineerUpdate {
 
 /**
  * Hook to get unread notification count from database
- * Polls every 30 seconds to keep count updated
+ * Uses real-time subscriptions for instant updates, with initial fetch
  */
 export function useNotificationCount(userName: string | undefined) {
   const [count, setCount] = useState(0)
 
+  // Initial fetch of notification count
   useEffect(() => {
     if (!userName) {
-      // Use a microtask to avoid synchronous setState in effect
       queueMicrotask(() => setCount(0))
       return
     }
-    
-    // Fetch count and set up polling
+
     let isMounted = true
     const doFetch = async () => {
       const result = await getUnreadNotificationCount(userName)
@@ -163,13 +149,68 @@ export function useNotificationCount(userName: string | undefined) {
         setCount(result.data)
       }
     }
-    
+
     doFetch()
-    const interval = setInterval(doFetch, 30000)
-    
+
     return () => {
       isMounted = false
-      clearInterval(interval)
+    }
+  }, [userName])
+
+  // Real-time subscription - increment count on new notification
+  useEffect(() => {
+    if (!userName) return
+
+    // Dynamic import to avoid SSR issues
+    let cleanup: (() => void) | undefined
+
+    import('@/lib/supabase-browser').then(({ getSupabaseBrowserClient, isSupabaseConfigured }) => {
+      if (!isSupabaseConfigured()) return
+
+      const supabase = getSupabaseBrowserClient()
+      if (!supabase) return
+
+      const channel = supabase
+        .channel(`notification-count-${userName}`)
+        .on(
+          'postgres_changes',
+          {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'Notification',
+            filter: `userName=eq.${userName}`,
+          },
+          () => {
+            // Increment count on new notification
+            setCount(prev => prev + 1)
+          }
+        )
+        .on(
+          'postgres_changes' as const,
+          {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'Notification',
+            filter: `userName=eq.${userName}`,
+          },
+          (payload: { old: { read?: boolean }; new: { read?: boolean } }) => {
+            // Decrement if notification was marked as read
+            const oldData = payload.old
+            const newData = payload.new
+            if (!oldData.read && newData.read) {
+              setCount(prev => Math.max(0, prev - 1))
+            }
+          }
+        )
+        .subscribe()
+
+      cleanup = () => {
+        supabase.removeChannel(channel)
+      }
+    })
+
+    return () => {
+      cleanup?.()
     }
   }, [userName])
 

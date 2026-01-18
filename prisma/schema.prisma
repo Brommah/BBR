@@ -1,5 +1,21 @@
-// Prisma schema for Broersma Bouwadvies Backoffice
-// Connected to Supabase PostgreSQL
+// ============================================================
+// Broersma Bouwadvies Backoffice - Database Schema
+// ============================================================
+//
+// This schema defines the data model for a construction advisory
+// firm's backoffice system. It manages the complete client journey
+// from lead intake through quote approval to project delivery.
+//
+// Key concepts:
+// - Leads progress through a Kanban pipeline (Nieuw -> Archief)
+// - Quotes require admin approval before being sent to clients
+// - Team members have role-based access (Admin, Projectleider, Engineer)
+// - Engineers specialize as Rekenaar (calculator) or Tekenaar (draftsman)
+// - Email automations track the customer communication lifecycle
+//
+// Database: PostgreSQL via Supabase
+// ORM: Prisma 7
+// ============================================================
 
 generator client {
   provider = "prisma-client-js"
@@ -9,154 +25,246 @@ datasource db {
   provider = "postgresql"
 }
 
+// ============================================================
+// ENUMS
+// ============================================================
+
+/// Pipeline stages for lead progression
+/// Flow: Nieuw -> Calculatie -> OfferteVerzonden -> Opdracht -> Archief
 enum LeadStatus {
-  Nieuw
-  Calculatie
-  OfferteVerzonden
-  Opdracht
-  Archief
+  Nieuw            // New lead, awaiting processing
+  Calculatie       // Being calculated/quoted by engineer
+  OfferteVerzonden // Quote sent to client, awaiting response
+  Opdracht         // Client accepted, project in progress
+  Archief          // Completed or archived
 }
 
+/// Quote approval workflow states
+/// Flow: none -> pending (submitted) -> approved/rejected
 enum QuoteApprovalStatus {
-  none
-  pending
-  approved
-  rejected
+  none      // No quote submitted yet
+  pending   // Submitted by engineer, awaiting admin review
+  approved  // Admin approved, ready to send to client
+  rejected  // Admin rejected with feedback, needs revision
 }
 
+/// Project urgency level (set by admin)
 enum Priority {
-  normal
-  high
-  urgent
+  normal // Standard processing
+  high   // Prioritize over normal
+  urgent // Requires immediate attention
 }
 
+/// Engineer specialization type
+/// Only applicable when user role === 'engineer'
 enum EngineerType {
-  rekenaar
-  tekenaar
+  rekenaar // Calculator - performs structural calculations
+  tekenaar // Draftsman - creates technical drawings
 }
 
+// ============================================================
+// CORE MODELS
+// ============================================================
 
+/// Lead - The central entity representing a potential/active project
+///
+/// A lead tracks a client's project from initial contact through delivery.
+/// Contains client info, project details, quote data, and team assignments.
+///
+/// Key fields:
+/// - status: Current pipeline stage
+/// - quoteApproval: Quote workflow state (separate from pipeline status)
+/// - assigned*: Team member assignments (Projectleider coordinates, engineers execute)
+///
+/// Soft delete: Set deletedAt instead of hard deleting
 model Lead {
-  id                  String              @id @default(cuid())
-  clientName          String
-  clientEmail         String?
-  clientPhone         String?
-  projectType         String
-  city                String
-  address             String?
-  status              LeadStatus          @default(Nieuw)
-  value               Float               @default(0)
-  createdAt           DateTime            @default(now())
-  updatedAt           DateTime            @updatedAt
-  deletedAt           DateTime?           // Soft delete
-  assignee            String?             // DEPRECATED - use assignedRekenaar/Tekenaar instead
-  addressValid        Boolean             @default(false)
-  werknummer          String?             // Work number for the project
-  priority            Priority            @default(normal) // Admin-set urgency level
-  deadline            DateTime?           // Optional deadline for the project
-  
-  // Team assignments
-  assignedProjectleider String?           // Name of assigned Projectleider (Femke/Rohina)
-  assignedRekenaar      String?           // Name of assigned Rekenaar
-  assignedTekenaar      String?           // Name of assigned Tekenaar
-  
-  // Quote data
-  quoteApproval       QuoteApprovalStatus @default(none)
-  quoteValue          Float?
-  quoteDescription    String?             // Engineer's justification for the quote
-  quoteLineItems      Json?               // Array of {description: string, amount: number}
-  quoteEstimatedHours Float?              // Estimated hours for the work
-  quoteFeedback       Json?               // Array of admin feedback objects
-  
-  // Email automation tracking
-  quoteSentAt           DateTime?         // When quote email was sent to client
-  quoteReminder1SentAt  DateTime?         // First reminder sent
-  quoteReminder2SentAt  DateTime?         // Second reminder sent
-  orderConfirmSentAt    DateTime?         // Order confirmation sent
-  deliveryNotifSentAt   DateTime?         // Delivery notification sent
-  feedbackRequestSentAt DateTime?         // Feedback request sent
-  npsSurveySentAt       DateTime?         // NPS survey sent
-  referralInviteSentAt  DateTime?         // Referral invitation sent
-  reactivationSentAt    DateTime?         // Reactivation email sent
-  assigneeNotifiedAt    DateTime?         // When client was notified of engineer assignment
-  
-  // Relations
-  specifications      ProjectSpec[]
-  notes               Note[]
-  activities          Activity[]
-  documents           Document[]
-  communications      Communication[]
-  quoteVersions       QuoteVersion[]
-  emailLogs           EmailLog[]
-  timeEntries         TimeEntry[]
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  deletedAt DateTime? // Soft delete - filter with deletedAt IS NULL
 
+  // ----- Client Information -----
+  clientName  String  // Full name of the client
+  clientEmail String? // Email for correspondence and quote delivery
+  clientPhone String? // Phone number for direct contact
+
+  // ----- Project Details -----
+  projectType  String     // Type: 'Dakkapel', 'Aanbouw', 'Verbouwing', etc.
+  city         String     // City/municipality
+  address      String?    // Full street address
+  addressValid Boolean    @default(false) // Validated via Kadaster API
+  werknummer   String?    // Internal work/project number (e.g., "2024-0042")
+  priority     Priority   @default(normal) // Admin-set urgency level
+  deadline     DateTime?  // Optional deadline for project completion
+
+  // ----- Pipeline Status -----
+  status LeadStatus @default(Nieuw)
+  value  Float      @default(0) // Estimated/quoted project value in EUR
+
+  // ----- Team Assignments -----
+  // Note: `assignee` is DEPRECATED, use specific assignment fields below
+  assignee              String? // DEPRECATED - kept for backwards compatibility
+  assignedProjectleider String? // Coordinates project delivery (e.g., "Femke", "Rohina")
+  assignedRekenaar      String? // Engineer doing calculations
+  assignedTekenaar      String? // Engineer doing drawings
+
+  // ----- Quote Data -----
+  // These fields are populated when an engineer submits a quote for approval
+  quoteApproval       QuoteApprovalStatus @default(none)
+  quoteValue          Float?  // Total quote amount in EUR
+  quoteDescription    String? // Engineer's justification/notes for the quote
+  quoteEstimatedHours Float?  // Estimated hours for the work
+
+  /// Line items breakdown
+  /// JSON Structure: Array<{ description: string, amount: number }>
+  /// Example: [{"description": "Dakkapel constructieberekening", "amount": 850}]
+  quoteLineItems Json?
+
+  /// Admin feedback on submitted quotes
+  /// JSON Structure: Array<{
+  ///   id: string,
+  ///   authorId: string,
+  ///   authorName: string,
+  ///   message: string,
+  ///   createdAt: string (ISO),
+  ///   type: 'approval' | 'rejection' | 'revision'
+  /// }>
+  quoteFeedback Json?
+
+  // ----- Email Automation Tracking -----
+  // Timestamps for tracking which automated emails have been sent
+  quoteSentAt           DateTime? // Quote email sent to client
+  quoteReminder1SentAt  DateTime? // First reminder (+4 days)
+  quoteReminder2SentAt  DateTime? // Second/final reminder (+10 days)
+  orderConfirmSentAt    DateTime? // Order confirmation after acceptance
+  deliveryNotifSentAt   DateTime? // Delivery notification when complete
+  feedbackRequestSentAt DateTime? // Feedback request (+3 days post-delivery)
+  npsSurveySentAt       DateTime? // NPS survey (+14 days post-delivery)
+  referralInviteSentAt  DateTime? // Referral invitation (for NPS 9-10)
+  reactivationSentAt    DateTime? // Reactivation email (90 days inactive)
+  assigneeNotifiedAt    DateTime? // Client notified of engineer assignment
+
+  // ----- Relations -----
+  specifications  ProjectSpec[]
+  notes           Note[]
+  activities      Activity[]
+  documents       Document[]
+  communications  Communication[]
+  quoteVersions   QuoteVersion[]
+  emailLogs       EmailLog[]
+  timeEntries     TimeEntry[]
+
+  // ----- Indexes -----
   @@index([status])
   @@index([assignee])
   @@index([createdAt])
   @@index([deletedAt])
-  // Composite indexes for common query patterns
   @@index([assignee, status])        // "My leads" filtered by status
-  @@index([quoteApproval, status])   // Approval queue queries
-  @@index([status, createdAt])       // Pipeline sorting by date
-  // Team assignment indexes
+  @@index([quoteApproval, status])   // Quote approval queue
+  @@index([status, createdAt])       // Pipeline sorting
   @@index([assignedProjectleider])
   @@index([assignedRekenaar])
   @@index([assignedTekenaar])
 }
 
+/// ProjectSpec - Key-value specifications for a lead
+///
+/// Stores project-specific data like dimensions, quantities, etc.
+/// Example: { key: "dakkapel_breedte", value: "3.5", unit: "m" }
 model ProjectSpec {
   id        String   @id @default(cuid())
   leadId    String
   lead      Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
-  key       String
-  value     String
-  unit      String?
+  key       String   // Specification name (e.g., "dakkapel_breedte", "verdieping")
+  value     String   // The value (stored as string, parsed as needed)
+  unit      String?  // Optional unit (e.g., "m", "m2", "stuks")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@unique([leadId, key])
+  @@unique([leadId, key]) // One value per key per lead
 }
 
+/// Note - Team notes and comments on a lead
+///
+/// Supports @mentions (parsed from content) and emoji reactions.
+/// Mentions trigger notifications to mentioned users.
 model Note {
   id        String   @id @default(cuid())
   leadId    String
   lead      Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
-  content   String
-  author    String
-  reactions Json?    // Emoji reactions: { "👍": ["User1", "User2"], "❤️": ["User3"] }
+  content   String   // Note text, may contain @mentions like "@Jan"
+  author    String   // Username of note author
   createdAt DateTime @default(now())
+
+  /// Emoji reactions from team members
+  /// JSON Structure: { [emoji: string]: string[] }
+  /// Example: { "thumbsup": ["Jan", "Piet"], "heart": ["Marie"] }
+  reactions Json?
 }
 
+/// Activity - Audit log of all lead changes
+///
+/// Tracks status changes, emails sent, quotes generated, etc.
+/// Used for timeline display and audit compliance.
 model Activity {
   id        String   @id @default(cuid())
   leadId    String
   lead      Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
-  type      String   // 'status_change', 'email_sent', 'note_added', 'quote_generated', etc.
-  content   String
-  author    String?
-  metadata  Json?    // For storing before/after states for audit
   createdAt DateTime @default(now())
+
+  /// Activity type identifier
+  /// Values: 'status_change', 'email_sent', 'note_added', 'quote_submitted',
+  ///         'quote_approved', 'quote_rejected', 'document_uploaded',
+  ///         'assignment_changed', 'quote_sent', 'quote_accepted'
+  type String
+
+  content String  // Human-readable description
+  author  String? // Who performed the action (null for system actions)
+
+  /// Additional data for audit purposes
+  /// JSON Structure (for status_change): { from: string, to: string }
+  /// JSON Structure (for quote_approved): { quoteValue: number, feedback?: string }
+  metadata Json?
 
   @@index([leadId])
   @@index([createdAt])
   @@index([type])
 }
 
+// ============================================================
+// USER & AUTHENTICATION MODELS
+// ============================================================
+
+/// User - Team member account
+///
+/// Users are created in both Supabase Auth and this table.
+/// The role from this table takes precedence over Supabase metadata.
+///
+/// Soft delete: Set deletedAt to deactivate without losing history.
 model User {
-  id           String        @id @default(cuid())
-  name         String
-  email        String        @unique
-  roleId       String?       // Foreign key to Role (nullable during migration)
-  roleRef      Role?         @relation(fields: [roleId], references: [id])
-  role         String        @default("engineer") // Legacy field - kept for backwards compatibility
-  engineerType EngineerType? // Only for engineers: 'rekenaar' or 'tekenaar'
-  avatar       String?
-  createdAt    DateTime      @default(now())
-  deletedAt    DateTime?     // Soft delete
-  
-  // Per-user permission overrides
+  id        String    @id @default(cuid())
+  name      String    // Display name
+  email     String    @unique // Login email (must match Supabase Auth)
+  avatar    String?   // Avatar URL (Supabase Storage)
+  createdAt DateTime  @default(now())
+  deletedAt DateTime? // Soft delete
+
+  // ----- Role Assignment -----
+  roleId String? // Foreign key to Role (nullable during migration)
+  roleRef Role? @relation(fields: [roleId], references: [id])
+
+  /// Legacy role field - kept for backwards compatibility
+  /// New code should use roleRef relation with RBAC permissions
+  /// Values: 'admin', 'projectleider', 'engineer'
+  role String @default("engineer")
+
+  /// Engineer specialization (only when role === 'engineer')
+  /// Determines which assignment field (assignedRekenaar/Tekenaar) applies
+  engineerType EngineerType?
+
+  // Per-user permission overrides (can grant/revoke specific permissions)
   permissionOverrides UserPermission[]
-  
+
   @@index([roleId])
 }
 
@@ -164,166 +272,279 @@ model User {
 // RBAC (Role-Based Access Control) Models
 // ============================================================
 
+/// Role - User role definition
+///
+/// System roles (admin, projectleider, engineer) have isSystem=true
+/// and cannot be deleted. Custom roles can be created for special cases.
+///
+/// Permissions are assigned via the RolePermission join table.
 model Role {
   id          String   @id @default(cuid())
-  name        String   @unique  // 'admin', 'projectleider', 'engineer', or custom
-  displayName String             // 'Admin', 'Projectleider', etc.
-  description String?
-  color       String   @default("#6b7280")  // For UI badges (hex color)
-  isSystem    Boolean  @default(false)       // System roles cannot be deleted
+  name        String   @unique // Identifier: 'admin', 'projectleider', 'engineer', or custom
+  displayName String   // UI display: 'Admin', 'Projectleider', etc.
+  description String?  // Role description for admin UI
+  color       String   @default("#6b7280") // Badge color (hex)
+  isSystem    Boolean  @default(false) // System roles cannot be deleted
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
-  
+
   users       User[]
   permissions RolePermission[]
-  
+
   @@index([isSystem])
 }
 
+/// Permission - Granular access control permission
+///
+/// Permissions follow the format: "category:action"
+/// Example: "leads:edit", "quotes:approve", "admin:manage-users"
+///
+/// Categories: leads, quotes, admin, settings, team
 model Permission {
-  id          String   @id @default(cuid())
-  key         String   @unique  // 'leads:edit', 'quotes:approve', etc.
-  name        String             // 'Edit Leads', 'Approve Quotes'
-  description String?
-  category    String             // 'leads', 'quotes', 'admin', 'settings', 'team'
-  sortOrder   Int      @default(0) // For consistent UI ordering
-  
+  id          String @id @default(cuid())
+  key         String @unique // e.g., 'leads:edit', 'quotes:approve'
+  name        String // UI display: 'Edit Leads', 'Approve Quotes'
+  description String? // Detailed description for admin UI
+  category    String // Grouping: 'leads', 'quotes', 'admin', 'settings', 'team'
+  sortOrder   Int    @default(0) // For consistent UI ordering within category
+
   rolePermissions RolePermission[]
   userPermissions UserPermission[]
-  
+
   @@index([category])
 }
 
+/// RolePermission - Links roles to their permissions
+///
+/// Many-to-many join table between Role and Permission.
+/// All users with a role get these permissions by default.
 model RolePermission {
   roleId       String
   permissionId String
   role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
   permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
   createdAt    DateTime   @default(now())
-  
+
   @@id([roleId, permissionId])
 }
 
+/// UserPermission - Per-user permission overrides
+///
+/// Allows granting or revoking specific permissions for individual users,
+/// overriding what their role would normally provide.
+///
+/// granted=true: Explicitly grant permission (even if role doesn't have it)
+/// granted=false: Explicitly deny permission (even if role has it)
 model UserPermission {
   userId       String
   permissionId String
-  granted      Boolean    @default(true)  // false = explicitly denied (override role permission)
+  granted      Boolean    @default(true) // false = explicitly denied
   user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
   createdAt    DateTime   @default(now())
-  
+
   @@id([userId, permissionId])
 }
 
+// ============================================================
+// PRICING & COST MODELS
+// ============================================================
+
+/// CostRate - Pricing configuration for quotes
+///
+/// Defines base prices for project types and surcharges.
+/// Used by engineers when building quotes.
 model CostRate {
-  id                String   @id @default(cuid())
-  name              String
-  basePrice         Float
-  category          String   @default("base") // 'base', 'surcharge'
-  isPercentage      Boolean  @default(false)
-  projectType       String?  // Maps to project type for base rates (e.g., 'Dakkapel', 'Aanbouw')
-  workSpecification String?  @db.Text // Detailed work description for this rate (shown on quote)
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-  
+  id          String   @id @default(cuid())
+  name        String   // Rate name for display
+  basePrice   Float    // Price in EUR
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  /// Rate category
+  /// Values: 'base' (project type base price), 'surcharge' (additional fees)
+  category String @default("base")
+
+  /// Whether this rate is a percentage (true) or fixed amount (false)
+  isPercentage Boolean @default(false)
+
+  /// For base rates: which project type this applies to
+  /// Values: 'Dakkapel', 'Aanbouw', 'Verbouwing', 'Fundering', etc.
+  projectType String?
+
+  /// Detailed work description shown on the quote
+  workSpecification String? @db.Text
+
   @@index([projectType])
 }
 
-// Document storage for leads
+// ============================================================
+// DOCUMENT & COMMUNICATION MODELS
+// ============================================================
+
+/// Document - File attachments for leads
+///
+/// Files are stored in Supabase Storage, this table tracks metadata.
+/// Soft delete supported via deletedAt field.
 model Document {
   id         String    @id @default(cuid())
   leadId     String
   lead       Lead      @relation(fields: [leadId], references: [id], onDelete: Cascade)
-  name       String
-  type       String    // 'pdf', 'image', 'spreadsheet', 'dwg', 'other'
-  category   String    // 'tekening', 'offerte', 'foto', 'vergunning', 'correspondentie', 'overig'
-  size       Int       // in bytes
+  name       String    // Original filename
+  size       Int       // File size in bytes
   url        String    // Supabase Storage URL
-  status     String    @default("pending") // 'pending', 'approved', 'final'
-  uploadedBy String
+  uploadedBy String    // Username of uploader
   createdAt  DateTime  @default(now())
   deletedAt  DateTime? // Soft delete
+
+  /// File type for icon/preview handling
+  /// Values: 'pdf', 'image', 'spreadsheet', 'dwg', 'other'
+  type String
+
+  /// Document category for organization
+  /// Values: 'tekening' (drawing), 'offerte' (quote), 'foto' (photo),
+  ///         'vergunning' (permit), 'correspondentie' (correspondence), 'overig' (other)
+  category String
+
+  /// Approval status for document workflow
+  /// Values: 'pending', 'approved', 'final'
+  status String @default("pending")
 
   @@index([leadId])
   @@index([category])
 }
 
-// Communication log (emails, calls)
+/// Communication - Log of client communications
+///
+/// Tracks emails, calls, and WhatsApp messages with clients.
+/// For outbound emails, see EmailLog for automated tracking.
 model Communication {
   id        String   @id @default(cuid())
   leadId    String
   lead      Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
-  type      String   // 'email', 'call', 'whatsapp'
-  direction String   // 'inbound', 'outbound'
-  subject   String?
-  content   String
-  duration  Int?     // for calls, in seconds
-  author    String
+  author    String   // Team member who logged this
   createdAt DateTime @default(now())
+
+  /// Communication channel
+  /// Values: 'email', 'call', 'whatsapp'
+  type String
+
+  /// Direction of communication
+  /// Values: 'inbound' (from client), 'outbound' (to client)
+  direction String
+
+  subject String? // Email subject or call topic
+  content String  // Full content or call notes
+  duration Int?   // Call duration in seconds (null for non-calls)
 
   @@index([leadId])
   @@index([createdAt])
 }
 
-// Quote version history
+// ============================================================
+// QUOTE MANAGEMENT MODELS
+// ============================================================
+
+/// QuoteVersion - Quote history with acceptance tracking
+///
+/// Each quote submission creates a new version. Approved quotes
+/// generate a secure acceptance link for legally binding acceptance.
+///
+/// Acceptance flow:
+/// 1. Engineer submits quote (creates version with status='submitted')
+/// 2. Admin approves (status='approved', generates acceptanceHash)
+/// 3. Quote email sent (status='sent')
+/// 4. Client clicks link and accepts (status='accepted', acceptance fields populated)
 model QuoteVersion {
   id          String   @id @default(cuid())
   leadId      String
   lead        Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
-  version     Int
-  value       Float
-  lineItems   Json     // Array of {description: string, amount: number}
-  description String?
-  status      String   // 'draft', 'submitted', 'approved', 'rejected', 'sent', 'accepted'
-  createdBy   String
+  version     Int      // Version number (1, 2, 3...)
+  value       Float    // Quote total in EUR
+  description String?  // Engineer's notes
+  createdBy   String   // Username who created this version
   createdAt   DateTime @default(now())
-  
-  // Secure link for client acceptance
-  acceptanceHash    String?   @unique // Unique hash for secure acceptance URL
-  hashExpiresAt     DateTime? // When the acceptance link expires
-  
-  // Acceptance tracking (legally binding evidence)
-  acceptedAt        DateTime? // When client clicked "Accept"
-  acceptedByEmail   String?   // Email address of acceptor
-  acceptedFromIp    String?   // IP address for legal evidence
+
+  /// Quote version status
+  /// Flow: 'draft' -> 'submitted' -> 'approved'/'rejected' -> 'sent' -> 'accepted'
+  status String
+
+  /// Line items for this quote version
+  /// JSON Structure: Array<{ description: string, amount: number, hours?: number }>
+  lineItems Json
+
+  // ----- Secure Acceptance Link -----
+  acceptanceHash String?   @unique // Unique hash for /offerte/[hash] URL
+  hashExpiresAt  DateTime? // Link expiration (typically 30 days)
+
+  // ----- Legal Acceptance Evidence -----
+  // These fields are populated when client accepts via the secure link
+  acceptedAt        DateTime? // Timestamp of acceptance
+  acceptedByEmail   String?   // Email entered by acceptor
+  acceptedFromIp    String?   // IP address for legal proof
   acceptedUserAgent String?   // Browser/device info
-  acceptanceNote    String?   // Any note client added during acceptance
-  termsAccepted     Boolean   @default(false) // Explicit terms acceptance checkbox
+  acceptanceNote    String?   // Optional note from client
+  termsAccepted     Boolean   @default(false) // Explicit terms checkbox
 
   @@index([leadId])
   @@index([acceptanceHash])
   @@unique([leadId, version])
 }
 
-// Email templates
+// ============================================================
+// EMAIL AUTOMATION MODELS
+// ============================================================
+
+/// EmailTemplate - Reusable email templates
+///
+/// Templates support variable substitution using {{variable}} syntax.
+/// Variables are replaced at send time with lead/user data.
 model EmailTemplate {
   id        String   @id @default(cuid())
-  name      String   @unique
-  subject   String
-  body      String
-  variables Json     // Array of variable names
+  name      String   @unique // Template identifier
+  subject   String   // Email subject (may contain {{variables}})
+  body      String   // HTML body (may contain {{variables}})
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  /// List of variable names used in this template
+  /// JSON Structure: string[]
+  /// Example: ["clientName", "projectType", "quoteValue", "acceptanceLink"]
+  variables Json
 }
 
-// Email send log
+/// EmailLog - Record of all sent emails
+///
+/// Tracks every email sent through the system with delivery status.
+/// Links to EmailEvent for detailed tracking (opens, clicks, bounces).
 model EmailLog {
-  id               String   @id @default(cuid())
-  leadId           String?
-  lead             Lead?    @relation(fields: [leadId], references: [id], onDelete: SetNull)
-  templateId       String?
-  automationFlowId String?  // Which automation flow (e.g., "01", "02", "03") triggered this email
-  to               String
-  subject          String
-  body             String
-  status           String   // 'sent', 'delivered', 'failed', 'bounced'
-  messageId        String?  // From email provider
-  error            String?
-  sentBy           String
-  openedAt         DateTime? // When email was first opened
-  clickedAt        DateTime? // When link was first clicked
-  createdAt        DateTime @default(now())
+  id        String   @id @default(cuid())
+  leadId    String?
+  lead      Lead?    @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  createdAt DateTime @default(now())
+
+  templateId String? // Reference to EmailTemplate used (if any)
+  to         String  // Recipient email address
+  subject    String  // Actual subject sent
+  body       String  // Actual HTML body sent
+  sentBy     String  // Username or 'system' for automated
+
+  /// Which automation flow triggered this email
+  /// Values: '01' (intake), '02' (assignment), '03' (quote), '04'/'05' (reminders),
+  ///         '06' (order), '09' (delivery), '10' (feedback), '11' (NPS), etc.
+  automationFlowId String?
+
+  /// Delivery status
+  /// Values: 'sent', 'delivered', 'failed', 'bounced'
+  status String
+
+  messageId String? // Email provider message ID (Resend)
+  error     String? // Error message if failed
+
+  // Engagement tracking (updated via webhooks)
+  openedAt  DateTime? // First open timestamp
+  clickedAt DateTime? // First click timestamp
 
   @@index([leadId])
   @@index([createdAt])
@@ -332,76 +553,49 @@ model EmailLog {
   @@index([messageId])
 }
 
-// Rate limiting storage
-model RateLimit {
-  id        String   @id
-  count     Int      @default(1)
-  expiresAt DateTime
+/// EmailAutomationConfig - Automation flow configuration
+///
+/// Each flow can be activated, paused, or set to draft.
+/// Flows are triggered by events (status changes, time delays, etc.)
+model EmailAutomationConfig {
+  id        String   @id @default(cuid())
+  flowId    String   @unique // Flow identifier: '01', '02', ..., '15'
+  name      String   // Human-readable name
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@index([expiresAt])
+  /// Flow status
+  /// Values: 'active' (running), 'paused' (temporarily stopped), 'draft' (not ready)
+  status String @default("active")
+
+  /// Flow category for organization
+  /// Values: 'klant' (customer), 'conversie' (conversion), 'feedback',
+  ///         'intern' (internal), 'campagne' (campaign)
+  category String
 }
 
-// Audit log for compliance
-model AuditLog {
-  id         String   @id @default(cuid())
-  entityType String   // 'lead', 'user', 'quote', 'document'
-  entityId   String
-  action     String   // 'create', 'update', 'delete', 'restore'
-  changes    Json     // Array of {field, oldValue, newValue}
-  userId     String
-  userName   String
-  ipAddress  String?
-  userAgent  String?
-  createdAt  DateTime @default(now())
-
-  @@index([entityType, entityId])
-  @@index([userId])
-  @@index([createdAt])
-}
-
-// Time tracking entries for engineers
-model TimeEntry {
-  id          String   @id @default(cuid())
-  leadId      String?  // Nullable for general/non-project hours
-  lead        Lead?    @relation(fields: [leadId], references: [id], onDelete: Cascade)
-  userId      String
-  userName    String
-  date        DateTime // The date of the work
-  startTime   String   // HH:mm format
-  endTime     String   // HH:mm format
-  duration    Int      // Duration in minutes
-  description String
-  category    String   // 'calculatie', 'overleg', 'administratie', 'site-bezoek', 'overig', 'algemeen', 'prive'
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  @@index([leadId])
-  @@index([userId])
-  @@index([date])
-}
-
-// Email Automation Configuration
-model EmailAutomationConfig {
-  id          String   @id @default(cuid())
-  flowId      String   @unique // e.g., "01", "02", "03" - matches the automation ID
-  name        String
-  status      String   @default("active") // 'active', 'paused', 'draft'
-  category    String   // 'klant', 'conversie', 'feedback', 'intern', 'campagne'
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-}
-
-// Email Event Tracking (for webhooks from Resend)
+/// EmailEvent - Webhook events from email provider
+///
+/// Tracks delivery, opens, clicks, bounces, and complaints.
+/// Populated by Resend webhook handler (/api/webhooks/resend).
 model EmailEvent {
-  id          String   @id @default(cuid())
-  emailLogId  String?  // Reference to the original email log
-  messageId   String?  // From email provider (Resend)
-  eventType   String   // 'delivered', 'opened', 'clicked', 'bounced', 'complained'
-  automationFlowId String? // Which automation flow this belongs to (e.g., "01", "02")
-  metadata    Json?    // Additional data like click URLs, etc.
-  createdAt   DateTime @default(now())
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+
+  emailLogId String? // Reference to original EmailLog
+  messageId  String? // Email provider message ID
+
+  /// Event type from webhook
+  /// Values: 'delivered', 'opened', 'clicked', 'bounced', 'complained'
+  eventType String
+
+  automationFlowId String? // For flow-level analytics
+
+  /// Additional event data
+  /// JSON Structure varies by event type:
+  /// - clicked: { url: string }
+  /// - bounced: { reason: string, code: string }
+  metadata Json?
 
   @@index([messageId])
   @@index([eventType])
@@ -409,20 +603,126 @@ model EmailEvent {
   @@index([createdAt])
 }
 
-// User notifications (for @mentions, status changes, etc.)
+// ============================================================
+// TIME TRACKING MODELS
+// ============================================================
+
+/// TimeEntry - Hour registration for engineers
+///
+/// Tracks time spent on leads or general activities.
+/// leadId is nullable for non-project hours (general/private).
+model TimeEntry {
+  id        String   @id @default(cuid())
+  leadId    String?  // Null for general/private hours
+  lead      Lead?    @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  userId    String   // User ID (for querying)
+  userName  String   // Denormalized for display
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  date      DateTime // Work date
+  startTime String   // Start time (HH:mm format)
+  endTime   String   // End time (HH:mm format)
+  duration  Int      // Duration in minutes (calculated)
+
+  description String // What was worked on
+
+  /// Work category for reporting
+  /// Values: 'calculatie' (calculations), 'overleg' (meetings),
+  ///         'administratie' (admin), 'site-bezoek' (site visit),
+  ///         'overig' (other), 'algemeen' (general), 'prive' (private/time-off)
+  category String
+
+  @@index([leadId])
+  @@index([userId])
+  @@index([date])
+}
+
+// ============================================================
+// AUDIT & COMPLIANCE MODELS
+// ============================================================
+
+/// RateLimit - API rate limiting storage
+///
+/// Used to prevent abuse of public endpoints (intake form, etc.)
+/// Tracks request counts per identifier (IP, email, etc.)
+model RateLimit {
+  id        String   @id // Identifier (e.g., "intake:192.168.1.1")
+  count     Int      @default(1) // Request count
+  expiresAt DateTime // When this limit window expires
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([expiresAt])
+}
+
+/// AuditLog - Compliance audit trail
+///
+/// Records all significant changes to entities for compliance.
+/// More detailed than Activity (which is lead-specific).
+model AuditLog {
+  id         String   @id @default(cuid())
+  createdAt  DateTime @default(now())
+
+  /// Entity being audited
+  /// Values: 'lead', 'user', 'quote', 'document', 'role', 'permission'
+  entityType String
+
+  entityId String // ID of the entity
+
+  /// Action performed
+  /// Values: 'create', 'update', 'delete', 'restore'
+  action String
+
+  /// Change details
+  /// JSON Structure: Array<{ field: string, oldValue: any, newValue: any }>
+  changes Json
+
+  // Actor information
+  userId    String  // Who made the change
+  userName  String  // Denormalized
+  ipAddress String? // Client IP
+  userAgent String? // Browser info
+
+  @@index([entityType, entityId])
+  @@index([userId])
+  @@index([createdAt])
+}
+
+// ============================================================
+// NOTIFICATION MODELS
+// ============================================================
+
+/// Notification - In-app user notifications
+///
+/// Triggered by @mentions, status changes, quote feedback, etc.
+/// Displayed in the notification bell/panel.
 model Notification {
-  id          String   @id @default(cuid())
-  userId      String   // The user who should see this notification
-  userName    String   // Denormalized for display
-  type        String   // 'mention', 'status_change', 'quote_feedback', 'document', 'assignment'
-  title       String
-  message     String
-  leadId      String?  // Related lead (optional)
-  leadName    String?  // Denormalized for display
-  fromUserId  String?  // Who triggered the notification
-  fromUserName String? // Denormalized for display
-  read        Boolean  @default(false)
-  createdAt   DateTime @default(now())
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+
+  // Recipient
+  userId   String // User ID to notify
+  userName String // Denormalized for display
+
+  /// Notification type for filtering and icons
+  /// Values: 'mention' (@mentioned in note), 'status_change' (lead status changed),
+  ///         'quote_feedback' (admin feedback on quote), 'document' (document uploaded),
+  ///         'assignment' (assigned to lead)
+  type String
+
+  title   String // Notification title
+  message String // Full message text
+
+  // Related lead (optional, for navigation)
+  leadId   String?
+  leadName String? // Denormalized
+
+  // Who triggered this notification
+  fromUserId   String?
+  fromUserName String?
+
+  read Boolean @default(false) // Read status
 
   @@index([userId, read])
   @@index([userId, createdAt])
