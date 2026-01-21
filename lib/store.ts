@@ -22,6 +22,8 @@ import {
   approveQuote as approveQuoteAction,
   rejectQuote as rejectQuoteAction,
   updateLeadTeamAssignments as updateLeadTeamAssignmentsAction,
+  updateLeadExecutionPhase as updateLeadExecutionPhaseAction,
+  updateLeadDesignPhase as updateLeadDesignPhaseAction,
   type ActionResult,
   type QuoteLineItem,
   type QuoteFeedbackItem,
@@ -36,6 +38,12 @@ export type LeadStatus = "Nieuw" | "Calculatie" | "Offerte Verzonden" | "Opdrach
 
 /** Quote approval workflow statuses */
 export type QuoteApprovalStatus = "none" | "pending" | "approved" | "rejected"
+
+/** Execution phase for standard projects in Opdracht status */
+export type ExecutionPhase = "wachtrij" | "in_behandeling" | "ter_controle" | "afgerond"
+
+/** Design phase for complex projects in Opdracht status */
+export type DesignPhase = "voorlopig_ontwerp" | "definitief_ontwerp" | "uitvoeringsgereed_ontwerp" | "ter_controle" | "afgerond"
 
 /**
  * Project specification key-value pair
@@ -104,6 +112,12 @@ export interface Lead {
   assignedRekenaar?: string | null
   /** Name of assigned Tekenaar (draftsman) */
   assignedTekenaar?: string | null
+  
+  // Execution/Design phase (when status = Opdracht)
+  /** Execution phase for standard projects */
+  executionPhase?: ExecutionPhase | null
+  /** Design phase for complex projects */
+  designPhase?: DesignPhase | null
 }
 
 /**
@@ -142,6 +156,12 @@ interface LeadState {
   // Team management
   /** Update team assignments (Projectleider, Rekenaar and/or Tekenaar) */
   updateTeamAssignments: (id: string, data: { assignedProjectleider?: string | null; assignedRekenaar?: string | null; assignedTekenaar?: string | null }) => Promise<boolean>
+  
+  // Phase management
+  /** Update execution phase (for standard projects in Opdracht status) */
+  updateExecutionPhase: (id: string, phase: ExecutionPhase) => Promise<boolean>
+  /** Update design phase (for complex projects in Opdracht status) */
+  updateDesignPhase: (id: string, phase: DesignPhase) => Promise<boolean>
 }
 
 export const useLeadStore = create<LeadState>((set, get) => ({
@@ -531,6 +551,74 @@ export const useLeadStore = create<LeadState>((set, get) => ({
         set({ leads: previousLeads })
         toast.error('Toewijzing mislukt', {
           description: result.error || 'Kon teamleden niet toewijzen'
+        })
+        return false
+      }
+      
+      return true
+    } catch (error) {
+      set({ leads: previousLeads })
+      toast.error('Netwerkfout', {
+        description: error instanceof Error ? error.message : 'Probeer opnieuw'
+      })
+      return false
+    }
+  },
+
+  /**
+   * Update execution phase (for standard projects in Opdracht status)
+   */
+  updateExecutionPhase: async (id, phase) => {
+    const previousLeads = get().leads
+    
+    // Optimistic update
+    set((state) => ({
+      leads: state.leads.map((lead) =>
+        lead.id === id ? { ...lead, executionPhase: phase } : lead
+      )
+    }))
+
+    try {
+      const result = await updateLeadExecutionPhaseAction(id, phase)
+      
+      if (!result.success) {
+        set({ leads: previousLeads })
+        toast.error('Update mislukt', {
+          description: result.error || 'Kon uitvoeringsfase niet wijzigen'
+        })
+        return false
+      }
+      
+      return true
+    } catch (error) {
+      set({ leads: previousLeads })
+      toast.error('Netwerkfout', {
+        description: error instanceof Error ? error.message : 'Probeer opnieuw'
+      })
+      return false
+    }
+  },
+
+  /**
+   * Update design phase (for complex projects in Opdracht status)
+   */
+  updateDesignPhase: async (id, phase) => {
+    const previousLeads = get().leads
+    
+    // Optimistic update
+    set((state) => ({
+      leads: state.leads.map((lead) =>
+        lead.id === id ? { ...lead, designPhase: phase } : lead
+      )
+    }))
+
+    try {
+      const result = await updateLeadDesignPhaseAction(id, phase)
+      
+      if (!result.success) {
+        set({ leads: previousLeads })
+        toast.error('Update mislukt', {
+          description: result.error || 'Kon ontwerpfase niet wijzigen'
         })
         return false
       }

@@ -54,6 +54,14 @@ import { TeamAssignmentPanel } from "@/components/lead-detail/team-assignment-pa
 import { useAuthStore } from "@/lib/auth"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
+import { DossierLifecycleTracker } from "@/components/lead-detail/dossier-lifecycle-tracker"
+
+// Complex project types that have design sub-phases
+const COMPLEX_PROJECT_TYPES = [
+  'VvE constructie',
+  'Fundering herstel',
+  'Draagmuur verwijderen',
+]
 
 // Status configuration
 const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
@@ -267,6 +275,23 @@ export default function LeadDetailPage() {
                                 lon={lon}
                                 isValidated={lead.addressValid}
                             />
+                        </div>
+
+                        {/* Lifecycle Progress Tracker */}
+                        <div className="px-3 pb-3">
+                            <div className="p-4 rounded-xl bg-gradient-to-br from-white to-slate-50 dark:from-slate-800/80 dark:to-slate-800/40 border border-slate-200/50 dark:border-slate-700/50 shadow-sm">
+                                <div className="flex items-center gap-2 mb-4">
+                                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                                    <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
+                                        Voortgang
+                                    </span>
+                                </div>
+                                <DossierLifecycleTracker 
+                                    status={lead.status as 'Nieuw' | 'Calculatie' | 'Offerte Verzonden' | 'Opdracht' | 'Archief'}
+                                    isComplexProject={COMPLEX_PROJECT_TYPES.includes(lead.projectType)}
+                                    compact={false}
+                                />
+                            </div>
                         </div>
                         
                         {/* Quick Info Grid */}

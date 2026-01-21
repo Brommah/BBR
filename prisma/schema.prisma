@@ -55,6 +55,25 @@ enum Priority {
   urgent // Requires immediate attention
 }
 
+/// Execution phase for projects in 'Opdracht' status (standard workflow)
+/// Flow: wachtrij -> in_behandeling -> ter_controle -> afgerond
+enum ExecutionPhase {
+  wachtrij        // In queue, waiting to start
+  in_behandeling  // Actively being worked on
+  ter_controle    // Final review/control
+  afgerond        // Completed
+}
+
+/// Design phase for complex projects in 'Opdracht' status
+/// Flow: voorlopig_ontwerp -> definitief_ontwerp -> uitvoeringsgereed_ontwerp -> ter_controle -> afgerond
+enum DesignPhase {
+  voorlopig_ontwerp       // Preliminary design
+  definitief_ontwerp      // Definitive design
+  uitvoeringsgereed_ontwerp // Construction-ready design
+  ter_controle            // Final review
+  afgerond                // Completed
+}
+
 /// Engineer specialization type
 /// Only applicable when user role === 'engineer'
 enum EngineerType {
@@ -100,6 +119,10 @@ model Lead {
   // ----- Pipeline Status -----
   status LeadStatus @default(Nieuw)
   value  Float      @default(0) // Estimated/quoted project value in EUR
+  
+  // ----- Execution/Design Phase (when status = Opdracht) -----
+  executionPhase ExecutionPhase? // For standard projects: wachtrij -> in_behandeling -> ter_controle
+  designPhase    DesignPhase?    // For complex projects: VO -> DO -> UO -> TC
 
   // ----- Team Assignments -----
   // Note: `assignee` is DEPRECATED, use specific assignment fields below

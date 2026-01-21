@@ -1058,6 +1058,93 @@ export async function updateLeadDetails(
   }
 }
 
+/**
+ * Update execution phase for a lead (standard projects in Opdracht status)
+ */
+export async function updateLeadExecutionPhase(
+  id: string,
+  executionPhase: 'wachtrij' | 'in_behandeling' | 'ter_controle' | 'afgerond'
+): Promise<ActionResult> {
+  const validId = validateId(id)
+  if (!validId) return { success: false, error: 'Invalid lead ID' }
+  
+  const validPhases = ['wachtrij', 'in_behandeling', 'ter_controle', 'afgerond']
+  if (!validPhases.includes(executionPhase)) {
+    return { success: false, error: 'Invalid execution phase' }
+  }
+
+  try {
+    const lead = await prisma.lead.update({
+      where: { id: validId },
+      data: { executionPhase }
+    })
+    
+    const phaseLabels: Record<string, string> = {
+      wachtrij: 'Wachtrij',
+      in_behandeling: 'In Behandeling',
+      ter_controle: 'Ter Controle',
+      afgerond: 'Afgerond'
+    }
+    
+    await prisma.activity.create({
+      data: {
+        leadId: validId,
+        type: 'status_change',
+        content: `Uitvoeringsfase gewijzigd naar ${phaseLabels[executionPhase]}`
+      }
+    })
+    
+    return { success: true, data: lead }
+  } catch (error) {
+    console.error('[DB] Error updating execution phase:', error)
+    return { success: false, error: 'Failed to update execution phase' }
+  }
+}
+
+/**
+ * Update design phase for a lead (complex projects in Opdracht status)
+ */
+export async function updateLeadDesignPhase(
+  id: string,
+  designPhase: 'voorlopig_ontwerp' | 'definitief_ontwerp' | 'uitvoeringsgereed_ontwerp' | 'ter_controle' | 'afgerond'
+): Promise<ActionResult> {
+  const validId = validateId(id)
+  if (!validId) return { success: false, error: 'Invalid lead ID' }
+  
+  const validPhases = ['voorlopig_ontwerp', 'definitief_ontwerp', 'uitvoeringsgereed_ontwerp', 'ter_controle', 'afgerond']
+  if (!validPhases.includes(designPhase)) {
+    return { success: false, error: 'Invalid design phase' }
+  }
+
+  try {
+    const lead = await prisma.lead.update({
+      where: { id: validId },
+      data: { designPhase }
+    })
+    
+    const phaseLabels: Record<string, string> = {
+      voorlopig_ontwerp: 'Voorlopig Ontwerp',
+      definitief_ontwerp: 'Definitief Ontwerp',
+      uitvoeringsgereed_ontwerp: 'Uitvoeringsgereed Ontwerp',
+      ter_controle: 'Ter Controle',
+      afgerond: 'Afgerond'
+    }
+    
+    await prisma.activity.create({
+      data: {
+        leadId: validId,
+        type: 'status_change',
+        content: `Ontwerpfase gewijzigd naar ${phaseLabels[designPhase]}`
+      }
+    })
+    
+    return { success: true, data: lead }
+  } catch (error) {
+    console.error('[DB] Error updating design phase:', error)
+    return { success: false, error: 'Failed to update design phase' }
+  }
+}
+
 // ============================================================
 // Quote Operations
 // ============================================================

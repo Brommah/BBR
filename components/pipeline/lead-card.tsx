@@ -12,6 +12,7 @@ import { useState, useEffect, useRef } from "react"
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip"
 import { getProjectTypeColor } from "./pipeline-legend"
 import { useAllUsers, useAuthStore } from "@/lib/auth"
+import { DossierLifecycleTrackerCompact } from "@/components/lead-detail/dossier-lifecycle-tracker"
 
 interface LeadCardProps {
   lead: Lead
@@ -238,6 +239,13 @@ export function LeadCard({ lead }: LeadCardProps) {
             <div className="flex items-center gap-2 text-muted-foreground">
               <MapPin className="w-3 h-3 flex-shrink-0" aria-hidden="true" />
               <span className="truncate">{lead.city}</span>
+            </div>
+
+            {/* Lifecycle Progress Indicator */}
+            <div className="py-1">
+              <DossierLifecycleTrackerCompact 
+                status={lead.status as 'Nieuw' | 'Calculatie' | 'Offerte Verzonden' | 'Opdracht' | 'Archief'}
+              />
             </div>
              
             <div className="flex justify-between items-center border-t border-border/50 pt-2 mt-2">

@@ -1,6 +1,6 @@
 "use client"
 
-import { Home, Bell, Kanban, ClipboardPlus, LayoutDashboard, ClipboardCheck, Clock } from "lucide-react"
+import { Home, Bell, Kanban, ClipboardPlus, LayoutDashboard, ClipboardCheck, Clock, Users } from "lucide-react"
 import Link from "next/link"
 import Image from "next/image"
 import { usePathname, useSearchParams } from "next/navigation"
@@ -56,6 +56,12 @@ const menuItems = [
     title: "Uren",
     url: "/?tab=uren",
     icon: Clock,
+    roles: ['admin'] as const,
+  },
+  {
+    title: "CRM",
+    url: "/crm",
+    icon: Users,
     roles: ['admin'] as const,
   },
 ]
